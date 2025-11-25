@@ -1,5 +1,5 @@
 name: SMPStats
-version: 0.2.0
+version: 0.2.1
 main: de.nurrobin.smpstats.SMPStats
 api-version: '1.21'
 author: nurrobin
@@ -8,11 +8,22 @@ commands:
   stats:
     description: Zeigt SMPStats Statistiken.
     usage: /stats [player|json|dump]
+  sstats:
+    description: SMPStats Kurz-Command.
+    usage: /sstats [info|reload|user <name> [reset|set <stat> <value>]]
+    aliases: [SStats]
+    permission: smpstats.use
   smpstats:
     description: SMPStats Admin-Befehle.
-    usage: /smpstats [info|reload]
-    permission: smpstats.reload
+    usage: /smpstats [info|reload|user <name> [reset|set <stat> <value>]]
+    permission: smpstats.use
 permissions:
   smpstats.reload:
     description: Erlaubt das Neuladen der SMPStats-Konfiguration.
     default: op
+  smpstats.edit:
+    description: Erlaubt das Setzen/Zurücksetzen von Spielerstats.
+    default: op
+  smpstats.use:
+    description: Erlaubt Zugriff auf /sstats und /smpstats.
+    default: true

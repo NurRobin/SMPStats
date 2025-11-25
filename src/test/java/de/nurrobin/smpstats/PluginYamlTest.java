@@ -20,6 +20,7 @@ class PluginYamlTest {
         Map<String, Object> commands = yaml.getConfigurationSection("commands").getValues(false);
         assertTrue(commands.containsKey("stats"));
         assertTrue(commands.containsKey("smpstats"));
+        assertTrue(commands.containsKey("sstats"));
     }
 
     private YamlConfiguration load(String name) {

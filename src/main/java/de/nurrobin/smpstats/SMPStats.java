@@ -2,7 +2,7 @@ package de.nurrobin.smpstats;
 
 import de.nurrobin.smpstats.api.ApiServer;
 import de.nurrobin.smpstats.commands.StatsCommand;
-import de.nurrobin.smpstats.commands.SmpstatsAdminCommand;
+import de.nurrobin.smpstats.commands.SStatsCommand;
 import de.nurrobin.smpstats.database.StatsStorage;
 import de.nurrobin.smpstats.listeners.BlockListener;
 import de.nurrobin.smpstats.listeners.CombatListener;
@@ -211,10 +211,14 @@ public class SMPStats extends JavaPlugin {
         } else {
             getLogger().warning("Command /stats is missing from plugin.yml");
         }
-        SmpstatsAdminCommand adminCommand = new SmpstatsAdminCommand(this);
+        SStatsCommand adminCommand = new SStatsCommand(this, statsService);
         if (getCommand("smpstats") != null) {
             getCommand("smpstats").setExecutor(adminCommand);
             getCommand("smpstats").setTabCompleter(adminCommand);
+        }
+        if (getCommand("sstats") != null) {
+            getCommand("sstats").setExecutor(adminCommand);
+            getCommand("sstats").setTabCompleter(adminCommand);
         }
     }
 

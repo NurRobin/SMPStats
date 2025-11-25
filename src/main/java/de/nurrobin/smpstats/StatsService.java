@@ -122,6 +122,42 @@ public class StatsService {
         return stats.map(skillCalculator::calculate);
     }
 
+    public boolean resetStats(UUID uuid) {
+        Optional<StatsRecord> stats = getStats(uuid);
+        if (stats.isEmpty()) {
+            return false;
+        }
+        StatsRecord record = stats.get();
+        record.setPlaytimeMillis(0);
+        record.setDeaths(0);
+        record.setLastDeathCause(null);
+        record.setPlayerKills(0);
+        record.setMobKills(0);
+        record.setBlocksPlaced(0);
+        record.setBlocksBroken(0);
+        record.setDistanceOverworld(0);
+        record.setDistanceNether(0);
+        record.setDistanceEnd(0);
+        record.setBiomesVisited(new java.util.LinkedHashSet<>());
+        record.setDamageDealt(0);
+        record.setDamageTaken(0);
+        record.setItemsCrafted(0);
+        record.setItemsConsumed(0);
+        save(record);
+        return true;
+    }
+
+    public boolean setStat(UUID uuid, de.nurrobin.smpstats.commands.StatField field, double value) {
+        Optional<StatsRecord> stats = getStats(uuid);
+        if (stats.isEmpty()) {
+            return false;
+        }
+        StatsRecord record = stats.get();
+        field.apply(record, value);
+        save(record);
+        return true;
+    }
+
     public List<String> getOnlineNames() {
         return sessions.values().stream()
                 .map(s -> s.getRecord().getName())
