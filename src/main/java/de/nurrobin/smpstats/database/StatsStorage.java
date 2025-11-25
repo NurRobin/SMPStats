@@ -3,6 +3,10 @@ package de.nurrobin.smpstats.database;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import de.nurrobin.smpstats.StatsRecord;
+import de.nurrobin.smpstats.heatmap.HeatmapBin;
+import de.nurrobin.smpstats.heatmap.HeatmapType;
+import de.nurrobin.smpstats.moments.MomentEntry;
+import de.nurrobin.smpstats.moments.MomentType;
 import org.bukkit.plugin.Plugin;
 
 import java.io.Closeable;
@@ -72,10 +76,35 @@ public class StatsStorage implements Closeable {
                     items_crafted INTEGER NOT NULL DEFAULT 0,
                     items_consumed INTEGER NOT NULL DEFAULT 0
                 );
+
+                CREATE TABLE IF NOT EXISTS moments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    uuid TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    title TEXT,
+                    detail TEXT,
+                    payload TEXT,
+                    world TEXT,
+                    x INTEGER,
+                    y INTEGER,
+                    z INTEGER,
+                    started_at INTEGER NOT NULL,
+                    ended_at INTEGER NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS heatmap_bins (
+                    type TEXT NOT NULL,
+                    world TEXT NOT NULL,
+                    chunk_x INTEGER NOT NULL,
+                    chunk_z INTEGER NOT NULL,
+                    count INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (type, world, chunk_x, chunk_z)
+                );
                 """;
         try (Statement statement = connection.createStatement()) {
             statement.execute(sql);
             statement.execute("CREATE INDEX IF NOT EXISTS idx_player_name ON player_stats(name);");
+            statement.execute("CREATE INDEX IF NOT EXISTS idx_moments_type_time ON moments(type, started_at DESC);");
         }
     }
 
@@ -214,6 +243,96 @@ public class StatsStorage implements Closeable {
         }
         Set<String> biomes = gson.fromJson(raw, STRING_SET);
         return biomes != null ? biomes : new LinkedHashSet<>();
+    }
+
+    public synchronized void saveMoment(MomentEntry entry) throws SQLException {
+        String sql = """
+                INSERT INTO moments (uuid, type, title, detail, payload, world, x, y, z, started_at, ended_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, entry.getPlayerId().toString());
+            statement.setString(2, entry.getType().name());
+            statement.setString(3, entry.getTitle());
+            statement.setString(4, entry.getDetail());
+            statement.setString(5, entry.getPayload());
+            statement.setString(6, entry.getWorld());
+            statement.setInt(7, entry.getX());
+            statement.setInt(8, entry.getY());
+            statement.setInt(9, entry.getZ());
+            statement.setLong(10, entry.getStartedAt());
+            statement.setLong(11, entry.getEndedAt());
+            statement.executeUpdate();
+        }
+    }
+
+    public synchronized List<MomentEntry> loadRecentMoments(int limit) throws SQLException {
+        String sql = "SELECT * FROM moments ORDER BY started_at DESC LIMIT ?";
+        List<MomentEntry> result = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, limit);
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(mapMoment(rs));
+                }
+            }
+        }
+        return result;
+    }
+
+    private MomentEntry mapMoment(ResultSet rs) throws SQLException {
+        return new MomentEntry(
+                rs.getLong("id"),
+                UUID.fromString(rs.getString("uuid")),
+                MomentType.valueOf(rs.getString("type")),
+                rs.getString("title"),
+                rs.getString("detail"),
+                rs.getString("payload"),
+                rs.getString("world"),
+                rs.getInt("x"),
+                rs.getInt("y"),
+                rs.getInt("z"),
+                rs.getLong("started_at"),
+                rs.getLong("ended_at")
+        );
+    }
+
+    public synchronized void incrementHeatmapBin(HeatmapType type, String world, int chunkX, int chunkZ, long delta) throws SQLException {
+        String sql = """
+                INSERT INTO heatmap_bins (type, world, chunk_x, chunk_z, count)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(type, world, chunk_x, chunk_z) DO UPDATE SET
+                    count = count + excluded.count;
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, type.name());
+            statement.setString(2, world);
+            statement.setInt(3, chunkX);
+            statement.setInt(4, chunkZ);
+            statement.setLong(5, delta);
+            statement.executeUpdate();
+        }
+    }
+
+    public synchronized List<HeatmapBin> loadHeatmapBins(HeatmapType type, int limit) throws SQLException {
+        String sql = "SELECT * FROM heatmap_bins WHERE type = ? ORDER BY count DESC LIMIT ?";
+        List<HeatmapBin> bins = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, type.name());
+            statement.setInt(2, limit);
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    bins.add(new HeatmapBin(
+                            HeatmapType.valueOf(rs.getString("type")),
+                            rs.getString("world"),
+                            rs.getInt("chunk_x"),
+                            rs.getInt("chunk_z"),
+                            rs.getLong("count")
+                    ));
+                }
+            }
+        }
+        return bins;
     }
 
     @Override

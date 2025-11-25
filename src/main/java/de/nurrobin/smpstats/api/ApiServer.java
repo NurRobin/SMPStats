@@ -5,6 +5,9 @@ import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.Settings;
 import de.nurrobin.smpstats.StatsRecord;
 import de.nurrobin.smpstats.StatsService;
+import de.nurrobin.smpstats.moments.MomentService;
+import de.nurrobin.smpstats.heatmap.HeatmapService;
+import de.nurrobin.smpstats.heatmap.HeatmapType;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -23,14 +26,18 @@ public class ApiServer {
     private final SMPStats plugin;
     private final StatsService statsService;
     private final Settings settings;
+    private final MomentService momentService;
+    private final HeatmapService heatmapService;
     private final Gson gson = new Gson();
 
     private HttpServer server;
 
-    public ApiServer(SMPStats plugin, StatsService statsService, Settings settings) {
+    public ApiServer(SMPStats plugin, StatsService statsService, Settings settings, MomentService momentService, HeatmapService heatmapService) {
         this.plugin = plugin;
         this.statsService = statsService;
         this.settings = settings;
+        this.momentService = momentService;
+        this.heatmapService = heatmapService;
     }
 
     public void start() {
@@ -43,6 +50,8 @@ public class ApiServer {
 
         server.createContext("/stats", new StatsHandler());
         server.createContext("/online", new OnlineHandler());
+        server.createContext("/moments/recent", new RecentMomentsHandler());
+        server.createContext("/heatmap", new HeatmapHandler());
         server.setExecutor(Executors.newCachedThreadPool());
         server.start();
 
@@ -123,6 +132,39 @@ public class ApiServer {
                 return;
             }
             sendJson(exchange, 200, statsService.getOnlineNames());
+        }
+    }
+
+    private class RecentMomentsHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!authorize(exchange)) {
+                return;
+            }
+            List<?> recent = momentService.getRecentMoments(50);
+            sendJson(exchange, 200, recent);
+        }
+    }
+
+    private class HeatmapHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!authorize(exchange)) {
+                return;
+            }
+            URI uri = exchange.getRequestURI();
+            String path = uri.getPath().substring("/heatmap".length()); // expected /heatmap/<type>
+            if (path.isEmpty() || "/".equals(path)) {
+                sendText(exchange, 400, "Missing heatmap type");
+                return;
+            }
+            String typeRaw = path.startsWith("/") ? path.substring(1) : path;
+            try {
+                HeatmapType type = HeatmapType.valueOf(typeRaw.toUpperCase());
+                sendJson(exchange, 200, heatmapService.loadTop(type, 200));
+            } catch (IllegalArgumentException e) {
+                sendText(exchange, 400, "Invalid heatmap type");
+            }
         }
     }
 }

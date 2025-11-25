@@ -9,7 +9,11 @@ import de.nurrobin.smpstats.listeners.CombatListener;
 import de.nurrobin.smpstats.listeners.CraftingListener;
 import de.nurrobin.smpstats.listeners.JoinQuitListener;
 import de.nurrobin.smpstats.listeners.MovementListener;
+import de.nurrobin.smpstats.listeners.MomentListener;
+import de.nurrobin.smpstats.listeners.HeatmapListener;
 import de.nurrobin.smpstats.skills.SkillWeights;
+import de.nurrobin.smpstats.moments.MomentService;
+import de.nurrobin.smpstats.heatmap.HeatmapService;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -26,6 +30,8 @@ public class SMPStats extends JavaPlugin {
     private StatsService statsService;
     private Settings settings;
     private ApiServer apiServer;
+    private MomentService momentService;
+    private HeatmapService heatmapService;
     private int autosaveTaskId = -1;
 
     @Override
@@ -43,6 +49,8 @@ public class SMPStats extends JavaPlugin {
         }
 
         this.statsService = new StatsService(this, storage, settings);
+        this.momentService = new MomentService(this, storage, settings);
+        this.heatmapService = new HeatmapService(this, storage, settings);
 
         registerListeners();
         registerCommands();
@@ -50,6 +58,8 @@ public class SMPStats extends JavaPlugin {
             statsService.handleJoin(online);
         }
         startAutosave();
+        momentService.start();
+        heatmapService.start();
         startApiServer();
         logStartupBanner("Aktiv");
     }
@@ -59,6 +69,12 @@ public class SMPStats extends JavaPlugin {
         cancelAutosave();
         if (statsService != null) {
             statsService.shutdown();
+        }
+        if (momentService != null) {
+            momentService.shutdown();
+        }
+        if (heatmapService != null) {
+            heatmapService.shutdown();
         }
         if (apiServer != null) {
             apiServer.stop();
@@ -80,6 +96,16 @@ public class SMPStats extends JavaPlugin {
         reloadConfig();
         this.settings = loadSettings();
         statsService.updateSettings(settings);
+        if (momentService != null) {
+            momentService.shutdown();
+            momentService.updateSettings(settings);
+            momentService.start();
+        }
+        if (heatmapService != null) {
+            heatmapService.shutdown();
+            heatmapService.updateSettings(settings);
+            heatmapService.start();
+        }
         startAutosave();
         restartApiServer();
         logStartupBanner("Reload");
@@ -121,8 +147,16 @@ public class SMPStats extends JavaPlugin {
                 )
         );
 
+        boolean momentsEnabled = config.getBoolean("moments.enabled", true);
+        long diamondWindowSeconds = config.getLong("moments.diamond_window_seconds", 30L);
+        long momentsFlushSeconds = config.getLong("moments.flush_seconds", 10L);
+
+        boolean heatmapEnabled = config.getBoolean("heatmap.enabled", true);
+        int heatmapFlushMinutes = Math.max(1, config.getInt("heatmap.flush_minutes", 5));
+
         return new Settings(movement, blocks, kills, biomes, crafting, damage, consumption,
-                apiEnabled, apiPort, apiKey, autosaveMinutes, skillWeights);
+                apiEnabled, apiPort, apiKey, autosaveMinutes, skillWeights,
+                momentsEnabled, diamondWindowSeconds, momentsFlushSeconds, heatmapEnabled, heatmapFlushMinutes);
     }
 
     private void registerListeners() {
@@ -132,6 +166,8 @@ public class SMPStats extends JavaPlugin {
         pm.registerEvents(new CombatListener(this, statsService), this);
         pm.registerEvents(new MovementListener(this, statsService), this);
         pm.registerEvents(new CraftingListener(this, statsService), this);
+        pm.registerEvents(new MomentListener(momentService), this);
+        pm.registerEvents(new HeatmapListener(heatmapService), this);
     }
 
     private void registerCommands() {
@@ -169,7 +205,7 @@ public class SMPStats extends JavaPlugin {
             apiServer = null;
             return;
         }
-        apiServer = new ApiServer(this, statsService, settings);
+        apiServer = new ApiServer(this, statsService, settings, momentService, heatmapService);
         apiServer.start();
     }
 

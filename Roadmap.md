@@ -10,9 +10,9 @@ Größe: `S` (klein) | `M` (mittel) | `L` (groß) | `XL` (sehr groß)
 ## Fokus-Features
 | Feature | Priorität | Größe | Status | Notizen |
 | --- | --- | --- | --- | --- |
-| Skill-Profile (Mining/Combat/Exploration/Builder/Farmer) | High | M | In Progress | Auswertung existierender Stats, gewichtbar per Config, Anzeige in /stats, später API |
-| Moments Engine (Firsts/Clutch/Fail, Merge-Window) | High | L | Todo | Generische Event-Fenster, Persistenz, Feed-Hook |
-| Heatmaps / Activity Maps (Tode/Mining/Hotspots) | High | L | Todo | Chunk/Region-Bins, periodisches Flush, API-Export |
+| Skill-Profile (Mining/Combat/Exploration/Builder/Farmer) | High | M | Done | Gewichte per Config, Anzeige in /stats, Basis-Berechnung aktiv |
+| Moments Engine (Firsts/Clutch/Fail, Merge-Window) | High | L | In Progress | Diamond-Window + First Death + Big Fall erfasst & gespeichert; noch: weitere Moments/Feed |
+| Heatmaps / Activity Maps (Tode/Mining/Hotspots) | High | L | In Progress | Mining/Death-Bins + Flush + API; noch: Hotspots/mehr Typen |
 | Social Stats (Nähe-Zeit, gemeinsame Kills) | Medium | M | Todo | Sampler jede n Sekunden, Paar-Counter, Leaderboards |
 | Server Health / Cost Index | Medium | M | Todo | Chunks/Entities/Hopper/Redstone Counters, Monitoring-Fokus |
 | Season/Timeline Layer (daily/weekly/monthly) | Medium | M | Todo | Season-Key, Zeiträume, Leaderboards pro Range |

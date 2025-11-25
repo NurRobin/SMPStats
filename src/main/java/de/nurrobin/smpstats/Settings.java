@@ -15,6 +15,11 @@ public class Settings {
     private final String apiKey;
     private final int autosaveMinutes;
     private final SkillWeights skillWeights;
+    private final boolean momentsEnabled;
+    private final long diamondWindowSeconds;
+    private final long momentsFlushSeconds;
+    private final boolean heatmapEnabled;
+    private final int heatmapFlushMinutes;
 
     public Settings(boolean trackMovement,
                     boolean trackBlocks,
@@ -27,7 +32,12 @@ public class Settings {
                     int apiPort,
                     String apiKey,
                     int autosaveMinutes,
-                    SkillWeights skillWeights) {
+                    SkillWeights skillWeights,
+                    boolean momentsEnabled,
+                    long diamondWindowSeconds,
+                    long momentsFlushSeconds,
+                    boolean heatmapEnabled,
+                    int heatmapFlushMinutes) {
         this.trackMovement = trackMovement;
         this.trackBlocks = trackBlocks;
         this.trackKills = trackKills;
@@ -40,6 +50,11 @@ public class Settings {
         this.apiKey = apiKey;
         this.autosaveMinutes = autosaveMinutes;
         this.skillWeights = skillWeights;
+        this.momentsEnabled = momentsEnabled;
+        this.diamondWindowSeconds = diamondWindowSeconds;
+        this.momentsFlushSeconds = momentsFlushSeconds;
+        this.heatmapEnabled = heatmapEnabled;
+        this.heatmapFlushMinutes = heatmapFlushMinutes;
     }
 
     public boolean isTrackMovement() {
@@ -88,5 +103,25 @@ public class Settings {
 
     public SkillWeights getSkillWeights() {
         return skillWeights;
+    }
+
+    public boolean isMomentsEnabled() {
+        return momentsEnabled;
+    }
+
+    public long getDiamondWindowSeconds() {
+        return diamondWindowSeconds;
+    }
+
+    public long getMomentsFlushSeconds() {
+        return momentsFlushSeconds;
+    }
+
+    public boolean isHeatmapEnabled() {
+        return heatmapEnabled;
+    }
+
+    public int getHeatmapFlushMinutes() {
+        return heatmapFlushMinutes;
     }
 }
