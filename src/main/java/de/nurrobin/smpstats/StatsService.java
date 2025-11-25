@@ -123,11 +123,10 @@ public class StatsService {
     }
 
     public boolean resetStats(UUID uuid) {
-        Optional<StatsRecord> stats = getStats(uuid);
-        if (stats.isEmpty()) {
+        StatsRecord record = getMutableRecord(uuid);
+        if (record == null) {
             return false;
         }
-        StatsRecord record = stats.get();
         record.setPlaytimeMillis(0);
         record.setDeaths(0);
         record.setLastDeathCause(null);
@@ -148,14 +147,27 @@ public class StatsService {
     }
 
     public boolean setStat(UUID uuid, de.nurrobin.smpstats.commands.StatField field, double value) {
-        Optional<StatsRecord> stats = getStats(uuid);
-        if (stats.isEmpty()) {
+        StatsRecord record = getMutableRecord(uuid);
+        if (record == null) {
             return false;
         }
-        StatsRecord record = stats.get();
         field.apply(record, value);
         save(record);
         return true;
+    }
+
+    private StatsRecord getMutableRecord(UUID uuid) {
+        PlayerSession session = sessions.get(uuid);
+        if (session != null) {
+            return session.getRecord();
+        }
+        try {
+            Optional<StatsRecord> fromDb = storage.load(uuid);
+            return fromDb.orElse(null);
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Could not load stats for " + uuid + ": " + e.getMessage());
+            return null;
+        }
     }
 
     public List<String> getOnlineNames() {
