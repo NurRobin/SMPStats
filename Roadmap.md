@@ -1,32 +1,32 @@
 # SMPStats Roadmap
 
-Status-Legende: `Todo` | `In Progress` | `Done`  
-Priorität: `High` | `Medium` | `Low`  
-Größe: `S` (klein) | `M` (mittel) | `L` (groß) | `XL` (sehr groß)
+Status: `Todo` | `In Progress` | `Done`  
+Priority: `High` | `Medium` | `Low`  
+Size: `S` | `M` | `L` | `XL`
 
-## Aktueller Stand
-- ✅ Baseline Stats-Tracking, SQLite, /stats-Command, HTTP-API, Autosave, Reload-Command (Status: Done)
+## Current
+- ✅ Baseline stats tracking, SQLite, `/stats`, HTTP API, autosave, reload command.
 
-## Fokus-Features
-| Feature | Priorität | Größe | Status | Notizen |
+## Focus Features
+| Feature | Priority | Size | Status | Notes |
 | --- | --- | --- | --- | --- |
-| Skill-Profile (Mining/Combat/Exploration/Builder/Farmer) | High | M | Done | Gewichte per Config, Anzeige in /stats, Basis-Berechnung aktiv |
-| Moments Engine (Firsts/Clutch/Fail, Merge-Window) | High | L | In Progress | Benutzerdefinierbare Definitions (block_break/death/death_fall/first_death/damage_low_hp/death_explosion) + Merge, Persistenz; Feed fehlt noch |
-| Heatmaps / Activity Maps (Tode/Mining/Hotspots) | High | L | In Progress | Mining/Death-Bins + Flush + API; noch: Hotspots/mehr Typen |
-| Social Stats (Nähe-Zeit, gemeinsame Kills) | Medium | M | Todo | Sampler jede n Sekunden, Paar-Counter, Leaderboards |
-| Server Health / Cost Index | Medium | M | Todo | Chunks/Entities/Hopper/Redstone Counters, Monitoring-Fokus |
-| Season/Timeline Layer (daily/weekly/monthly) | Medium | M | Todo | Season-Key, Zeiträume, Leaderboards pro Range |
-| Live Feed (WS/SSE) für Moments | Medium | L | Todo | Stream von Moments, Throttle/Dedupe, Auth |
-| Death Replay Lite | Medium | M | Done | Snapshot bei Tod (Ort, Ursache, Health, Nearby, Inventory) |
-| Story Generator Hook (Weekly Summary) | Low | M | Todo | JSON-Summary + optional LLM-Hook |
+| Skill Profiles (Mining/Combat/Exploration/Builder/Farmer) | High | M | Done | Configurable weights, shown in `/stats` |
+| Moments Engine (Firsts/Clutch/Fail, Merge Window) | High | L | In Progress | Configurable definitions (block_break/death/death_fall/first_death/damage_low_hp/death_explosion/item_gain/boss_kill), persistence, REST/SSE feed |
+| Heatmaps / Activity Maps | High | L | In Progress | Mining/Death bins + hotspots, API export |
+| Social Stats (time nearby, shared activity) | Medium | M | In Progress | Nearby sampler + stored pair seconds, API `/social/top`; shared kills pending |
+| Server Health / Cost Index | Medium | M | Todo | Chunks/Entities/Hopper/Redstone counters |
+| Season/Timeline Layer (daily/weekly/monthly) | Medium | M | In Progress | Daily timeline snapshots + API |
+| Live Feed (WS/SSE) for Moments | Medium | L | Done | SSE `/moments/stream` |
+| Death Replay Lite | Medium | M | Done | Death snapshot (cause, pos, health, nearby, inventory), API `/death/replay` |
+| Story Generator Hook | Low | M | Todo | Weekly JSON summary + optional LLM hook |
 
-## Unterstützende Tasks
-- Config-Erweiterungen & Docs (Weights, Windows, Regions, Season) – Todo
-- API-Endpunkte für neue Features – Todo
-- Tests/Validation (DB migrations, config parsing) – Todo
+## Supporting Tasks
+- Config/docs for weights/windows/regions/season.
+- API endpoints for new features (filters, names for social pairs).
+- Tests/validation (DB migrations, config parsing, integration).
 
-## Nächste Schritte (konkret)
-- Moments: Feed/SSE + weitere Presets (MLG, Wither, Netherite, Advancements), Dedupe über DB für Firsts.
-- Heatmap: benannte Hotspot-Regionen + Filter pro Welt/Typ, optional Decay.
-- Social Stats: Nähe-Sampling + gemeinsame Kills, API/Leaderboards.
-- Tests: Integration mit MockBukkit für Commands/API; Validierung Moments-Parser mit mehr Typen.
+## Next Steps
+- Moments: more presets (Advancements, Netherite craft), dedupe-first via DB.
+- Heatmap: hotspot filters per world/type, optional decay.
+- Social: resolve UUID->name in API, shared kill counters, leaderboards.
+- Timeline: add ranges (weekly/monthly) and leaderboards.***

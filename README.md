@@ -1,128 +1,89 @@
-# SMPStats – Paper 1.21.x Player Statistics Plugin
+# SMPStats – Paper 1.21.x Player Stats & Moments
 
-SMPStats ist ein leichtgewichtiges aber mächtiges Statistik-Plugin für Paper-Server  
-(optimiert für Minecraft **1.21.1+**).  
-Es verfolgt automatisch Spieleraktivitäten und stellt sie über Ingame-Commands und
-optional über eine **HTTP-API** zur Verfügung.
+SMPStats is a lightweight but feature-rich stats plugin for Paper **1.21.1+**.  
+It automatically tracks player activity, exposes data via in-game commands and an optional HTTP API, and records “moments” (diamonds, clutches, deaths, etc.).
 
 ## ✨ Features
+- Auto-tracking: playtime, joins/quits, deaths (cause), player/mob kills, blocks placed/broken, distance (per dimension), biomes, damage dealt/taken, crafting, item consumption, first/last join.
+- Skill profiles (mining/combat/exploration/builder/farmer) with configurable weights and display in `/stats`.
+- Moments engine: configurable triggers (block_break/death/death_fall/first_death/damage_low_hp/death_explosion/item_gain/boss_kill) with merge windows (e.g., diamond runs), SSE/REST feed.
+- Heatmaps: chunk bins for mining/deaths + hotspot counters (configurable regions).
+- Social stats: time spent nearby (pair counters).
+- Timeline snapshots: daily aggregates per player.
+- Death Replay Lite: store death snapshots (cause, position, health, nearby entities, inventory contents).
+- Optional HTTP API with API key.
 
-### 🎮 Spieler-Tracking (automatisch)
-- Spielzeit (Sessions, Pausen, Join/Leave)
-- Tode (inkl. Todesursache)
-- Kills (Player + Monster)
-- Platzierte Blöcke
-- Abgebaute Blöcke
-- Zurückgelegte Distanz (Overworld / Nether / End getrennt)
-- Besuchte Biome
-- Damage dealt / damage taken
-- Crafting / Konsumierte Items
-- Erstes & letztes Join-Datum
+## 💬 Commands
+| Command | Description |
+| --- | --- |
+| `/stats` | Show your stats |
+| `/stats <player>` | Show another player's stats |
+| `/stats json` | Show your stats as JSON |
+| `/stats dump` | Dump all stats to console (JSON) |
+| `/sstats` (alias `/smpstats`, `/SStats`) | Info (version/API/flags) |
+| `/sstats reload` | Reload config, restart API (perm `smpstats.reload`) |
+| `/sstats user <name>` | Show stats for player |
+| `/sstats user <name> reset` | Reset stats (perm `smpstats.edit`) |
+| `/sstats user <name> set <stat> <value>` | Set a stat (tab-complete; perm `smpstats.edit`) |
 
-### 💬 Commands
-| Command | Beschreibung |
-|--------|--------------|
-| `/stats` | Eigene Statistiken anzeigen |
-| `/stats <player>` | Statistiken eines anderen Spielers anzeigen |
-| `/stats json` | Eigene Stats als JSON im Chat (für Debug) |
-| `/stats dump` | Alle Stats als JSON in die Konsole schreiben |
-| `/smpstats reload` | Config neu laden (Konsole oder `smpstats.reload`) |
+## 🌐 HTTP API (if enabled)
+Auth: `X-API-Key: <key>`
+- `GET /stats/<uuid>` – player stats JSON
+- `GET /stats/all` – all stats JSON
+- `GET /online` – online player names
+- `GET /moments/recent?limit=&since=` – moments list
+- `GET /moments/query?player=&type=&since=&limit=` – filtered moments
+- `GET /moments/stream?since=&limit=` – SSE feed of moments
+- `GET /heatmap/<type>` – heatmap bins (e.g., MINING/DEATH)
+- `GET /heatmap/hotspots/<type>` – hotspot counters
+- `GET /timeline/<uuid>?limit=` – daily timeline entries
+- `GET /social/top?limit=` – top nearby pairs
+- `GET /death/replay?limit=` – death replay entries
 
-### 🌐 HTTP API (optional)
-Falls aktiviert, stellt das Plugin einen kleinen HTTP-Server bereit.
+## 💾 Storage
+Uses local **SQLite**. Schema auto-migrates and blocks downgrades.
 
-**Endpoints:**
-- `GET /stats/<uuid>` – JSON-Stats eines Spielers  
-- `GET /stats/all` – JSON-Liste aller Spieler  
-- `GET /online` – Liste aller aktuell verbundenen Spieler
+## 🚀 Install
+1) `mvn clean package`  
+2) Copy `target/SMPStats.jar` to `plugins/`  
+3) Start server → `config.yml` & DB auto-created
 
-Authentifizierung über `X-API-Key: <key>`.
-
-### 💾 Speicherung
-Das Plugin nutzt lokal **SQLite**, ideal für SMPs — keine Einrichtung nötig.
-
----
-
-## 🚀 Installation
-
-1. Repo klonen  
-2. Plugin bauen:
-```bash
-   mvn clean package
-```
-
-3. Die Datei `SMPStats.jar` aus `target/` in den `plugins/`-Ordner werfen
-4. Server starten → Config & DB werden automatisch erstellt
-
----
-
-## 🛠 Konfiguration
-
-Die Datei `config.yml` wird beim ersten Start erstellt.
-
-**Beispiel:**
-
+## 🛠 Config (excerpt)
 ```yaml
 api:
   enabled: true
+  bind_address: "0.0.0.0"
   port: 8765
-  api_key: "CHANGEME123"
-
+  api_key: "ChangeMe"
 tracking:
   movement: true
   blocks: true
   kills: true
   biomes: true
+  crafting: true
+  damage: true
+  consumption: true
+moments:
+  enabled: true
+  flush_seconds: 10
+heatmap:
+  enabled: true
+social:
+  enabled: true
+timeline:
+  enabled: true
+death_replay:
+  enabled: true
 ```
 
----
-
-## 🧩 API Beispiel
-
-```bash
-curl -H "X-API-Key: CHANGEME123" http://localhost:8765/stats/uuid
-```
-
----
-
-## 🧱 Build & Development
-
-Sprache: **Java 21**
-Build Tool: **Maven**
-IDE: **IntelliJ IDEA Ultimate oder Community**
-Server: **Paper 1.21.x**
-
-Ordnerstruktur:
-
-```
-/src
- └── main
-     ├── java
-     │    └── de.nurrobin.smpstats
-     │          ├── SMPStats.java
-     │          ├── database/
-     │          ├── listeners/
-     │          ├── commands/
-     │          └── api/
-     └── resources
-           ├── plugin.yml
-           └── config.yml
-```
-
----
+## 🧱 Build & Develop
+- Java 21, Maven
+- Structure: `src/main/java/de/nurrobin/smpstats/...`, resources in `src/main/resources/`
 
 ## 📌 Permissions
+- `smpstats.use` (default: true) – use `/sstats` and `/smpstats`
+- `smpstats.reload` (default: op) – reload config/API
+- `smpstats.edit` (default: op) – reset/set player stats
 
-Standardmäßig keine — jeder darf `/stats` nutzen.
-Optional in Zukunft über Permission-Nodes regelbar.
-
----
-
-## 🧪 Roadmap / Ideen
-
-* GUI-basierte Stat Pages (eigenes Inventory)
-* Export als Web-Dashboard
-* Monthly Recap / Year Wrapped
-* Comparison Stats (Spieler vergleichen)
-* Scoreboard Integration
-* Leaderboards (Kills, Playtime, Distance…)
+## 📜 Roadmap
+See `Roadmap.md` for feature status and next steps.
