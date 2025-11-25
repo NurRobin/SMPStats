@@ -1,6 +1,6 @@
 package de.nurrobin.smpstats.listeners;
 
-import de.nurrobin.smpstats.Settings;
+import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.StatsService;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
@@ -10,17 +10,17 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerMoveEvent;
 
 public class MovementListener implements Listener {
+    private final SMPStats plugin;
     private final StatsService statsService;
-    private final Settings settings;
 
-    public MovementListener(StatsService statsService, Settings settings) {
+    public MovementListener(SMPStats plugin, StatsService statsService) {
+        this.plugin = plugin;
         this.statsService = statsService;
-        this.settings = settings;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
-        if (!settings.isTrackMovement() && !settings.isTrackBiomes()) {
+        if (!plugin.getSettings().isTrackMovement() && !plugin.getSettings().isTrackBiomes()) {
             return;
         }
 
@@ -33,14 +33,14 @@ public class MovementListener implements Listener {
         Player player = event.getPlayer();
         boolean movedPosition = hasMovedPosition(from, to);
 
-        if (settings.isTrackMovement() && movedPosition) {
+        if (plugin.getSettings().isTrackMovement() && movedPosition) {
             double distance = from.toVector().distance(to.toVector());
             if (distance > 0) {
                 statsService.addDistance(player.getUniqueId(), to.getWorld().getEnvironment(), distance);
             }
         }
 
-        if (settings.isTrackBiomes() && changedBlock(from, to)) {
+        if (plugin.getSettings().isTrackBiomes() && changedBlock(from, to)) {
             String biome = to.getBlock().getBiome().name();
             statsService.addBiome(player.getUniqueId(), biome);
         }

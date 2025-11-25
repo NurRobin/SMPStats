@@ -1,6 +1,6 @@
 package de.nurrobin.smpstats.listeners;
 
-import de.nurrobin.smpstats.Settings;
+import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.StatsService;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
@@ -13,15 +13,13 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.projectiles.ProjectileSource;
 
-import java.util.UUID;
-
 public class CombatListener implements Listener {
+    private final SMPStats plugin;
     private final StatsService statsService;
-    private final Settings settings;
 
-    public CombatListener(StatsService statsService, Settings settings) {
+    public CombatListener(SMPStats plugin, StatsService statsService) {
+        this.plugin = plugin;
         this.statsService = statsService;
-        this.settings = settings;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -61,6 +59,10 @@ public class CombatListener implements Listener {
     public void onDamageTaken(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof Player player)) {
             return;
+        }
+        EntityDamageEvent.DamageCause cause = event.getCause();
+        if (cause == EntityDamageEvent.DamageCause.SUICIDE || "KILL".equalsIgnoreCase(cause.name())) {
+            return; // ignore /kill or self-kill to avoid massive damage spikes
         }
         statsService.addDamageTaken(player.getUniqueId(), event.getFinalDamage());
     }

@@ -2,6 +2,7 @@ package de.nurrobin.smpstats;
 
 import de.nurrobin.smpstats.api.ApiServer;
 import de.nurrobin.smpstats.commands.StatsCommand;
+import de.nurrobin.smpstats.commands.SmpstatsAdminCommand;
 import de.nurrobin.smpstats.database.StatsStorage;
 import de.nurrobin.smpstats.listeners.BlockListener;
 import de.nurrobin.smpstats.listeners.CombatListener;
@@ -9,8 +10,10 @@ import de.nurrobin.smpstats.listeners.CraftingListener;
 import de.nurrobin.smpstats.listeners.JoinQuitListener;
 import de.nurrobin.smpstats.listeners.MovementListener;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -47,13 +50,12 @@ public class SMPStats extends JavaPlugin {
         }
         startAutosave();
         startApiServer();
+        logStartupBanner("Aktiv");
     }
 
     @Override
     public void onDisable() {
-        if (autosaveTaskId != -1) {
-            Bukkit.getScheduler().cancelTask(autosaveTaskId);
-        }
+        cancelAutosave();
         if (statsService != null) {
             statsService.shutdown();
         }
@@ -71,6 +73,16 @@ public class SMPStats extends JavaPlugin {
 
     public Settings getSettings() {
         return settings;
+    }
+
+    public void reloadPluginConfig(CommandSender sender) {
+        reloadConfig();
+        this.settings = loadSettings();
+        statsService.updateSettings(settings);
+        startAutosave();
+        restartApiServer();
+        logStartupBanner("Reload");
+        sender.sendMessage(ChatColor.GREEN + "SMPStats Konfiguration neu geladen.");
     }
 
     private Settings loadSettings() {
@@ -95,10 +107,10 @@ public class SMPStats extends JavaPlugin {
     private void registerListeners() {
         PluginManager pm = getServer().getPluginManager();
         pm.registerEvents(new JoinQuitListener(statsService), this);
-        pm.registerEvents(new BlockListener(statsService, settings), this);
-        pm.registerEvents(new CombatListener(statsService, settings), this);
-        pm.registerEvents(new MovementListener(statsService, settings), this);
-        pm.registerEvents(new CraftingListener(statsService, settings), this);
+        pm.registerEvents(new BlockListener(this, statsService), this);
+        pm.registerEvents(new CombatListener(this, statsService), this);
+        pm.registerEvents(new MovementListener(this, statsService), this);
+        pm.registerEvents(new CraftingListener(this, statsService), this);
     }
 
     private void registerCommands() {
@@ -109,20 +121,54 @@ public class SMPStats extends JavaPlugin {
         } else {
             getLogger().warning("Command /stats is missing from plugin.yml");
         }
+        SmpstatsAdminCommand adminCommand = new SmpstatsAdminCommand(this);
+        if (getCommand("smpstats") != null) {
+            getCommand("smpstats").setExecutor(adminCommand);
+            getCommand("smpstats").setTabCompleter(adminCommand);
+        }
     }
 
     private void startAutosave() {
+        cancelAutosave();
         long intervalTicks = settings.getAutosaveMinutes() * 60L * 20L;
         autosaveTaskId = Bukkit.getScheduler().runTaskTimerAsynchronously(this, statsService::flushOnline, intervalTicks, intervalTicks).getTaskId();
         getLogger().info("Autosave scheduled every " + settings.getAutosaveMinutes() + " minute(s)");
     }
 
+    private void cancelAutosave() {
+        if (autosaveTaskId != -1) {
+            Bukkit.getScheduler().cancelTask(autosaveTaskId);
+            autosaveTaskId = -1;
+        }
+    }
+
     private void startApiServer() {
         if (!settings.isApiEnabled()) {
             getLogger().info("HTTP API disabled in config.yml");
+            apiServer = null;
             return;
         }
         apiServer = new ApiServer(this, statsService, settings);
         apiServer.start();
+    }
+
+    private void restartApiServer() {
+        if (apiServer != null) {
+            apiServer.stop();
+        }
+        startApiServer();
+    }
+
+    private void logStartupBanner(String action) {
+        String version = getDescription().getVersion();
+        getLogger().info("====================================");
+        getLogger().info(" SMPStats " + action + " - v" + version);
+        if (settings.isApiEnabled()) {
+            getLogger().info(" API: enabled on port " + settings.getApiPort());
+        } else {
+            getLogger().info(" API: disabled");
+        }
+        getLogger().info(" Autosave: " + settings.getAutosaveMinutes() + " minute(s)");
+        getLogger().info("====================================");
     }
 }

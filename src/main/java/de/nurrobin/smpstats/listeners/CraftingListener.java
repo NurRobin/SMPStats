@@ -1,6 +1,6 @@
 package de.nurrobin.smpstats.listeners;
 
-import de.nurrobin.smpstats.Settings;
+import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.StatsService;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -11,17 +11,17 @@ import org.bukkit.inventory.CraftingInventory;
 import org.bukkit.inventory.ItemStack;
 
 public class CraftingListener implements Listener {
+    private final SMPStats plugin;
     private final StatsService statsService;
-    private final Settings settings;
 
-    public CraftingListener(StatsService statsService, Settings settings) {
+    public CraftingListener(SMPStats plugin, StatsService statsService) {
+        this.plugin = plugin;
         this.statsService = statsService;
-        this.settings = settings;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onCraft(CraftItemEvent event) {
-        if (!settings.isTrackCrafting()) {
+        if (!plugin.getSettings().isTrackCrafting()) {
             return;
         }
         long crafted = estimateCraftAmount(event);
@@ -32,7 +32,7 @@ public class CraftingListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onConsume(PlayerItemConsumeEvent event) {
-        if (!settings.isTrackConsumption()) {
+        if (!plugin.getSettings().isTrackConsumption()) {
             return;
         }
         statsService.addConsumed(event.getPlayer().getUniqueId());

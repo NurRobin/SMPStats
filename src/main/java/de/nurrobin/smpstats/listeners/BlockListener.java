@@ -1,6 +1,6 @@
 package de.nurrobin.smpstats.listeners;
 
-import de.nurrobin.smpstats.Settings;
+import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.StatsService;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -9,17 +9,17 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 
 public class BlockListener implements Listener {
+    private final SMPStats plugin;
     private final StatsService statsService;
-    private final Settings settings;
 
-    public BlockListener(StatsService statsService, Settings settings) {
+    public BlockListener(SMPStats plugin, StatsService statsService) {
+        this.plugin = plugin;
         this.statsService = statsService;
-        this.settings = settings;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
-        if (!settings.isTrackBlocks()) {
+        if (!plugin.getSettings().isTrackBlocks()) {
             return;
         }
         statsService.addBlocksPlaced(event.getPlayer().getUniqueId());
@@ -27,7 +27,7 @@ public class BlockListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
-        if (!settings.isTrackBlocks()) {
+        if (!plugin.getSettings().isTrackBlocks()) {
             return;
         }
         statsService.addBlocksBroken(event.getPlayer().getUniqueId());

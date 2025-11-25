@@ -14,6 +14,7 @@ import org.bukkit.entity.Player;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -24,6 +25,7 @@ import java.util.UUID;
 public class StatsCommand implements CommandExecutor, TabCompleter {
     private static final DateTimeFormatter DATE_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withLocale(Locale.GERMANY).withZone(ZoneId.systemDefault());
+    private static final NumberFormat NUMBER = NumberFormat.getIntegerInstance(Locale.GERMANY);
 
     private final SMPStats plugin;
     private final StatsService statsService;
@@ -90,24 +92,32 @@ public class StatsCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendStats(CommandSender sender, StatsRecord record) {
-        sender.sendMessage(ChatColor.GOLD + "----- SMPStats für " + record.getName() + " -----");
+        sender.sendMessage(ChatColor.DARK_AQUA + "╔════════════ " + ChatColor.AQUA + "SMPStats" + ChatColor.DARK_AQUA + " ════════════");
+        sender.sendMessage(ChatColor.GRAY + "  Spieler: " + ChatColor.WHITE + record.getName());
         sender.sendMessage(formatLine("Spielzeit", formatDuration(record.getPlaytimeMillis())));
         sender.sendMessage(formatLine("Erster Join", formatTimestamp(record.getFirstJoin())));
         sender.sendMessage(formatLine("Letzter Join", formatTimestamp(record.getLastJoin())));
-        sender.sendMessage(formatLine("Tode", record.getDeaths() + (record.getLastDeathCause() != null ? " (letzte: " + record.getLastDeathCause() + ")" : "")));
-        sender.sendMessage(formatLine("Kills", "PvP: " + record.getPlayerKills() + " | Mobs: " + record.getMobKills()));
-        sender.sendMessage(formatLine("Blöcke", "Platziert: " + record.getBlocksPlaced() + " | Abgebaut: " + record.getBlocksBroken()));
-        sender.sendMessage(formatLine("Distanz", String.format(Locale.GERMANY, "OW: %.1fm | Nether: %.1fm | End: %.1fm",
+        sender.sendMessage(formatLine("Tode", NUMBER.format(record.getDeaths()) + lastDeathSuffix(record)));
+        sender.sendMessage(formatLine("Kills", "PvP " + NUMBER.format(record.getPlayerKills()) + ChatColor.DARK_GRAY + " | " + ChatColor.WHITE + "Mobs " + NUMBER.format(record.getMobKills())));
+        sender.sendMessage(formatLine("Blöcke", "Platziert " + NUMBER.format(record.getBlocksPlaced()) + ChatColor.DARK_GRAY + " | " + ChatColor.WHITE + "Abgebaut " + NUMBER.format(record.getBlocksBroken())));
+        sender.sendMessage(formatLine("Distanz", String.format(Locale.GERMANY, "OW %.1fm" + ChatColor.DARK_GRAY + " | " + ChatColor.WHITE + "Nether %.1fm" + ChatColor.DARK_GRAY + " | " + ChatColor.WHITE + "End %.1fm",
                 record.getDistanceOverworld(), record.getDistanceNether(), record.getDistanceEnd())));
-        sender.sendMessage(formatLine("Damage", String.format(Locale.GERMANY, "Dealt: %.1f | Taken: %.1f",
+        sender.sendMessage(formatLine("Damage", String.format(Locale.GERMANY, "Dealt %.1f" + ChatColor.DARK_GRAY + " | " + ChatColor.WHITE + "Taken %.1f",
                 record.getDamageDealt(), record.getDamageTaken())));
-        sender.sendMessage(formatLine("Crafting", "Items gefertigt: " + record.getItemsCrafted()));
-        sender.sendMessage(formatLine("Verzehrt", "Items konsumiert: " + record.getItemsConsumed()));
-        sender.sendMessage(formatLine("Biome besucht", record.getBiomesVisited().size() + ""));
+        sender.sendMessage(formatLine("Crafting", "Items gefertigt " + NUMBER.format(record.getItemsCrafted())));
+        sender.sendMessage(formatLine("Verzehrt", "Items konsumiert " + NUMBER.format(record.getItemsConsumed())));
+        sender.sendMessage(formatLine("Biome", NUMBER.format(record.getBiomesVisited().size())));
+        sender.sendMessage(ChatColor.DARK_AQUA + "╚═════════════════════════════════");
+    }
+
+    private String lastDeathSuffix(StatsRecord record) {
+        return record.getLastDeathCause() != null
+                ? ChatColor.DARK_GRAY + " (letzte: " + ChatColor.WHITE + record.getLastDeathCause() + ChatColor.DARK_GRAY + ")"
+                : "";
     }
 
     private String formatLine(String title, String value) {
-        return ChatColor.YELLOW + title + ": " + ChatColor.WHITE + value;
+        return ChatColor.GRAY + "  • " + ChatColor.AQUA + title + ChatColor.DARK_GRAY + " » " + ChatColor.WHITE + value;
     }
 
     private String formatTimestamp(long epochMillis) {

@@ -26,6 +26,7 @@ optional über eine **HTTP-API** zur Verfügung.
 | `/stats <player>` | Statistiken eines anderen Spielers anzeigen |
 | `/stats json` | Eigene Stats als JSON im Chat (für Debug) |
 | `/stats dump` | Alle Stats als JSON in die Konsole schreiben |
+| `/smpstats reload` | Config neu laden (Konsole oder `smpstats.reload`) |
 
 ### 🌐 HTTP API (optional)
 Falls aktiviert, stellt das Plugin einen kleinen HTTP-Server bereit.

@@ -8,3 +8,11 @@ commands:
   stats:
     description: Zeigt SMPStats Statistiken.
     usage: /stats [player|json|dump]
+  smpstats:
+    description: SMPStats Admin-Befehle.
+    usage: /smpstats reload
+    permission: smpstats.reload
+permissions:
+  smpstats.reload:
+    description: Erlaubt das Neuladen der SMPStats-Konfiguration.
+    default: op

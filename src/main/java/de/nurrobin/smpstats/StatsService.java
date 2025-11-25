@@ -16,12 +16,16 @@ import java.util.concurrent.ConcurrentHashMap;
 public class StatsService {
     private final SMPStats plugin;
     private final StatsStorage storage;
-    private final Settings settings;
+    private Settings settings;
     private final Map<UUID, PlayerSession> sessions = new ConcurrentHashMap<>();
 
     public StatsService(SMPStats plugin, StatsStorage storage, Settings settings) {
         this.plugin = plugin;
         this.storage = storage;
+        this.settings = settings;
+    }
+
+    public void updateSettings(Settings settings) {
         this.settings = settings;
     }
 
