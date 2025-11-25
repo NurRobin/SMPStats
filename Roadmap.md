@@ -1,0 +1,26 @@
+# SMPStats Roadmap
+
+Status-Legende: `Todo` | `In Progress` | `Done`  
+Priorität: `High` | `Medium` | `Low`  
+Größe: `S` (klein) | `M` (mittel) | `L` (groß) | `XL` (sehr groß)
+
+## Aktueller Stand
+- ✅ Baseline Stats-Tracking, SQLite, /stats-Command, HTTP-API, Autosave, Reload-Command (Status: Done)
+
+## Fokus-Features
+| Feature | Priorität | Größe | Status | Notizen |
+| --- | --- | --- | --- | --- |
+| Skill-Profile (Mining/Combat/Exploration/Builder/Farmer) | High | M | In Progress | Auswertung existierender Stats, gewichtbar per Config, Anzeige in /stats, später API |
+| Moments Engine (Firsts/Clutch/Fail, Merge-Window) | High | L | Todo | Generische Event-Fenster, Persistenz, Feed-Hook |
+| Heatmaps / Activity Maps (Tode/Mining/Hotspots) | High | L | Todo | Chunk/Region-Bins, periodisches Flush, API-Export |
+| Social Stats (Nähe-Zeit, gemeinsame Kills) | Medium | M | Todo | Sampler jede n Sekunden, Paar-Counter, Leaderboards |
+| Server Health / Cost Index | Medium | M | Todo | Chunks/Entities/Hopper/Redstone Counters, Monitoring-Fokus |
+| Season/Timeline Layer (daily/weekly/monthly) | Medium | M | Todo | Season-Key, Zeiträume, Leaderboards pro Range |
+| Live Feed (WS/SSE) für Moments | Medium | L | Todo | Stream von Moments, Throttle/Dedupe, Auth |
+| Death Replay Lite | Medium | M | Todo | Snapshot bei Tod (Ort, Ursache, Health, Nearby, Value) |
+| Story Generator Hook (Weekly Summary) | Low | M | Todo | JSON-Summary + optional LLM-Hook |
+
+## Unterstützende Tasks
+- Config-Erweiterungen & Docs (Weights, Windows, Regions, Season) – Todo
+- API-Endpunkte für neue Features – Todo
+- Tests/Validation (DB migrations, config parsing) – Todo
