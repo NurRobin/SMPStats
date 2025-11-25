@@ -21,6 +21,7 @@ public class Settings {
     private final boolean heatmapEnabled;
     private final int heatmapFlushMinutes;
     private final java.util.List<de.nurrobin.smpstats.moments.MomentDefinition> momentDefinitions;
+    private final java.util.List<de.nurrobin.smpstats.heatmap.HotspotDefinition> heatmapHotspots;
 
     public Settings(boolean trackMovement,
                     boolean trackBlocks,
@@ -39,7 +40,8 @@ public class Settings {
                     long momentsFlushSeconds,
                     boolean heatmapEnabled,
                     int heatmapFlushMinutes,
-                    java.util.List<de.nurrobin.smpstats.moments.MomentDefinition> momentDefinitions) {
+                    java.util.List<de.nurrobin.smpstats.moments.MomentDefinition> momentDefinitions,
+                    java.util.List<de.nurrobin.smpstats.heatmap.HotspotDefinition> heatmapHotspots) {
         this.trackMovement = trackMovement;
         this.trackBlocks = trackBlocks;
         this.trackKills = trackKills;
@@ -58,6 +60,7 @@ public class Settings {
         this.heatmapEnabled = heatmapEnabled;
         this.heatmapFlushMinutes = heatmapFlushMinutes;
         this.momentDefinitions = momentDefinitions;
+        this.heatmapHotspots = heatmapHotspots;
     }
 
     public boolean isTrackMovement() {
@@ -130,5 +133,9 @@ public class Settings {
 
     public java.util.List<de.nurrobin.smpstats.moments.MomentDefinition> getMomentDefinitions() {
         return momentDefinitions;
+    }
+
+    public java.util.List<de.nurrobin.smpstats.heatmap.HotspotDefinition> getHeatmapHotspots() {
+        return heatmapHotspots;
     }
 }

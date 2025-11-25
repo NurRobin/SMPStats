@@ -107,6 +107,24 @@ public class MomentService {
         }
     }
 
+    public List<MomentEntry> getMomentsSince(long sinceMillis, int limit) {
+        try {
+            return storage.loadMomentsSince(sinceMillis, limit);
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Could not load moments since: " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    public List<MomentEntry> queryMoments(java.util.UUID playerId, String type, long sinceMillis, int limit) {
+        try {
+            return storage.queryMoments(playerId, type, sinceMillis, limit);
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Could not query moments: " + e.getMessage());
+            return List.of();
+        }
+    }
+
     private void flushStale() {
         long now = System.currentTimeMillis();
         for (Map.Entry<Key, ActiveWindow> entry : windows.entrySet()) {

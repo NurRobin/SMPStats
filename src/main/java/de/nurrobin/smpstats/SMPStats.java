@@ -15,6 +15,7 @@ import de.nurrobin.smpstats.skills.SkillWeights;
 import de.nurrobin.smpstats.moments.MomentService;
 import de.nurrobin.smpstats.heatmap.HeatmapService;
 import de.nurrobin.smpstats.moments.MomentConfigParser;
+import de.nurrobin.smpstats.heatmap.HotspotDefinition;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -157,10 +158,38 @@ public class SMPStats extends JavaPlugin {
 
         MomentConfigParser parser = new MomentConfigParser();
         java.util.List<de.nurrobin.smpstats.moments.MomentDefinition> momentDefinitions = parser.parse(config.getConfigurationSection("moments"));
+        java.util.List<HotspotDefinition> hotspots = parseHotspots(config.getConfigurationSection("heatmap.hotspots"));
 
         return new Settings(movement, blocks, kills, biomes, crafting, damage, consumption,
                 apiEnabled, apiPort, apiKey, autosaveMinutes, skillWeights,
-                momentsEnabled, diamondWindowSeconds, momentsFlushSeconds, heatmapEnabled, heatmapFlushMinutes, momentDefinitions);
+                momentsEnabled, diamondWindowSeconds, momentsFlushSeconds, heatmapEnabled, heatmapFlushMinutes, momentDefinitions, hotspots);
+    }
+
+    private java.util.List<HotspotDefinition> parseHotspots(org.bukkit.configuration.ConfigurationSection section) {
+        java.util.List<HotspotDefinition> list = new java.util.ArrayList<>();
+        if (section == null) {
+            return list;
+        }
+        var hotspotSection = section.getConfigurationSection("heatmap.hotspots");
+        if (hotspotSection == null && section.get("heatmap.hotspots") instanceof java.util.List<?>) {
+            // If top-level section passed already contains hotspots list
+            hotspotSection = section.getConfigurationSection("hotspots");
+        }
+        if (hotspotSection == null) {
+            return list;
+        }
+        for (String key : hotspotSection.getKeys(false)) {
+            var cfg = hotspotSection.getConfigurationSection(key);
+            if (cfg == null) continue;
+            String name = cfg.getString("name", key);
+            String world = cfg.getString("world", "world");
+            int minX = cfg.getInt("min.x", cfg.getInt("minX", 0));
+            int minZ = cfg.getInt("min.z", cfg.getInt("minZ", 0));
+            int maxX = cfg.getInt("max.x", cfg.getInt("maxX", 0));
+            int maxZ = cfg.getInt("max.z", cfg.getInt("maxZ", 0));
+            list.add(new HotspotDefinition(name, world, minX, minZ, maxX, maxZ));
+        }
+        return list;
     }
 
     private void registerListeners() {

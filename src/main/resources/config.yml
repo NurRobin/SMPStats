@@ -56,3 +56,9 @@ moments:
 heatmap:
   enabled: true
   flush_minutes: 5     # Schreibintervall für Heatmap-Bins (Chunk-basiert)
+  hotspots:
+    spawn:
+      name: "Spawn"
+      world: "world"
+      min: {x: -100, z: -100}
+      max: {x: 100, z: 100}

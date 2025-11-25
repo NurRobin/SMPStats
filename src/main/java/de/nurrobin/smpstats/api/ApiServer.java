@@ -50,7 +50,9 @@ public class ApiServer {
         server.createContext("/stats", new StatsHandler());
         server.createContext("/online", new OnlineHandler());
         server.createContext("/moments/recent", new RecentMomentsHandler());
+        server.createContext("/moments/query", new QueryMomentsHandler());
         server.createContext("/heatmap", new HeatmapHandler());
+        server.createContext("/heatmap/hotspots", new HeatmapHotspotHandler());
         server.setExecutor(Executors.newCachedThreadPool());
         server.start();
 
@@ -71,6 +73,20 @@ public class ApiServer {
             return false;
         }
         return true;
+    }
+
+    private java.util.Optional<String> queryParam(URI uri, String name) {
+        String query = uri.getQuery();
+        if (query == null || query.isEmpty()) {
+            return java.util.Optional.empty();
+        }
+        for (String part : query.split("&")) {
+            String[] kv = part.split("=", 2);
+            if (kv.length == 2 && kv[0].equalsIgnoreCase(name)) {
+                return java.util.Optional.of(kv[1]);
+            }
+        }
+        return java.util.Optional.empty();
     }
 
     private void sendJson(HttpExchange exchange, int status, Object body) throws IOException {
@@ -140,7 +156,9 @@ public class ApiServer {
             if (!authorize(exchange)) {
                 return;
             }
-            List<?> recent = momentService.getRecentMoments(50);
+            int limit = queryParam(exchange.getRequestURI(), "limit").map(Integer::parseInt).orElse(50);
+            long since = queryParam(exchange.getRequestURI(), "since").map(Long::parseLong).orElse(-1L);
+            List<?> recent = since > 0 ? momentService.getMomentsSince(since, limit) : momentService.getRecentMoments(limit);
             sendJson(exchange, 200, recent);
         }
     }
@@ -163,6 +181,45 @@ public class ApiServer {
             } catch (IllegalArgumentException e) {
                 sendText(exchange, 400, "Invalid heatmap type");
             }
+        }
+    }
+
+    private class HeatmapHotspotHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!authorize(exchange)) {
+                return;
+            }
+            URI uri = exchange.getRequestURI();
+            String path = uri.getPath().substring("/heatmap/hotspots".length()); // /heatmap/hotspots/<type>
+            if (path.isEmpty() || "/".equals(path)) {
+                sendText(exchange, 400, "Missing heatmap type");
+                return;
+            }
+            String typeRaw = path.startsWith("/") ? path.substring(1) : path;
+            sendJson(exchange, 200, heatmapService.loadHotspots(typeRaw.toUpperCase()));
+        }
+    }
+
+    private class QueryMomentsHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!authorize(exchange)) {
+                return;
+            }
+            int limit = queryParam(exchange.getRequestURI(), "limit").map(Integer::parseInt).orElse(100);
+            long since = queryParam(exchange.getRequestURI(), "since").map(Long::parseLong).orElse(-1L);
+            String type = queryParam(exchange.getRequestURI(), "type").orElse(null);
+            java.util.Optional<String> playerParam = queryParam(exchange.getRequestURI(), "player");
+            java.util.UUID playerId = null;
+            if (playerParam.isPresent()) {
+                try {
+                    playerId = java.util.UUID.fromString(playerParam.get());
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+            List<?> moments = momentService.queryMoments(playerId, type != null ? type.toUpperCase() : null, since, limit);
+            sendJson(exchange, 200, moments);
         }
     }
 }

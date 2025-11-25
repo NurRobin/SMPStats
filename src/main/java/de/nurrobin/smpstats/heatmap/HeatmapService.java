@@ -2,6 +2,7 @@ package de.nurrobin.smpstats.heatmap;
 
 import de.nurrobin.smpstats.Settings;
 import de.nurrobin.smpstats.database.StatsStorage;
+import de.nurrobin.smpstats.heatmap.HotspotDefinition;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -17,17 +18,21 @@ public class HeatmapService {
     private final Plugin plugin;
     private final StatsStorage storage;
     private Settings settings;
+    private List<HotspotDefinition> hotspots;
     private final Map<BinKey, Long> pending = new ConcurrentHashMap<>();
+    private final Map<HotspotKey, Long> hotspotCounts = new ConcurrentHashMap<>();
     private int flushTaskId = -1;
 
     public HeatmapService(Plugin plugin, StatsStorage storage, Settings settings) {
         this.plugin = plugin;
         this.storage = storage;
         this.settings = settings;
+        this.hotspots = settings.getHeatmapHotspots();
     }
 
     public void updateSettings(Settings settings) {
         this.settings = settings;
+        this.hotspots = settings.getHeatmapHotspots();
     }
 
     public void start() {
@@ -55,6 +60,11 @@ public class HeatmapService {
         }
         BinKey key = BinKey.fromLocation(type, location);
         pending.merge(key, 1L, Long::sum);
+        for (HotspotDefinition hotspot : hotspots) {
+            if (hotspot.contains(location)) {
+                hotspotCounts.merge(new HotspotKey(type, hotspot.getName(), hotspot.getWorld()), 1L, Long::sum);
+            }
+        }
     }
 
     public List<HeatmapBin> loadTop(String type, int limit) {
@@ -66,9 +76,18 @@ public class HeatmapService {
         }
     }
 
+    public Map<String, Long> loadHotspots(String type) {
+        try {
+            return storage.loadHotspotCounts(type);
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Could not load heatmap hotspots: " + e.getMessage());
+            return Map.of();
+        }
+    }
+
     private void flush() {
         if (pending.isEmpty()) {
-            return;
+            // still flush hotspot counts
         }
         List<Map.Entry<BinKey, Long>> batch = new ArrayList<>(pending.entrySet());
         pending.clear();
@@ -80,6 +99,15 @@ public class HeatmapService {
                 plugin.getLogger().warning("Could not persist heatmap bin: " + e.getMessage());
             }
         }
+        List<Map.Entry<HotspotKey, Long>> hotspotBatch = new ArrayList<>(hotspotCounts.entrySet());
+        hotspotCounts.clear();
+        for (Map.Entry<HotspotKey, Long> entry : hotspotBatch) {
+            try {
+                storage.incrementHotspot(entry.getKey().type, entry.getKey().hotspot, entry.getKey().world, entry.getValue());
+            } catch (SQLException e) {
+                plugin.getLogger().warning("Could not persist hotspot bin: " + e.getMessage());
+            }
+        }
     }
 
     private record BinKey(String type, String world, int chunkX, int chunkZ) {
@@ -87,5 +115,8 @@ public class HeatmapService {
             World world = location.getWorld();
             return new BinKey(type, world != null ? world.getName() : "unknown", location.getBlockX() >> 4, location.getBlockZ() >> 4);
         }
+    }
+
+    private record HotspotKey(String type, String hotspot, String world) {
     }
 }

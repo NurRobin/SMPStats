@@ -19,8 +19,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -97,6 +99,14 @@ public class StatsStorage implements Closeable {
                     chunk_z INTEGER NOT NULL,
                     count INTEGER NOT NULL DEFAULT 0,
                     PRIMARY KEY (type, world, chunk_x, chunk_z)
+                );
+
+                CREATE TABLE IF NOT EXISTS heatmap_hotspots (
+                    type TEXT NOT NULL,
+                    hotspot TEXT NOT NULL,
+                    world TEXT NOT NULL,
+                    count INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (type, hotspot, world)
                 );
                 """;
         try (Statement statement = connection.createStatement()) {
@@ -333,6 +343,36 @@ public class StatsStorage implements Closeable {
         return bins;
     }
 
+    public synchronized void incrementHotspot(String type, String hotspot, String world, long delta) throws SQLException {
+        String sql = """
+                INSERT INTO heatmap_hotspots (type, hotspot, world, count)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(type, hotspot, world) DO UPDATE SET
+                    count = count + excluded.count;
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, type);
+            statement.setString(2, hotspot);
+            statement.setString(3, world);
+            statement.setLong(4, delta);
+            statement.executeUpdate();
+        }
+    }
+
+    public synchronized Map<String, Long> loadHotspotCounts(String type) throws SQLException {
+        String sql = "SELECT hotspot, count FROM heatmap_hotspots WHERE type = ? ORDER BY count DESC";
+        Map<String, Long> map = new LinkedHashMap<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, type);
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    map.put(rs.getString("hotspot"), rs.getLong("count"));
+                }
+            }
+        }
+        return map;
+    }
+
     public synchronized boolean hasMoment(UUID playerId, String type) throws SQLException {
         String sql = "SELECT 1 FROM moments WHERE uuid = ? AND type = ? LIMIT 1";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -353,5 +393,55 @@ public class StatsStorage implements Closeable {
                 plugin.getLogger().warning("Failed to close database connection: " + e.getMessage());
             }
         }
+    }
+
+    public synchronized List<MomentEntry> loadMomentsSince(long sinceMillis, int limit) throws SQLException {
+        String sql = "SELECT * FROM moments WHERE started_at >= ? ORDER BY started_at ASC LIMIT ?";
+        List<MomentEntry> result = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, sinceMillis);
+            statement.setInt(2, limit);
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(mapMoment(rs));
+                }
+            }
+        }
+        return result;
+    }
+
+    public synchronized List<MomentEntry> queryMoments(UUID playerId, String type, long sinceMillis, int limit) throws SQLException {
+        StringBuilder sql = new StringBuilder("SELECT * FROM moments WHERE 1=1");
+        List<Object> params = new ArrayList<>();
+        if (playerId != null) {
+            sql.append(" AND uuid = ?");
+            params.add(playerId.toString());
+        }
+        if (type != null && !type.isBlank()) {
+            sql.append(" AND type = ?");
+            params.add(type);
+        }
+        if (sinceMillis > 0) {
+            sql.append(" AND started_at >= ?");
+            params.add(sinceMillis);
+        }
+        sql.append(" ORDER BY started_at DESC");
+        if (limit > 0) {
+            sql.append(" LIMIT ?");
+            params.add(limit);
+        }
+
+        List<MomentEntry> result = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
+            for (int i = 0; i < params.size(); i++) {
+                statement.setObject(i + 1, params.get(i));
+            }
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(mapMoment(rs));
+                }
+            }
+        }
+        return result;
     }
 }
