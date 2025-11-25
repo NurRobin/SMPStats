@@ -78,3 +78,10 @@ heatmap:
       world: "world"
       min: {x: -100, z: -100}
       max: {x: 100, z: 100}
+
+social:
+  enabled: true
+  sample_seconds: 5    # Abstand für Nähe-Samples (Sekunden)
+
+timeline:
+  enabled: true

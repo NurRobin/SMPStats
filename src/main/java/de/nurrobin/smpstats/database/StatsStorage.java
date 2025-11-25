@@ -28,7 +28,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public class StatsStorage implements Closeable {
-    private static final int SCHEMA_VERSION = 2;
+    private static final int SCHEMA_VERSION = 3;
     private static final Type STRING_SET = new TypeToken<Set<String>>() {
     }.getType();
 
@@ -71,6 +71,10 @@ public class StatsStorage implements Closeable {
             if (currentVersion == 1) {
                 addMomentsAndHeatmapTables();
                 currentVersion = 2;
+            }
+            if (currentVersion == 2) {
+                addSocialTimelineTables();
+                currentVersion = 3;
             }
             setUserVersion(currentVersion);
             connection.commit();
@@ -166,6 +170,39 @@ public class StatsStorage implements Closeable {
                         world TEXT NOT NULL,
                         count INTEGER NOT NULL DEFAULT 0,
                         PRIMARY KEY (type, hotspot, world)
+                    );
+                    """);
+        }
+    }
+
+    private void addSocialTimelineTables() throws SQLException {
+        try (Statement st = connection.createStatement()) {
+            st.execute("""
+                    CREATE TABLE IF NOT EXISTS social_pairs (
+                        uuid_a TEXT NOT NULL,
+                        uuid_b TEXT NOT NULL,
+                        seconds INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY (uuid_a, uuid_b)
+                    );
+                    """);
+            st.execute("""
+                    CREATE TABLE IF NOT EXISTS timeline_daily (
+                        uuid TEXT NOT NULL,
+                        day TEXT NOT NULL,
+                        playtime_ms INTEGER NOT NULL,
+                        blocks_broken INTEGER NOT NULL,
+                        blocks_placed INTEGER NOT NULL,
+                        player_kills INTEGER NOT NULL,
+                        mob_kills INTEGER NOT NULL,
+                        deaths INTEGER NOT NULL,
+                        distance_overworld REAL NOT NULL,
+                        distance_nether REAL NOT NULL,
+                        distance_end REAL NOT NULL,
+                        damage_dealt REAL NOT NULL,
+                        damage_taken REAL NOT NULL,
+                        items_crafted INTEGER NOT NULL,
+                        items_consumed INTEGER NOT NULL,
+                        PRIMARY KEY (uuid, day)
                     );
                     """);
         }
@@ -501,6 +538,107 @@ public class StatsStorage implements Closeable {
             try (ResultSet rs = statement.executeQuery()) {
                 while (rs.next()) {
                     result.add(mapMoment(rs));
+                }
+            }
+        }
+        return result;
+    }
+
+    public synchronized void incrementSocialPair(UUID a, UUID b, long seconds) throws SQLException {
+        String sql = """
+                INSERT INTO social_pairs (uuid_a, uuid_b, seconds)
+                VALUES (?, ?, ?)
+                ON CONFLICT(uuid_a, uuid_b) DO UPDATE SET
+                    seconds = seconds + excluded.seconds;
+                """;
+        try (PreparedStatement st = connection.prepareStatement(sql)) {
+            st.setString(1, a.toString());
+            st.setString(2, b.toString());
+            st.setLong(3, seconds);
+            st.executeUpdate();
+        }
+    }
+
+    public synchronized List<Map.Entry<String, Long>> loadTopSocial(int limit) throws SQLException {
+        String sql = "SELECT uuid_a, uuid_b, seconds FROM social_pairs ORDER BY seconds DESC LIMIT ?";
+        List<Map.Entry<String, Long>> list = new ArrayList<>();
+        try (PreparedStatement st = connection.prepareStatement(sql)) {
+            st.setInt(1, limit);
+            try (ResultSet rs = st.executeQuery()) {
+                while (rs.next()) {
+                    String key = rs.getString("uuid_a") + "," + rs.getString("uuid_b");
+                    list.add(Map.entry(key, rs.getLong("seconds")));
+                }
+            }
+        }
+        return list;
+    }
+
+    public synchronized void upsertTimeline(StatsRecord record, java.time.LocalDate day) throws SQLException {
+        String sql = """
+                INSERT INTO timeline_daily (uuid, day, playtime_ms, blocks_broken, blocks_placed, player_kills, mob_kills, deaths,
+                                            distance_overworld, distance_nether, distance_end,
+                                            damage_dealt, damage_taken, items_crafted, items_consumed)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(uuid, day) DO UPDATE SET
+                    playtime_ms = excluded.playtime_ms,
+                    blocks_broken = excluded.blocks_broken,
+                    blocks_placed = excluded.blocks_placed,
+                    player_kills = excluded.player_kills,
+                    mob_kills = excluded.mob_kills,
+                    deaths = excluded.deaths,
+                    distance_overworld = excluded.distance_overworld,
+                    distance_nether = excluded.distance_nether,
+                    distance_end = excluded.distance_end,
+                    damage_dealt = excluded.damage_dealt,
+                    damage_taken = excluded.damage_taken,
+                    items_crafted = excluded.items_crafted,
+                    items_consumed = excluded.items_consumed;
+                """;
+        try (PreparedStatement st = connection.prepareStatement(sql)) {
+            st.setString(1, record.getUuid().toString());
+            st.setString(2, day.toString());
+            st.setLong(3, record.getPlaytimeMillis());
+            st.setLong(4, record.getBlocksBroken());
+            st.setLong(5, record.getBlocksPlaced());
+            st.setLong(6, record.getPlayerKills());
+            st.setLong(7, record.getMobKills());
+            st.setLong(8, record.getDeaths());
+            st.setDouble(9, record.getDistanceOverworld());
+            st.setDouble(10, record.getDistanceNether());
+            st.setDouble(11, record.getDistanceEnd());
+            st.setDouble(12, record.getDamageDealt());
+            st.setDouble(13, record.getDamageTaken());
+            st.setLong(14, record.getItemsCrafted());
+            st.setLong(15, record.getItemsConsumed());
+            st.executeUpdate();
+        }
+    }
+
+    public synchronized List<Map<String, Object>> loadTimeline(UUID uuid, int limit) throws SQLException {
+        String sql = "SELECT * FROM timeline_daily WHERE uuid = ? ORDER BY day DESC LIMIT ?";
+        List<Map<String, Object>> result = new ArrayList<>();
+        try (PreparedStatement st = connection.prepareStatement(sql)) {
+            st.setString(1, uuid.toString());
+            st.setInt(2, limit);
+            try (ResultSet rs = st.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("day", rs.getString("day"));
+                    row.put("playtime_ms", rs.getLong("playtime_ms"));
+                    row.put("blocks_broken", rs.getLong("blocks_broken"));
+                    row.put("blocks_placed", rs.getLong("blocks_placed"));
+                    row.put("player_kills", rs.getLong("player_kills"));
+                    row.put("mob_kills", rs.getLong("mob_kills"));
+                    row.put("deaths", rs.getLong("deaths"));
+                    row.put("distance_overworld", rs.getDouble("distance_overworld"));
+                    row.put("distance_nether", rs.getDouble("distance_nether"));
+                    row.put("distance_end", rs.getDouble("distance_end"));
+                    row.put("damage_dealt", rs.getDouble("damage_dealt"));
+                    row.put("damage_taken", rs.getDouble("damage_taken"));
+                    row.put("items_crafted", rs.getLong("items_crafted"));
+                    row.put("items_consumed", rs.getLong("items_consumed"));
+                    result.add(row);
                 }
             }
         }

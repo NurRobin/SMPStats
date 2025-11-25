@@ -29,6 +29,10 @@ public class StatsService {
         this.skillCalculator = new SkillCalculator(settings.getSkillWeights());
     }
 
+    public StatsStorage getStorage() {
+        return storage;
+    }
+
     public void updateSettings(Settings settings) {
         this.settings = settings;
         this.skillCalculator.updateWeights(settings.getSkillWeights());
@@ -67,6 +71,7 @@ public class StatsService {
         for (PlayerSession session : sessions.values()) {
             session.updatePlaytime(now);
             save(session.getRecord());
+            plugin.getTimelineService().ifPresent(t -> t.snapshot(session.getRecord()));
         }
     }
 

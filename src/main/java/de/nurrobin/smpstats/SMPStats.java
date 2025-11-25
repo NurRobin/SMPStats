@@ -16,6 +16,8 @@ import de.nurrobin.smpstats.moments.MomentService;
 import de.nurrobin.smpstats.heatmap.HeatmapService;
 import de.nurrobin.smpstats.moments.MomentConfigParser;
 import de.nurrobin.smpstats.heatmap.HotspotDefinition;
+import de.nurrobin.smpstats.social.SocialStatsService;
+import de.nurrobin.smpstats.timeline.TimelineService;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -34,6 +36,8 @@ public class SMPStats extends JavaPlugin {
     private ApiServer apiServer;
     private MomentService momentService;
     private HeatmapService heatmapService;
+    private SocialStatsService socialStatsService;
+    private TimelineService timelineService;
     private int autosaveTaskId = -1;
 
     @Override
@@ -53,6 +57,8 @@ public class SMPStats extends JavaPlugin {
         this.statsService = new StatsService(this, storage, settings);
         this.momentService = new MomentService(this, storage, settings);
         this.heatmapService = new HeatmapService(this, storage, settings);
+        this.socialStatsService = new SocialStatsService(this, storage, settings);
+        this.timelineService = new TimelineService(this, storage, settings);
 
         registerListeners();
         registerCommands();
@@ -62,6 +68,7 @@ public class SMPStats extends JavaPlugin {
         startAutosave();
         momentService.start();
         heatmapService.start();
+        socialStatsService.start();
         startApiServer();
         logStartupBanner("Aktiv");
     }
@@ -77,6 +84,9 @@ public class SMPStats extends JavaPlugin {
         }
         if (heatmapService != null) {
             heatmapService.shutdown();
+        }
+        if (socialStatsService != null) {
+            socialStatsService.shutdown();
         }
         if (apiServer != null) {
             apiServer.stop();
@@ -94,6 +104,10 @@ public class SMPStats extends JavaPlugin {
         return settings;
     }
 
+    public java.util.Optional<TimelineService> getTimelineService() {
+        return java.util.Optional.ofNullable(timelineService);
+    }
+
     public void reloadPluginConfig(CommandSender sender) {
         reloadConfig();
         this.settings = loadSettings();
@@ -107,6 +121,14 @@ public class SMPStats extends JavaPlugin {
             heatmapService.shutdown();
             heatmapService.updateSettings(settings);
             heatmapService.start();
+        }
+        if (socialStatsService != null) {
+            socialStatsService.shutdown();
+            socialStatsService.updateSettings(settings);
+            socialStatsService.start();
+        }
+        if (timelineService != null) {
+            timelineService.updateSettings(settings);
         }
         startAutosave();
         restartApiServer();
@@ -160,9 +182,15 @@ public class SMPStats extends JavaPlugin {
         java.util.List<de.nurrobin.smpstats.moments.MomentDefinition> momentDefinitions = parser.parse(config.getConfigurationSection("moments"));
         java.util.List<HotspotDefinition> hotspots = parseHotspots(config.getConfigurationSection("heatmap.hotspots"));
 
+        boolean socialEnabled = config.getBoolean("social.enabled", true);
+        int socialSampleSeconds = Math.max(1, config.getInt("social.sample_seconds", 5));
+
+        boolean timelineEnabled = config.getBoolean("timeline.enabled", true);
+
         return new Settings(movement, blocks, kills, biomes, crafting, damage, consumption,
                 apiEnabled, apiPort, apiKey, autosaveMinutes, skillWeights,
-                momentsEnabled, diamondWindowSeconds, momentsFlushSeconds, heatmapEnabled, heatmapFlushMinutes, momentDefinitions, hotspots);
+                momentsEnabled, diamondWindowSeconds, momentsFlushSeconds, heatmapEnabled, heatmapFlushMinutes, momentDefinitions, hotspots,
+                socialEnabled, socialSampleSeconds, timelineEnabled);
     }
 
     private java.util.List<HotspotDefinition> parseHotspots(org.bukkit.configuration.ConfigurationSection section) {
@@ -242,7 +270,7 @@ public class SMPStats extends JavaPlugin {
             apiServer = null;
             return;
         }
-        apiServer = new ApiServer(this, statsService, settings, momentService, heatmapService);
+        apiServer = new ApiServer(this, statsService, settings, momentService, heatmapService, timelineService);
         apiServer.start();
     }
 

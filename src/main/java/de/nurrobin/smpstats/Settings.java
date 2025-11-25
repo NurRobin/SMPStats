@@ -22,6 +22,9 @@ public class Settings {
     private final int heatmapFlushMinutes;
     private final java.util.List<de.nurrobin.smpstats.moments.MomentDefinition> momentDefinitions;
     private final java.util.List<de.nurrobin.smpstats.heatmap.HotspotDefinition> heatmapHotspots;
+    private final boolean socialEnabled;
+    private final int socialSampleSeconds;
+    private final boolean timelineEnabled;
 
     public Settings(boolean trackMovement,
                     boolean trackBlocks,
@@ -41,7 +44,10 @@ public class Settings {
                     boolean heatmapEnabled,
                     int heatmapFlushMinutes,
                     java.util.List<de.nurrobin.smpstats.moments.MomentDefinition> momentDefinitions,
-                    java.util.List<de.nurrobin.smpstats.heatmap.HotspotDefinition> heatmapHotspots) {
+                    java.util.List<de.nurrobin.smpstats.heatmap.HotspotDefinition> heatmapHotspots,
+                    boolean socialEnabled,
+                    int socialSampleSeconds,
+                    boolean timelineEnabled) {
         this.trackMovement = trackMovement;
         this.trackBlocks = trackBlocks;
         this.trackKills = trackKills;
@@ -61,6 +67,9 @@ public class Settings {
         this.heatmapFlushMinutes = heatmapFlushMinutes;
         this.momentDefinitions = momentDefinitions;
         this.heatmapHotspots = heatmapHotspots;
+        this.socialEnabled = socialEnabled;
+        this.socialSampleSeconds = socialSampleSeconds;
+        this.timelineEnabled = timelineEnabled;
     }
 
     public boolean isTrackMovement() {
@@ -137,5 +146,17 @@ public class Settings {
 
     public java.util.List<de.nurrobin.smpstats.heatmap.HotspotDefinition> getHeatmapHotspots() {
         return heatmapHotspots;
+    }
+
+    public boolean isSocialEnabled() {
+        return socialEnabled;
+    }
+
+    public int getSocialSampleSeconds() {
+        return socialSampleSeconds;
+    }
+
+    public boolean isTimelineEnabled() {
+        return timelineEnabled;
     }
 }

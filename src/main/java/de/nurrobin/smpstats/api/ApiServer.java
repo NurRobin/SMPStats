@@ -17,6 +17,9 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -27,16 +30,18 @@ public class ApiServer {
     private final Settings settings;
     private final MomentService momentService;
     private final HeatmapService heatmapService;
+    private final de.nurrobin.smpstats.timeline.TimelineService timelineService;
     private final Gson gson = new Gson();
 
     private HttpServer server;
 
-    public ApiServer(SMPStats plugin, StatsService statsService, Settings settings, MomentService momentService, HeatmapService heatmapService) {
+    public ApiServer(SMPStats plugin, StatsService statsService, Settings settings, MomentService momentService, HeatmapService heatmapService, de.nurrobin.smpstats.timeline.TimelineService timelineService) {
         this.plugin = plugin;
         this.statsService = statsService;
         this.settings = settings;
         this.momentService = momentService;
         this.heatmapService = heatmapService;
+        this.timelineService = timelineService;
     }
 
     public void start() {
@@ -54,6 +59,8 @@ public class ApiServer {
         server.createContext("/moments/stream", new MomentsStreamHandler());
         server.createContext("/heatmap", new HeatmapHandler());
         server.createContext("/heatmap/hotspots", new HeatmapHotspotHandler());
+        server.createContext("/timeline", new TimelineHandler());
+        server.createContext("/social/top", new SocialTopHandler());
         server.setExecutor(Executors.newCachedThreadPool());
         server.start();
 
@@ -244,6 +251,61 @@ public class ApiServer {
             try (OutputStream os = exchange.getResponseBody()) {
                 os.write(data);
             }
+        }
+    }
+
+    private class TimelineHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!authorize(exchange)) {
+                return;
+            }
+            String path = exchange.getRequestURI().getPath().substring("/timeline".length()); // /timeline/<uuid>
+            if (path.isEmpty() || "/".equals(path)) {
+                sendText(exchange, 400, "Missing player id");
+                return;
+            }
+            String id = path.startsWith("/") ? path.substring(1) : path;
+            try {
+                UUID uuid = UUID.fromString(id);
+                int limit = queryParam(exchange.getRequestURI(), "limit").map(Integer::parseInt).orElse(30);
+                sendJson(exchange, 200, timelineService != null ? timelineServiceQuery(uuid, limit) : List.of());
+            } catch (IllegalArgumentException e) {
+                sendText(exchange, 400, "Invalid UUID");
+            }
+        }
+
+        private List<?> timelineServiceQuery(UUID uuid, int limit) {
+            try {
+                return statsService.getStorage().loadTimeline(uuid, limit);
+            } catch (Exception e) {
+                plugin.getLogger().warning("Timeline query failed: " + e.getMessage());
+                return List.of();
+            }
+        }
+    }
+
+    private class SocialTopHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!authorize(exchange)) {
+                return;
+            }
+            int limit = queryParam(exchange.getRequestURI(), "limit").map(Integer::parseInt).orElse(50);
+            List<Map<String, Object>> out = new ArrayList<>();
+            try {
+                for (var entry : statsService.getStorage().loadTopSocial(limit)) {
+                    String[] parts = entry.getKey().split(",");
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("a", parts[0]);
+                    row.put("b", parts.length > 1 ? parts[1] : "");
+                    row.put("seconds", entry.getValue());
+                    out.add(row);
+                }
+            } catch (Exception e) {
+                plugin.getLogger().warning("Could not load social top: " + e.getMessage());
+            }
+            sendJson(exchange, 200, out);
         }
     }
 }
