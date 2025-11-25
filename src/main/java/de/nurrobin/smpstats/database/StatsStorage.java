@@ -205,6 +205,24 @@ public class StatsStorage implements Closeable {
                         PRIMARY KEY (uuid, day)
                     );
                     """);
+            st.execute("""
+                    CREATE TABLE IF NOT EXISTS death_replays (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        ts INTEGER NOT NULL,
+                        uuid TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        cause TEXT,
+                        health REAL,
+                        world TEXT,
+                        x INTEGER,
+                        y INTEGER,
+                        z INTEGER,
+                        fall_distance REAL,
+                        value REAL,
+                        nearby_players TEXT,
+                        nearby_mobs TEXT
+                    );
+                    """);
         }
     }
 
@@ -643,5 +661,56 @@ public class StatsStorage implements Closeable {
             }
         }
         return result;
+    }
+
+    public synchronized void saveDeathReplay(de.nurrobin.smpstats.timeline.DeathReplayEntry entry) throws SQLException {
+        String sql = """
+                INSERT INTO death_replays (ts, uuid, name, cause, health, world, x, y, z, fall_distance, value, nearby_players, nearby_mobs)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """;
+        try (PreparedStatement st = connection.prepareStatement(sql)) {
+            st.setLong(1, entry.timestamp());
+            st.setString(2, entry.uuid());
+            st.setString(3, entry.name());
+            st.setString(4, entry.cause());
+            st.setDouble(5, entry.health());
+            st.setString(6, entry.world());
+            st.setInt(7, entry.x());
+            st.setInt(8, entry.y());
+            st.setInt(9, entry.z());
+            st.setDouble(10, entry.fallDistance());
+            st.setDouble(11, entry.value());
+            st.setString(12, gson.toJson(entry.nearbyPlayers()));
+            st.setString(13, gson.toJson(entry.nearbyMobs()));
+            st.executeUpdate();
+        }
+    }
+
+    public synchronized List<de.nurrobin.smpstats.timeline.DeathReplayEntry> loadDeathReplays(int limit) throws SQLException {
+        String sql = "SELECT * FROM death_replays ORDER BY ts DESC LIMIT ?";
+        List<de.nurrobin.smpstats.timeline.DeathReplayEntry> list = new ArrayList<>();
+        try (PreparedStatement st = connection.prepareStatement(sql)) {
+            st.setInt(1, limit);
+            try (ResultSet rs = st.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new de.nurrobin.smpstats.timeline.DeathReplayEntry(
+                            rs.getLong("ts"),
+                            rs.getString("uuid"),
+                            rs.getString("name"),
+                            rs.getString("cause"),
+                            rs.getDouble("health"),
+                            rs.getString("world"),
+                            rs.getInt("x"),
+                            rs.getInt("y"),
+                            rs.getInt("z"),
+                            rs.getDouble("fall_distance"),
+                            rs.getDouble("value"),
+                            gson.fromJson(rs.getString("nearby_players"), new com.google.gson.reflect.TypeToken<java.util.List<String>>(){}.getType()),
+                            gson.fromJson(rs.getString("nearby_mobs"), new com.google.gson.reflect.TypeToken<java.util.List<String>>(){}.getType())
+                    ));
+                }
+            }
+        }
+        return list;
     }
 }

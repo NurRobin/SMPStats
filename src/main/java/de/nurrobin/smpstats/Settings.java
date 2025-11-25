@@ -25,6 +25,10 @@ public class Settings {
     private final boolean socialEnabled;
     private final int socialSampleSeconds;
     private final boolean timelineEnabled;
+    private final boolean deathReplayEnabled;
+    private final boolean deathReplayInventoryValue;
+    private final int deathReplayNearbyRadius;
+    private final int deathReplayLimit;
 
     public Settings(boolean trackMovement,
                     boolean trackBlocks,
@@ -47,7 +51,11 @@ public class Settings {
                     java.util.List<de.nurrobin.smpstats.heatmap.HotspotDefinition> heatmapHotspots,
                     boolean socialEnabled,
                     int socialSampleSeconds,
-                    boolean timelineEnabled) {
+                    boolean timelineEnabled,
+                    boolean deathReplayEnabled,
+                    boolean deathReplayInventoryValue,
+                    int deathReplayNearbyRadius,
+                    int deathReplayLimit) {
         this.trackMovement = trackMovement;
         this.trackBlocks = trackBlocks;
         this.trackKills = trackKills;
@@ -70,6 +78,10 @@ public class Settings {
         this.socialEnabled = socialEnabled;
         this.socialSampleSeconds = socialSampleSeconds;
         this.timelineEnabled = timelineEnabled;
+        this.deathReplayEnabled = deathReplayEnabled;
+        this.deathReplayInventoryValue = deathReplayInventoryValue;
+        this.deathReplayNearbyRadius = deathReplayNearbyRadius;
+        this.deathReplayLimit = deathReplayLimit;
     }
 
     public boolean isTrackMovement() {
@@ -158,5 +170,21 @@ public class Settings {
 
     public boolean isTimelineEnabled() {
         return timelineEnabled;
+    }
+
+    public boolean isDeathReplayEnabled() {
+        return deathReplayEnabled;
+    }
+
+    public boolean isDeathReplayInventoryValue() {
+        return deathReplayInventoryValue;
+    }
+
+    public int getDeathReplayNearbyRadius() {
+        return deathReplayNearbyRadius;
+    }
+
+    public int getDeathReplayLimit() {
+        return deathReplayLimit;
     }
 }

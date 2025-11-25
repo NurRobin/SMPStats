@@ -85,3 +85,9 @@ social:
 
 timeline:
   enabled: true
+
+death_replay:
+  enabled: true
+  include_inventory_value: true
+  nearby_radius: 16   # Blöcke
+  limit: 50           # Anzahl gespeicherter Death Reports

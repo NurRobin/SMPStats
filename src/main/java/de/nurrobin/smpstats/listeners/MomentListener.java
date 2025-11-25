@@ -41,6 +41,13 @@ public class MomentListener implements Listener {
         String cause = last != null ? last.getCause().name() : "UNKNOWN";
         boolean selfExplosion = isSelfExplosion(last, event.getEntity());
         momentService.onDeath(event.getEntity(), event.getEntity().getLocation(), event.getEntity().getFallDistance(), cause, selfExplosion);
+        // Capture death replay
+        if (event.getEntity() != null) {
+            var plugin = org.bukkit.Bukkit.getPluginManager().getPlugin("SMPStats");
+            if (plugin instanceof de.nurrobin.smpstats.SMPStats smp) {
+                smp.getDeathReplayService().ifPresent(service -> service.capture(event.getEntity(), cause, event.getEntity().getFallDistance()));
+            }
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

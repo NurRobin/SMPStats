@@ -18,6 +18,7 @@ import de.nurrobin.smpstats.moments.MomentConfigParser;
 import de.nurrobin.smpstats.heatmap.HotspotDefinition;
 import de.nurrobin.smpstats.social.SocialStatsService;
 import de.nurrobin.smpstats.timeline.TimelineService;
+import de.nurrobin.smpstats.timeline.DeathReplayService;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -38,6 +39,7 @@ public class SMPStats extends JavaPlugin {
     private HeatmapService heatmapService;
     private SocialStatsService socialStatsService;
     private TimelineService timelineService;
+    private DeathReplayService deathReplayService;
     private int autosaveTaskId = -1;
 
     @Override
@@ -59,6 +61,7 @@ public class SMPStats extends JavaPlugin {
         this.heatmapService = new HeatmapService(this, storage, settings);
         this.socialStatsService = new SocialStatsService(this, storage, settings);
         this.timelineService = new TimelineService(this, storage, settings);
+        this.deathReplayService = new DeathReplayService(this, storage, settings);
 
         registerListeners();
         registerCommands();
@@ -69,6 +72,9 @@ public class SMPStats extends JavaPlugin {
         momentService.start();
         heatmapService.start();
         socialStatsService.start();
+        if (deathReplayService != null) {
+            deathReplayService.start();
+        }
         startApiServer();
         logStartupBanner("Aktiv");
     }
@@ -88,6 +94,9 @@ public class SMPStats extends JavaPlugin {
         if (socialStatsService != null) {
             socialStatsService.shutdown();
         }
+        if (deathReplayService != null) {
+            deathReplayService.shutdown();
+        }
         if (apiServer != null) {
             apiServer.stop();
         }
@@ -106,6 +115,10 @@ public class SMPStats extends JavaPlugin {
 
     public java.util.Optional<TimelineService> getTimelineService() {
         return java.util.Optional.ofNullable(timelineService);
+    }
+
+    public java.util.Optional<DeathReplayService> getDeathReplayService() {
+        return java.util.Optional.ofNullable(deathReplayService);
     }
 
     public void reloadPluginConfig(CommandSender sender) {
@@ -129,6 +142,11 @@ public class SMPStats extends JavaPlugin {
         }
         if (timelineService != null) {
             timelineService.updateSettings(settings);
+        }
+        if (deathReplayService != null) {
+            deathReplayService.shutdown();
+            deathReplayService.updateSettings(settings);
+            deathReplayService.start();
         }
         startAutosave();
         restartApiServer();
@@ -187,10 +205,16 @@ public class SMPStats extends JavaPlugin {
 
         boolean timelineEnabled = config.getBoolean("timeline.enabled", true);
 
+        boolean deathReplayEnabled = config.getBoolean("death_replay.enabled", true);
+        boolean deathReplayInventoryValue = config.getBoolean("death_replay.include_inventory_value", true);
+        int deathReplayNearbyRadius = Math.max(1, config.getInt("death_replay.nearby_radius", 16));
+        int deathReplayLimit = Math.max(1, config.getInt("death_replay.limit", 20));
+
         return new Settings(movement, blocks, kills, biomes, crafting, damage, consumption,
                 apiEnabled, apiPort, apiKey, autosaveMinutes, skillWeights,
                 momentsEnabled, diamondWindowSeconds, momentsFlushSeconds, heatmapEnabled, heatmapFlushMinutes, momentDefinitions, hotspots,
-                socialEnabled, socialSampleSeconds, timelineEnabled);
+                socialEnabled, socialSampleSeconds, timelineEnabled,
+                deathReplayEnabled, deathReplayInventoryValue, deathReplayNearbyRadius, deathReplayLimit);
     }
 
     private java.util.List<HotspotDefinition> parseHotspots(org.bukkit.configuration.ConfigurationSection section) {

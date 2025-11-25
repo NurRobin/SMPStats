@@ -61,6 +61,7 @@ public class ApiServer {
         server.createContext("/heatmap/hotspots", new HeatmapHotspotHandler());
         server.createContext("/timeline", new TimelineHandler());
         server.createContext("/social/top", new SocialTopHandler());
+        server.createContext("/death/replay", new DeathReplayHandler());
         server.setExecutor(Executors.newCachedThreadPool());
         server.start();
 
@@ -306,6 +307,22 @@ public class ApiServer {
                 plugin.getLogger().warning("Could not load social top: " + e.getMessage());
             }
             sendJson(exchange, 200, out);
+        }
+    }
+
+    private class DeathReplayHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!authorize(exchange)) {
+                return;
+            }
+            int limit = queryParam(exchange.getRequestURI(), "limit").map(Integer::parseInt).orElse(20);
+            try {
+                sendJson(exchange, 200, statsService.getStorage().loadDeathReplays(limit));
+            } catch (Exception e) {
+                plugin.getLogger().warning("Could not load death replays: " + e.getMessage());
+                sendText(exchange, 500, "Error");
+            }
         }
     }
 }
