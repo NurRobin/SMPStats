@@ -125,9 +125,3 @@ Optional in Zukunft über Permission-Nodes regelbar.
 * Comparison Stats (Spieler vergleichen)
 * Scoreboard Integration
 * Leaderboards (Kills, Playtime, Distance…)
-
----
-
-## 📝 Lizenz
-
-MIT — frei nutzbar, anpassbar, erweiterbar.
