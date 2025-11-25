@@ -21,17 +21,21 @@ public class SmpstatsAdminCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (args.length == 0 || !"reload".equalsIgnoreCase(args[0])) {
-            sender.sendMessage(ChatColor.YELLOW + "Nutze: /smpstats reload");
+        if (args.length == 0) {
+            showInfo(sender);
             return true;
         }
 
-        if (!hasReloadPermission(sender)) {
-            sender.sendMessage(ChatColor.RED + "Dir fehlt die Berechtigung smpstats.reload");
+        if ("reload".equalsIgnoreCase(args[0])) {
+            if (!hasReloadPermission(sender)) {
+                sender.sendMessage(ChatColor.RED + "Dir fehlt die Berechtigung smpstats.reload");
+                return true;
+            }
+            plugin.reloadPluginConfig(sender);
             return true;
         }
 
-        plugin.reloadPluginConfig(sender);
+        sender.sendMessage(ChatColor.YELLOW + "Nutze: /smpstats [info|reload]");
         return true;
     }
 
@@ -40,6 +44,43 @@ public class SmpstatsAdminCommand implements CommandExecutor, TabCompleter {
             return true; // console
         }
         return sender.hasPermission("smpstats.reload");
+    }
+
+    private void showInfo(CommandSender sender) {
+        sender.sendMessage(ChatColor.DARK_AQUA + "╔══════════ " + ChatColor.AQUA + "SMPStats" + ChatColor.DARK_AQUA + " ══════════");
+        sender.sendMessage(line("Version", plugin.getDescription().getVersion()));
+        sender.sendMessage(line("API", plugin.getSettings().isApiEnabled()
+                ? "Enabled @ :" + plugin.getSettings().getApiPort()
+                : "Disabled"));
+        sender.sendMessage(line("Autosave", plugin.getSettings().getAutosaveMinutes() + " min"));
+        sender.sendMessage(line("Moments", plugin.getSettings().isMomentsEnabled() ? "On" : "Off"));
+        sender.sendMessage(line("Heatmap", plugin.getSettings().isHeatmapEnabled() ? "On" : "Off"));
+        sender.sendMessage(line("Tracking", trackingSummary()));
+        sender.sendMessage(ChatColor.DARK_AQUA + "╚═══════════════════════════════");
+    }
+
+    private String line(String key, String value) {
+        return ChatColor.GRAY + "  • " + ChatColor.AQUA + key + ChatColor.DARK_GRAY + " » " + ChatColor.WHITE + value;
+    }
+
+    private String trackingSummary() {
+        var s = plugin.getSettings();
+        StringBuilder b = new StringBuilder();
+        appendFlag(b, "Move", s.isTrackMovement());
+        appendFlag(b, "Blocks", s.isTrackBlocks());
+        appendFlag(b, "Kills", s.isTrackKills());
+        appendFlag(b, "Biomes", s.isTrackBiomes());
+        appendFlag(b, "Craft", s.isTrackCrafting());
+        appendFlag(b, "Dmg", s.isTrackDamage());
+        appendFlag(b, "Use", s.isTrackConsumption());
+        return b.toString();
+    }
+
+    private void appendFlag(StringBuilder b, String label, boolean on) {
+        if (!b.isEmpty()) {
+            b.append(ChatColor.DARK_GRAY).append(" | ");
+        }
+        b.append(on ? ChatColor.GREEN : ChatColor.RED).append(label);
     }
 
     @Override

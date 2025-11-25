@@ -10,7 +10,7 @@ commands:
     usage: /stats [player|json|dump]
   smpstats:
     description: SMPStats Admin-Befehle.
-    usage: /smpstats reload
+    usage: /smpstats [info|reload]
     permission: smpstats.reload
 permissions:
   smpstats.reload:
