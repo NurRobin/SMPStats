@@ -28,6 +28,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public class StatsStorage implements Closeable {
+    private static final int SCHEMA_VERSION = 2;
     private static final Type STRING_SET = new TypeToken<Set<String>>() {
     }.getType();
 
@@ -50,70 +51,131 @@ public class StatsStorage implements Closeable {
             pragma.execute("PRAGMA journal_mode=WAL;");
             pragma.execute("PRAGMA synchronous=NORMAL;");
         }
-        createTables();
+        applyMigrations();
     }
 
-    private void createTables() throws SQLException {
-        String sql = """
-                CREATE TABLE IF NOT EXISTS player_stats (
-                    uuid TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    first_join INTEGER NOT NULL,
-                    last_join INTEGER NOT NULL,
-                    playtime_ms INTEGER NOT NULL DEFAULT 0,
-                    deaths INTEGER NOT NULL DEFAULT 0,
-                    last_death TEXT,
-                    player_kills INTEGER NOT NULL DEFAULT 0,
-                    mob_kills INTEGER NOT NULL DEFAULT 0,
-                    blocks_placed INTEGER NOT NULL DEFAULT 0,
-                    blocks_broken INTEGER NOT NULL DEFAULT 0,
-                    dist_overworld REAL NOT NULL DEFAULT 0,
-                    dist_nether REAL NOT NULL DEFAULT 0,
-                    dist_end REAL NOT NULL DEFAULT 0,
-                    biomes TEXT,
-                    damage_dealt REAL NOT NULL DEFAULT 0,
-                    damage_taken REAL NOT NULL DEFAULT 0,
-                    items_crafted INTEGER NOT NULL DEFAULT 0,
-                    items_consumed INTEGER NOT NULL DEFAULT 0
-                );
-
-                CREATE TABLE IF NOT EXISTS moments (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    uuid TEXT NOT NULL,
-                    type TEXT NOT NULL,
-                    title TEXT,
-                    detail TEXT,
-                    payload TEXT,
-                    world TEXT,
-                    x INTEGER,
-                    y INTEGER,
-                    z INTEGER,
-                    started_at INTEGER NOT NULL,
-                    ended_at INTEGER NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS heatmap_bins (
-                    type TEXT NOT NULL,
-                    world TEXT NOT NULL,
-                    chunk_x INTEGER NOT NULL,
-                    chunk_z INTEGER NOT NULL,
-                    count INTEGER NOT NULL DEFAULT 0,
-                    PRIMARY KEY (type, world, chunk_x, chunk_z)
-                );
-
-                CREATE TABLE IF NOT EXISTS heatmap_hotspots (
-                    type TEXT NOT NULL,
-                    hotspot TEXT NOT NULL,
-                    world TEXT NOT NULL,
-                    count INTEGER NOT NULL DEFAULT 0,
-                    PRIMARY KEY (type, hotspot, world)
-                );
-                """;
-        try (Statement statement = connection.createStatement()) {
-            statement.execute(sql);
-            statement.execute("CREATE INDEX IF NOT EXISTS idx_player_name ON player_stats(name);");
-            statement.execute("CREATE INDEX IF NOT EXISTS idx_moments_type_time ON moments(type, started_at DESC);");
+    private void applyMigrations() throws SQLException {
+        int currentVersion = getUserVersion();
+        if (currentVersion > SCHEMA_VERSION) {
+            String msg = "Database schema (" + currentVersion + ") is newer than plugin supports (" + SCHEMA_VERSION + ").";
+            plugin.getLogger().severe(msg);
+            notifyAdmins(msg);
+            throw new SQLException(msg);
         }
+        connection.setAutoCommit(false);
+        try {
+            if (currentVersion == 0) {
+                createBaseTables();
+                currentVersion = 1;
+            }
+            if (currentVersion == 1) {
+                addMomentsAndHeatmapTables();
+                currentVersion = 2;
+            }
+            setUserVersion(currentVersion);
+            connection.commit();
+        } catch (SQLException ex) {
+            connection.rollback();
+            throw ex;
+        } finally {
+            connection.setAutoCommit(true);
+        }
+        if (currentVersion < SCHEMA_VERSION) {
+            setUserVersion(SCHEMA_VERSION);
+        }
+    }
+
+    private int getUserVersion() throws SQLException {
+        try (Statement st = connection.createStatement();
+             ResultSet rs = st.executeQuery("PRAGMA user_version;")) {
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+        }
+        return 0;
+    }
+
+    private void setUserVersion(int version) throws SQLException {
+        try (Statement st = connection.createStatement()) {
+            st.execute("PRAGMA user_version=" + version + ";");
+        }
+    }
+
+    private void createBaseTables() throws SQLException {
+        try (Statement st = connection.createStatement()) {
+            st.execute("""
+                    CREATE TABLE IF NOT EXISTS player_stats (
+                        uuid TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        first_join INTEGER NOT NULL,
+                        last_join INTEGER NOT NULL,
+                        playtime_ms INTEGER NOT NULL DEFAULT 0,
+                        deaths INTEGER NOT NULL DEFAULT 0,
+                        last_death TEXT,
+                        player_kills INTEGER NOT NULL DEFAULT 0,
+                        mob_kills INTEGER NOT NULL DEFAULT 0,
+                        blocks_placed INTEGER NOT NULL DEFAULT 0,
+                        blocks_broken INTEGER NOT NULL DEFAULT 0,
+                        dist_overworld REAL NOT NULL DEFAULT 0,
+                        dist_nether REAL NOT NULL DEFAULT 0,
+                        dist_end REAL NOT NULL DEFAULT 0,
+                        biomes TEXT,
+                        damage_dealt REAL NOT NULL DEFAULT 0,
+                        damage_taken REAL NOT NULL DEFAULT 0,
+                        items_crafted INTEGER NOT NULL DEFAULT 0,
+                        items_consumed INTEGER NOT NULL DEFAULT 0
+                    );
+                    """);
+            st.execute("CREATE INDEX IF NOT EXISTS idx_player_name ON player_stats(name);");
+        }
+    }
+
+    private void addMomentsAndHeatmapTables() throws SQLException {
+        try (Statement st = connection.createStatement()) {
+            st.execute("""
+                    CREATE TABLE IF NOT EXISTS moments (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        uuid TEXT NOT NULL,
+                        type TEXT NOT NULL,
+                        title TEXT,
+                        detail TEXT,
+                        payload TEXT,
+                        world TEXT,
+                        x INTEGER,
+                        y INTEGER,
+                        z INTEGER,
+                        started_at INTEGER NOT NULL,
+                        ended_at INTEGER NOT NULL
+                    );
+                    """);
+            st.execute("CREATE INDEX IF NOT EXISTS idx_moments_type_time ON moments(type, started_at DESC);");
+            st.execute("""
+                    CREATE TABLE IF NOT EXISTS heatmap_bins (
+                        type TEXT NOT NULL,
+                        world TEXT NOT NULL,
+                        chunk_x INTEGER NOT NULL,
+                        chunk_z INTEGER NOT NULL,
+                        count INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY (type, world, chunk_x, chunk_z)
+                    );
+                    """);
+            st.execute("""
+                    CREATE TABLE IF NOT EXISTS heatmap_hotspots (
+                        type TEXT NOT NULL,
+                        hotspot TEXT NOT NULL,
+                        world TEXT NOT NULL,
+                        count INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY (type, hotspot, world)
+                    );
+                    """);
+        }
+    }
+
+    private void notifyAdmins(String msg) {
+        plugin.getLogger().severe(msg);
+        plugin.getServer().getOnlinePlayers().stream()
+                .filter(p -> p.isOp() || p.hasPermission("smpstats.reload"))
+                .forEach(p -> p.sendMessage(org.bukkit.ChatColor.RED + "[SMPStats] " + msg));
     }
 
     public synchronized StatsRecord loadOrCreate(UUID uuid, String name) throws SQLException {
