@@ -3,6 +3,8 @@ package de.nurrobin.smpstats;
 import de.nurrobin.smpstats.database.StatsStorage;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
+import de.nurrobin.smpstats.skills.SkillCalculator;
+import de.nurrobin.smpstats.skills.SkillProfile;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -17,16 +19,19 @@ public class StatsService {
     private final SMPStats plugin;
     private final StatsStorage storage;
     private Settings settings;
+    private SkillCalculator skillCalculator;
     private final Map<UUID, PlayerSession> sessions = new ConcurrentHashMap<>();
 
     public StatsService(SMPStats plugin, StatsStorage storage, Settings settings) {
         this.plugin = plugin;
         this.storage = storage;
         this.settings = settings;
+        this.skillCalculator = new SkillCalculator(settings.getSkillWeights());
     }
 
     public void updateSettings(Settings settings) {
         this.settings = settings;
+        this.skillCalculator.updateWeights(settings.getSkillWeights());
     }
 
     public void handleJoin(Player player) {
@@ -110,6 +115,11 @@ public class StatsService {
         }
         all.sort(Comparator.comparing(StatsRecord::getName, String.CASE_INSENSITIVE_ORDER));
         return all;
+    }
+
+    public Optional<SkillProfile> getSkillProfile(UUID uuid) {
+        Optional<StatsRecord> stats = getStats(uuid);
+        return stats.map(skillCalculator::calculate);
     }
 
     public List<String> getOnlineNames() {

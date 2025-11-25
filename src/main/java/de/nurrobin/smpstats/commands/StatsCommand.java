@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.StatsRecord;
 import de.nurrobin.smpstats.StatsService;
+import de.nurrobin.smpstats.skills.SkillProfile;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -107,6 +108,15 @@ public class StatsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(formatLine("Crafting", "Items gefertigt " + NUMBER.format(record.getItemsCrafted())));
         sender.sendMessage(formatLine("Verzehrt", "Items konsumiert " + NUMBER.format(record.getItemsConsumed())));
         sender.sendMessage(formatLine("Biome", NUMBER.format(record.getBiomesVisited().size())));
+        statsService.getSkillProfile(record.getUuid()).ifPresent(profile -> {
+            sender.sendMessage(ChatColor.DARK_AQUA + "  Skills:");
+            sender.sendMessage(formatLine("Mining", formatSkill(profile.mining())));
+            sender.sendMessage(formatLine("Combat", formatSkill(profile.combat())));
+            sender.sendMessage(formatLine("Exploration", formatSkill(profile.exploration())));
+            sender.sendMessage(formatLine("Builder", formatSkill(profile.builder())));
+            sender.sendMessage(formatLine("Farmer", formatSkill(profile.farmer())));
+            sender.sendMessage(formatLine("Total", formatSkill(profile.total())));
+        });
         sender.sendMessage(ChatColor.DARK_AQUA + "╚═════════════════════════════════");
     }
 
@@ -118,6 +128,10 @@ public class StatsCommand implements CommandExecutor, TabCompleter {
 
     private String formatLine(String title, String value) {
         return ChatColor.GRAY + "  • " + ChatColor.AQUA + title + ChatColor.DARK_GRAY + " » " + ChatColor.WHITE + value;
+    }
+
+    private String formatSkill(double value) {
+        return String.format(Locale.GERMANY, "%.1f", value);
     }
 
     private String formatTimestamp(long epochMillis) {

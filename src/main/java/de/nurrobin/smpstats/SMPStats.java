@@ -9,6 +9,7 @@ import de.nurrobin.smpstats.listeners.CombatListener;
 import de.nurrobin.smpstats.listeners.CraftingListener;
 import de.nurrobin.smpstats.listeners.JoinQuitListener;
 import de.nurrobin.smpstats.listeners.MovementListener;
+import de.nurrobin.smpstats.skills.SkillWeights;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -100,8 +101,28 @@ public class SMPStats extends JavaPlugin {
         String apiKey = config.getString("api.api_key", "CHANGEME123");
         int autosaveMinutes = Math.max(1, config.getInt("autosave_minutes", 5));
 
+        SkillWeights skillWeights = new SkillWeights(
+                new SkillWeights.MiningWeights(config.getDouble("skills.mining.blocks_broken_weight", 0.05)),
+                new SkillWeights.CombatWeights(
+                        config.getDouble("skills.combat.player_kill_weight", 5.0),
+                        config.getDouble("skills.combat.mob_kill_weight", 2.0),
+                        config.getDouble("skills.combat.damage_dealt_weight", 0.02)
+                ),
+                new SkillWeights.ExplorationWeights(
+                        config.getDouble("skills.exploration.distance_weight", 0.01),
+                        config.getDouble("skills.exploration.biomes_weight", 8.0)
+                ),
+                new SkillWeights.BuilderWeights(
+                        config.getDouble("skills.builder.blocks_placed_weight", 0.05)
+                ),
+                new SkillWeights.FarmerWeights(
+                        config.getDouble("skills.farmer.items_crafted_weight", 0.02),
+                        config.getDouble("skills.farmer.items_consumed_weight", 0.01)
+                )
+        );
+
         return new Settings(movement, blocks, kills, biomes, crafting, damage, consumption,
-                apiEnabled, apiPort, apiKey, autosaveMinutes);
+                apiEnabled, apiPort, apiKey, autosaveMinutes, skillWeights);
     }
 
     private void registerListeners() {

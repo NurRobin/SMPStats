@@ -14,3 +14,19 @@ tracking:
   consumption: true
 
 autosave_minutes: 5
+
+skills:
+  mining:
+    blocks_broken_weight: 0.05
+  combat:
+    player_kill_weight: 5.0
+    mob_kill_weight: 2.0
+    damage_dealt_weight: 0.02
+  exploration:
+    distance_weight: 0.01
+    biomes_weight: 8.0
+  builder:
+    blocks_placed_weight: 0.05
+  farmer:
+    items_crafted_weight: 0.02
+    items_consumed_weight: 0.01

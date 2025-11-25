@@ -1,5 +1,7 @@
 package de.nurrobin.smpstats;
 
+import de.nurrobin.smpstats.skills.SkillWeights;
+
 public class Settings {
     private final boolean trackMovement;
     private final boolean trackBlocks;
@@ -12,6 +14,7 @@ public class Settings {
     private final int apiPort;
     private final String apiKey;
     private final int autosaveMinutes;
+    private final SkillWeights skillWeights;
 
     public Settings(boolean trackMovement,
                     boolean trackBlocks,
@@ -23,7 +26,8 @@ public class Settings {
                     boolean apiEnabled,
                     int apiPort,
                     String apiKey,
-                    int autosaveMinutes) {
+                    int autosaveMinutes,
+                    SkillWeights skillWeights) {
         this.trackMovement = trackMovement;
         this.trackBlocks = trackBlocks;
         this.trackKills = trackKills;
@@ -35,6 +39,7 @@ public class Settings {
         this.apiPort = apiPort;
         this.apiKey = apiKey;
         this.autosaveMinutes = autosaveMinutes;
+        this.skillWeights = skillWeights;
     }
 
     public boolean isTrackMovement() {
@@ -79,5 +84,9 @@ public class Settings {
 
     public int getAutosaveMinutes() {
         return autosaveMinutes;
+    }
+
+    public SkillWeights getSkillWeights() {
+        return skillWeights;
     }
 }
