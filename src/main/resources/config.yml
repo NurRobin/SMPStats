@@ -1,7 +1,8 @@
 api:
-  enabled: false
+  enabled: true
+  bind_address: "0.0.0.0"
   port: 8765
-  api_key: "CHANGEME123"
+  api_key: "YouShouldChangeThisKey"
 
 tracking:
   movement: true
