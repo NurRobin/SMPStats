@@ -61,11 +61,11 @@ public class DeathReplayService {
             }
         }
 
-        double value = 0;
-        if (settings.isDeathReplayInventoryValue()) {
+        List<String> inventory = new ArrayList<>();
+        if (settings.isDeathReplayInventoryItems()) {
             for (ItemStack stack : player.getInventory().getContents()) {
                 if (stack != null) {
-                    value += stack.getAmount(); // simple value proxy
+                    inventory.add(stack.getType().name() + "x" + stack.getAmount());
                 }
             }
         }
@@ -81,9 +81,9 @@ public class DeathReplayService {
                 loc.getBlockY(),
                 loc.getBlockZ(),
                 fallDistance,
-                value,
                 nearbyPlayers,
-                nearbyMobs
+                nearbyMobs,
+                inventory
         );
         buffer.addFirst(entry);
         while (buffer.size() > settings.getDeathReplayLimit()) {

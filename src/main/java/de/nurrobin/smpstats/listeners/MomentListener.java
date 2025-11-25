@@ -24,10 +24,12 @@ import java.util.UUID;
 
 public class MomentListener implements Listener {
     private final MomentService momentService;
+    private final de.nurrobin.smpstats.timeline.DeathReplayService deathReplayService;
     private final Map<UUID, Long> lastWaterPlace = new HashMap<>();
 
-    public MomentListener(MomentService momentService) {
+    public MomentListener(MomentService momentService, de.nurrobin.smpstats.timeline.DeathReplayService deathReplayService) {
         this.momentService = momentService;
+        this.deathReplayService = deathReplayService;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -42,11 +44,8 @@ public class MomentListener implements Listener {
         boolean selfExplosion = isSelfExplosion(last, event.getEntity());
         momentService.onDeath(event.getEntity(), event.getEntity().getLocation(), event.getEntity().getFallDistance(), cause, selfExplosion);
         // Capture death replay
-        if (event.getEntity() != null) {
-            var plugin = org.bukkit.Bukkit.getPluginManager().getPlugin("SMPStats");
-            if (plugin instanceof de.nurrobin.smpstats.SMPStats smp) {
-                smp.getDeathReplayService().ifPresent(service -> service.capture(event.getEntity(), cause, event.getEntity().getFallDistance()));
-            }
+        if (deathReplayService != null) {
+            deathReplayService.capture(event.getEntity(), cause, event.getEntity().getFallDistance());
         }
     }
 

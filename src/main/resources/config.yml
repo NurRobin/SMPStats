@@ -88,6 +88,6 @@ timeline:
 
 death_replay:
   enabled: true
-  include_inventory_value: true
+  include_inventory_items: true
   nearby_radius: 16   # Blöcke
   limit: 50           # Anzahl gespeicherter Death Reports

@@ -26,7 +26,7 @@ public class Settings {
     private final int socialSampleSeconds;
     private final boolean timelineEnabled;
     private final boolean deathReplayEnabled;
-    private final boolean deathReplayInventoryValue;
+    private final boolean deathReplayInventoryItems;
     private final int deathReplayNearbyRadius;
     private final int deathReplayLimit;
 
@@ -53,7 +53,7 @@ public class Settings {
                     int socialSampleSeconds,
                     boolean timelineEnabled,
                     boolean deathReplayEnabled,
-                    boolean deathReplayInventoryValue,
+                    boolean deathReplayInventoryItems,
                     int deathReplayNearbyRadius,
                     int deathReplayLimit) {
         this.trackMovement = trackMovement;
@@ -79,7 +79,7 @@ public class Settings {
         this.socialSampleSeconds = socialSampleSeconds;
         this.timelineEnabled = timelineEnabled;
         this.deathReplayEnabled = deathReplayEnabled;
-        this.deathReplayInventoryValue = deathReplayInventoryValue;
+        this.deathReplayInventoryItems = deathReplayInventoryItems;
         this.deathReplayNearbyRadius = deathReplayNearbyRadius;
         this.deathReplayLimit = deathReplayLimit;
     }
@@ -176,8 +176,8 @@ public class Settings {
         return deathReplayEnabled;
     }
 
-    public boolean isDeathReplayInventoryValue() {
-        return deathReplayInventoryValue;
+    public boolean isDeathReplayInventoryItems() {
+        return deathReplayInventoryItems;
     }
 
     public int getDeathReplayNearbyRadius() {

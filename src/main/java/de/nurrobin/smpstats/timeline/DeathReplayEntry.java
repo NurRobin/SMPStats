@@ -13,8 +13,8 @@ public record DeathReplayEntry(
         int y,
         int z,
         double fallDistance,
-        double value,
         List<String> nearbyPlayers,
-        List<String> nearbyMobs
+        List<String> nearbyMobs,
+        List<String> inventory
 ) {
 }

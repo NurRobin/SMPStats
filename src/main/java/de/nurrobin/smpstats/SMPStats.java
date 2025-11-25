@@ -206,7 +206,7 @@ public class SMPStats extends JavaPlugin {
         boolean timelineEnabled = config.getBoolean("timeline.enabled", true);
 
         boolean deathReplayEnabled = config.getBoolean("death_replay.enabled", true);
-        boolean deathReplayInventoryValue = config.getBoolean("death_replay.include_inventory_value", true);
+        boolean deathReplayInventoryItems = config.getBoolean("death_replay.include_inventory_items", true);
         int deathReplayNearbyRadius = Math.max(1, config.getInt("death_replay.nearby_radius", 16));
         int deathReplayLimit = Math.max(1, config.getInt("death_replay.limit", 20));
 
@@ -214,7 +214,7 @@ public class SMPStats extends JavaPlugin {
                 apiEnabled, apiPort, apiKey, autosaveMinutes, skillWeights,
                 momentsEnabled, diamondWindowSeconds, momentsFlushSeconds, heatmapEnabled, heatmapFlushMinutes, momentDefinitions, hotspots,
                 socialEnabled, socialSampleSeconds, timelineEnabled,
-                deathReplayEnabled, deathReplayInventoryValue, deathReplayNearbyRadius, deathReplayLimit);
+                deathReplayEnabled, deathReplayInventoryItems, deathReplayNearbyRadius, deathReplayLimit);
     }
 
     private java.util.List<HotspotDefinition> parseHotspots(org.bukkit.configuration.ConfigurationSection section) {
@@ -251,7 +251,7 @@ public class SMPStats extends JavaPlugin {
         pm.registerEvents(new CombatListener(this, statsService), this);
         pm.registerEvents(new MovementListener(this, statsService), this);
         pm.registerEvents(new CraftingListener(this, statsService), this);
-        pm.registerEvents(new MomentListener(momentService), this);
+        pm.registerEvents(new MomentListener(momentService, deathReplayService), this);
         pm.registerEvents(new HeatmapListener(heatmapService), this);
     }
 

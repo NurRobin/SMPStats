@@ -17,7 +17,7 @@ Größe: `S` (klein) | `M` (mittel) | `L` (groß) | `XL` (sehr groß)
 | Server Health / Cost Index | Medium | M | Todo | Chunks/Entities/Hopper/Redstone Counters, Monitoring-Fokus |
 | Season/Timeline Layer (daily/weekly/monthly) | Medium | M | Todo | Season-Key, Zeiträume, Leaderboards pro Range |
 | Live Feed (WS/SSE) für Moments | Medium | L | Todo | Stream von Moments, Throttle/Dedupe, Auth |
-| Death Replay Lite | Medium | M | In Progress | Snapshot bei Tod (Ort, Ursache, Health, Nearby, Value) |
+| Death Replay Lite | Medium | M | Done | Snapshot bei Tod (Ort, Ursache, Health, Nearby, Inventory) |
 | Story Generator Hook (Weekly Summary) | Low | M | Todo | JSON-Summary + optional LLM-Hook |
 
 ## Unterstützende Tasks

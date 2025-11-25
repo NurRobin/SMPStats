@@ -28,7 +28,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public class StatsStorage implements Closeable {
-    private static final int SCHEMA_VERSION = 3;
+    private static final int SCHEMA_VERSION = 4;
     private static final Type STRING_SET = new TypeToken<Set<String>>() {
     }.getType();
 
@@ -75,6 +75,10 @@ public class StatsStorage implements Closeable {
             if (currentVersion == 2) {
                 addSocialTimelineTables();
                 currentVersion = 3;
+            }
+            if (currentVersion == 3) {
+                addDeathReplayItemsColumn();
+                currentVersion = 4;
             }
             setUserVersion(currentVersion);
             connection.commit();
@@ -220,9 +224,20 @@ public class StatsStorage implements Closeable {
                         fall_distance REAL,
                         value REAL,
                         nearby_players TEXT,
-                        nearby_mobs TEXT
+                        nearby_mobs TEXT,
+                        inventory TEXT
                     );
                     """);
+        }
+    }
+
+    private void addDeathReplayItemsColumn() throws SQLException {
+        try (Statement st = connection.createStatement()) {
+            st.execute("ALTER TABLE death_replays ADD COLUMN inventory TEXT;");
+        } catch (SQLException e) {
+            if (!e.getMessage().contains("duplicate column")) {
+                throw e;
+            }
         }
     }
 
@@ -665,8 +680,8 @@ public class StatsStorage implements Closeable {
 
     public synchronized void saveDeathReplay(de.nurrobin.smpstats.timeline.DeathReplayEntry entry) throws SQLException {
         String sql = """
-                INSERT INTO death_replays (ts, uuid, name, cause, health, world, x, y, z, fall_distance, value, nearby_players, nearby_mobs)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                INSERT INTO death_replays (ts, uuid, name, cause, health, world, x, y, z, fall_distance, value, nearby_players, nearby_mobs, inventory)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """;
         try (PreparedStatement st = connection.prepareStatement(sql)) {
             st.setLong(1, entry.timestamp());
@@ -679,9 +694,10 @@ public class StatsStorage implements Closeable {
             st.setInt(8, entry.y());
             st.setInt(9, entry.z());
             st.setDouble(10, entry.fallDistance());
-            st.setDouble(11, entry.value());
+            st.setDouble(11, 0); // value not used
             st.setString(12, gson.toJson(entry.nearbyPlayers()));
             st.setString(13, gson.toJson(entry.nearbyMobs()));
+            st.setString(14, gson.toJson(entry.inventory()));
             st.executeUpdate();
         }
     }
@@ -704,9 +720,9 @@ public class StatsStorage implements Closeable {
                             rs.getInt("y"),
                             rs.getInt("z"),
                             rs.getDouble("fall_distance"),
-                            rs.getDouble("value"),
                             gson.fromJson(rs.getString("nearby_players"), new com.google.gson.reflect.TypeToken<java.util.List<String>>(){}.getType()),
-                            gson.fromJson(rs.getString("nearby_mobs"), new com.google.gson.reflect.TypeToken<java.util.List<String>>(){}.getType())
+                            gson.fromJson(rs.getString("nearby_mobs"), new com.google.gson.reflect.TypeToken<java.util.List<String>>(){}.getType()),
+                            gson.fromJson(rs.getString("inventory"), new com.google.gson.reflect.TypeToken<java.util.List<String>>(){}.getType())
                     ));
                 }
             }
