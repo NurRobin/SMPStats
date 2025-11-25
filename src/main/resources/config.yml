@@ -52,6 +52,22 @@ moments:
       title: "Big Fall Death"
       detail: "{player} fiel aus {fall} Blöcken."
       min_fall_distance: 50
+    wither_kill:
+      type: boss_kill
+      entity_types: [WITHER]
+      title: "Wither besiegt"
+      detail: "{player} hat den Wither gelegt."
+    netherite_gain:
+      type: item_gain
+      title: "Netherite!"
+      detail: "{player} hat Netherite gefunden."
+      materials: [NETHERITE_INGOT]
+      merge_seconds: 10
+    mlg_water:
+      type: boss_kill
+      entity_types: [MLG_WATER]
+      title: "MLG!"
+      detail: "{player} hat ein MLG geschafft."
 
 heatmap:
   enabled: true

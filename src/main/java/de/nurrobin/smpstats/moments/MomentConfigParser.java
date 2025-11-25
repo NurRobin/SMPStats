@@ -34,7 +34,8 @@ public class MomentConfigParser {
             double maxHealth = def.getDouble("max_health_after_damage", 0);
             Set<String> causes = parseCauses(def.getStringList("causes"));
             boolean requireSelf = def.getBoolean("require_self", false);
-            definitions.add(new MomentDefinition(key, trigger, title, detail, merge, firstOnly, materials, minFall, maxHealth, causes, requireSelf));
+            Set<String> entityTypes = parseTypes(def.getStringList("entity_types"));
+            definitions.add(new MomentDefinition(key, trigger, title, detail, merge, firstOnly, materials, minFall, maxHealth, causes, requireSelf, entityTypes));
         }
         return definitions.isEmpty() ? defaults() : definitions;
     }
@@ -74,7 +75,8 @@ public class MomentConfigParser {
                 0,
                 0,
                 Set.of(),
-                false
+                false,
+                Set.of()
         ));
         defs.add(new MomentDefinition(
                 "first_death",
@@ -87,7 +89,8 @@ public class MomentConfigParser {
                 0,
                 0,
                 Set.of(),
-                false
+                false,
+                Set.of()
         ));
         defs.add(new MomentDefinition(
                 "big_fall_death",
@@ -100,7 +103,8 @@ public class MomentConfigParser {
                 50,
                 0,
                 Set.of("FALL"),
-                false
+                false,
+                Set.of()
         ));
         defs.add(new MomentDefinition(
                 "clutch_low_hp",
@@ -113,7 +117,8 @@ public class MomentConfigParser {
                 0,
                 1.0,
                 Set.of(),
-                false
+                false,
+                Set.of()
         ));
         defs.add(new MomentDefinition(
                 "tnt_self",
@@ -126,7 +131,50 @@ public class MomentConfigParser {
                 0,
                 0,
                 Set.of("BLOCK_EXPLOSION", "ENTITY_EXPLOSION"),
-                true
+                true,
+                Set.of()
+        ));
+        defs.add(new MomentDefinition(
+                "wither_kill",
+                MomentDefinition.TriggerType.BOSS_KILL,
+                "Wither besiegt",
+                "{player} hat den Wither gelegt.",
+                0,
+                false,
+                Set.of(),
+                0,
+                0,
+                Set.of(),
+                false,
+                Set.of("WITHER")
+        ));
+        defs.add(new MomentDefinition(
+                "mlg_water",
+                MomentDefinition.TriggerType.BOSS_KILL,
+                "MLG!",
+                "{player} hat ein MLG geschafft.",
+                0,
+                false,
+                Set.of(),
+                0,
+                0,
+                Set.of(),
+                false,
+                Set.of("MLG_WATER")
+        ));
+        defs.add(new MomentDefinition(
+                "netherite_gain",
+                MomentDefinition.TriggerType.ITEM_GAIN,
+                "Netherite!",
+                "{player} hat Netherite gefunden.",
+                10,
+                false,
+                Set.of(Material.NETHERITE_INGOT),
+                0,
+                0,
+                Set.of(),
+                false,
+                Set.of()
         ));
         return defs;
     }
@@ -136,6 +184,16 @@ public class MomentConfigParser {
         for (String c : causeStrings) {
             if (c != null && !c.isBlank()) {
                 set.add(c.toUpperCase(Locale.ROOT));
+            }
+        }
+        return set;
+    }
+
+    private Set<String> parseTypes(List<String> types) {
+        Set<String> set = new HashSet<>();
+        for (String t : types) {
+            if (t != null && !t.isBlank()) {
+                set.add(t.toUpperCase(Locale.ROOT));
             }
         }
         return set;

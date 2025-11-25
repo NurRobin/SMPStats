@@ -51,6 +51,7 @@ public class ApiServer {
         server.createContext("/online", new OnlineHandler());
         server.createContext("/moments/recent", new RecentMomentsHandler());
         server.createContext("/moments/query", new QueryMomentsHandler());
+        server.createContext("/moments/stream", new MomentsStreamHandler());
         server.createContext("/heatmap", new HeatmapHandler());
         server.createContext("/heatmap/hotspots", new HeatmapHotspotHandler());
         server.setExecutor(Executors.newCachedThreadPool());
@@ -220,6 +221,29 @@ public class ApiServer {
             }
             List<?> moments = momentService.queryMoments(playerId, type != null ? type.toUpperCase() : null, since, limit);
             sendJson(exchange, 200, moments);
+        }
+    }
+
+    private class MomentsStreamHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!authorize(exchange)) {
+                return;
+            }
+            int limit = queryParam(exchange.getRequestURI(), "limit").map(Integer::parseInt).orElse(50);
+            long since = queryParam(exchange.getRequestURI(), "since").map(Long::parseLong).orElse(-1L);
+            List<?> moments = since > 0 ? momentService.getMomentsSince(since, limit) : momentService.getRecentMoments(limit);
+            StringBuilder sb = new StringBuilder();
+            for (Object m : moments) {
+                sb.append("data: ").append(gson.toJson(m)).append("\n\n");
+            }
+            byte[] data = sb.toString().getBytes();
+            exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
+            exchange.getResponseHeaders().add("Cache-Control", "no-cache");
+            exchange.sendResponseHeaders(200, data.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(data);
+            }
         }
     }
 }

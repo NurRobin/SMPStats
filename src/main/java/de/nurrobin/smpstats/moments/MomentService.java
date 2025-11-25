@@ -81,6 +81,7 @@ public class MomentService {
                         emitInstant(player, def, location, Map.of("cause", cause));
                     }
                 }
+                case BOSS_KILL -> { /* handled in listener on death event */ }
                 default -> { }
             }
         }
@@ -95,6 +96,24 @@ public class MomentService {
             if (resultingHealth > 0 && resultingHealth <= def.getMaxHealthAfterDamage()) {
                 emitInstant(player, def, player.getLocation(), Map.of("health", String.format("%.1f", resultingHealth)));
             }
+        }
+    }
+
+    public void onItemGain(Player player, org.bukkit.Material material, Location location) {
+        if (!settings.isMomentsEnabled()) return;
+        for (MomentDefinition def : definitions) {
+            if (def.getTrigger() != MomentDefinition.TriggerType.ITEM_GAIN) continue;
+            if (!def.matchesMaterial(material)) continue;
+            handleWindow(player.getUniqueId(), def, location);
+        }
+    }
+
+    public void onBossKill(Player player, String entityType, Location location) {
+        if (!settings.isMomentsEnabled()) return;
+        for (MomentDefinition def : definitions) {
+            if (def.getTrigger() != MomentDefinition.TriggerType.BOSS_KILL) continue;
+            if (!def.matchesEntityType(entityType)) continue;
+            emitInstant(player, def, location, Map.of("entity", entityType));
         }
     }
 

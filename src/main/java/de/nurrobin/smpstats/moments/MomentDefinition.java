@@ -12,7 +12,9 @@ public class MomentDefinition {
         DEATH_FALL,
         FIRST_DEATH,
         DAMAGE_LOW_HP,
-        DEATH_EXPLOSION
+        DEATH_EXPLOSION,
+        ITEM_GAIN,
+        BOSS_KILL
     }
 
     private final String id;
@@ -26,6 +28,7 @@ public class MomentDefinition {
     private final double maxHealthAfterDamage;
     private final Set<String> causes;
     private final boolean requireSelf;
+    private final Set<String> entityTypes;
 
     public MomentDefinition(String id,
                             TriggerType trigger,
@@ -37,7 +40,8 @@ public class MomentDefinition {
                             double minFallDistance,
                             double maxHealthAfterDamage,
                             Set<String> causes,
-                            boolean requireSelf) {
+                            boolean requireSelf,
+                            Set<String> entityTypes) {
         this.id = id;
         this.trigger = trigger;
         this.title = title;
@@ -49,6 +53,7 @@ public class MomentDefinition {
         this.maxHealthAfterDamage = maxHealthAfterDamage;
         this.causes = causes != null ? causes : new HashSet<>();
         this.requireSelf = requireSelf;
+        this.entityTypes = entityTypes != null ? entityTypes : new HashSet<>();
     }
 
     public String getId() {
@@ -95,11 +100,19 @@ public class MomentDefinition {
         return requireSelf;
     }
 
+    public Set<String> getEntityTypes() {
+        return entityTypes;
+    }
+
     public boolean matchesMaterial(Material material) {
         return materials.isEmpty() || materials.contains(material);
     }
 
     public boolean matchesCause(String cause) {
         return causes.isEmpty() || causes.contains(cause);
+    }
+
+    public boolean matchesEntityType(String type) {
+        return entityTypes.isEmpty() || entityTypes.contains(type);
     }
 }
