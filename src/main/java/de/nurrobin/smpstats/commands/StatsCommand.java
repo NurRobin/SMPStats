@@ -1,0 +1,135 @@
+package de.nurrobin.smpstats.commands;
+
+import com.google.gson.Gson;
+import de.nurrobin.smpstats.SMPStats;
+import de.nurrobin.smpstats.StatsRecord;
+import de.nurrobin.smpstats.StatsService;
+import org.bukkit.ChatColor;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
+import org.bukkit.entity.Player;
+
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.UUID;
+
+public class StatsCommand implements CommandExecutor, TabCompleter {
+    private static final DateTimeFormatter DATE_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withLocale(Locale.GERMANY).withZone(ZoneId.systemDefault());
+
+    private final SMPStats plugin;
+    private final StatsService statsService;
+    private final Gson gson = new Gson();
+
+    public StatsCommand(SMPStats plugin, StatsService statsService) {
+        this.plugin = plugin;
+        this.statsService = statsService;
+    }
+
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (args.length == 0) {
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage(ChatColor.RED + "Bitte nutze /stats <player> in der Konsole.");
+                return true;
+            }
+            showStats(sender, player.getUniqueId(), player.getName());
+            return true;
+        }
+
+        String sub = args[0];
+        if ("json".equalsIgnoreCase(sub)) {
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage(ChatColor.RED + "Nur Spieler können /stats json nutzen.");
+                return true;
+            }
+            statsService.getStats(player.getUniqueId())
+                    .ifPresentOrElse(
+                            record -> sender.sendMessage(ChatColor.GRAY + gson.toJson(record)),
+                            () -> sender.sendMessage(ChatColor.RED + "Keine Stats gefunden.")
+                    );
+            return true;
+        }
+
+        if ("dump".equalsIgnoreCase(sub)) {
+            List<StatsRecord> all = statsService.getAllStats();
+            for (StatsRecord record : all) {
+                plugin.getLogger().info(record.getName() + " -> " + gson.toJson(record));
+            }
+            sender.sendMessage(ChatColor.GREEN + "Alle Stats wurden in die Konsole geschrieben.");
+            return true;
+        }
+
+        // Otherwise try to find stats for the given player name
+        String targetName = sub;
+        Optional<StatsRecord> target = statsService.getStatsByName(targetName);
+        if (target.isPresent()) {
+            sendStats(sender, target.get());
+            return true;
+        }
+
+        sender.sendMessage(ChatColor.RED + "Spieler '" + targetName + "' nicht gefunden.");
+        return true;
+    }
+
+    private void showStats(CommandSender sender, UUID uuid, String displayName) {
+        Optional<StatsRecord> record = statsService.getStats(uuid);
+        if (record.isEmpty()) {
+            sender.sendMessage(ChatColor.RED + "Keine Statistiken für " + displayName + " gefunden.");
+            return;
+        }
+        sendStats(sender, record.get());
+    }
+
+    private void sendStats(CommandSender sender, StatsRecord record) {
+        sender.sendMessage(ChatColor.GOLD + "----- SMPStats für " + record.getName() + " -----");
+        sender.sendMessage(formatLine("Spielzeit", formatDuration(record.getPlaytimeMillis())));
+        sender.sendMessage(formatLine("Erster Join", formatTimestamp(record.getFirstJoin())));
+        sender.sendMessage(formatLine("Letzter Join", formatTimestamp(record.getLastJoin())));
+        sender.sendMessage(formatLine("Tode", record.getDeaths() + (record.getLastDeathCause() != null ? " (letzte: " + record.getLastDeathCause() + ")" : "")));
+        sender.sendMessage(formatLine("Kills", "PvP: " + record.getPlayerKills() + " | Mobs: " + record.getMobKills()));
+        sender.sendMessage(formatLine("Blöcke", "Platziert: " + record.getBlocksPlaced() + " | Abgebaut: " + record.getBlocksBroken()));
+        sender.sendMessage(formatLine("Distanz", String.format(Locale.GERMANY, "OW: %.1fm | Nether: %.1fm | End: %.1fm",
+                record.getDistanceOverworld(), record.getDistanceNether(), record.getDistanceEnd())));
+        sender.sendMessage(formatLine("Damage", String.format(Locale.GERMANY, "Dealt: %.1f | Taken: %.1f",
+                record.getDamageDealt(), record.getDamageTaken())));
+        sender.sendMessage(formatLine("Crafting", "Items gefertigt: " + record.getItemsCrafted()));
+        sender.sendMessage(formatLine("Verzehrt", "Items konsumiert: " + record.getItemsConsumed()));
+        sender.sendMessage(formatLine("Biome besucht", record.getBiomesVisited().size() + ""));
+    }
+
+    private String formatLine(String title, String value) {
+        return ChatColor.YELLOW + title + ": " + ChatColor.WHITE + value;
+    }
+
+    private String formatTimestamp(long epochMillis) {
+        return DATE_FORMATTER.format(Instant.ofEpochMilli(epochMillis));
+    }
+
+    private String formatDuration(long millis) {
+        long totalSeconds = millis / 1000;
+        long hours = totalSeconds / 3600;
+        long minutes = (totalSeconds % 3600) / 60;
+        return hours + "h " + minutes + "m";
+    }
+
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (args.length == 1) {
+            List<String> suggestions = new ArrayList<>();
+            suggestions.add("json");
+            suggestions.add("dump");
+            suggestions.addAll(statsService.getOnlineNames());
+            return suggestions;
+        }
+        return Collections.emptyList();
+    }
+}

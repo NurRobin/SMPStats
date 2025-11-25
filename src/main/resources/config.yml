@@ -1,0 +1,15 @@
+api:
+  enabled: false
+  port: 8765
+  api_key: "CHANGEME123"
+
+tracking:
+  movement: true
+  blocks: true
+  kills: true
+  biomes: true
+  crafting: true
+  damage: true
+  consumption: true
+
+autosave_minutes: 5
