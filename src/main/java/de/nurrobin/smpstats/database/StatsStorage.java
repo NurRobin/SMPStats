@@ -4,9 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import de.nurrobin.smpstats.StatsRecord;
 import de.nurrobin.smpstats.heatmap.HeatmapBin;
-import de.nurrobin.smpstats.heatmap.HeatmapType;
 import de.nurrobin.smpstats.moments.MomentEntry;
-import de.nurrobin.smpstats.moments.MomentType;
 import org.bukkit.plugin.Plugin;
 
 import java.io.Closeable;
@@ -252,7 +250,7 @@ public class StatsStorage implements Closeable {
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, entry.getPlayerId().toString());
-            statement.setString(2, entry.getType().name());
+            statement.setString(2, entry.getType());
             statement.setString(3, entry.getTitle());
             statement.setString(4, entry.getDetail());
             statement.setString(5, entry.getPayload());
@@ -284,7 +282,7 @@ public class StatsStorage implements Closeable {
         return new MomentEntry(
                 rs.getLong("id"),
                 UUID.fromString(rs.getString("uuid")),
-                MomentType.valueOf(rs.getString("type")),
+                rs.getString("type"),
                 rs.getString("title"),
                 rs.getString("detail"),
                 rs.getString("payload"),
@@ -297,7 +295,7 @@ public class StatsStorage implements Closeable {
         );
     }
 
-    public synchronized void incrementHeatmapBin(HeatmapType type, String world, int chunkX, int chunkZ, long delta) throws SQLException {
+    public synchronized void incrementHeatmapBin(String type, String world, int chunkX, int chunkZ, long delta) throws SQLException {
         String sql = """
                 INSERT INTO heatmap_bins (type, world, chunk_x, chunk_z, count)
                 VALUES (?, ?, ?, ?, ?)
@@ -305,7 +303,7 @@ public class StatsStorage implements Closeable {
                     count = count + excluded.count;
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, type.name());
+            statement.setString(1, type);
             statement.setString(2, world);
             statement.setInt(3, chunkX);
             statement.setInt(4, chunkZ);
@@ -314,16 +312,16 @@ public class StatsStorage implements Closeable {
         }
     }
 
-    public synchronized List<HeatmapBin> loadHeatmapBins(HeatmapType type, int limit) throws SQLException {
+    public synchronized List<HeatmapBin> loadHeatmapBins(String type, int limit) throws SQLException {
         String sql = "SELECT * FROM heatmap_bins WHERE type = ? ORDER BY count DESC LIMIT ?";
         List<HeatmapBin> bins = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, type.name());
+            statement.setString(1, type);
             statement.setInt(2, limit);
             try (ResultSet rs = statement.executeQuery()) {
                 while (rs.next()) {
                     bins.add(new HeatmapBin(
-                            HeatmapType.valueOf(rs.getString("type")),
+                            rs.getString("type"),
                             rs.getString("world"),
                             rs.getInt("chunk_x"),
                             rs.getInt("chunk_z"),
@@ -333,6 +331,17 @@ public class StatsStorage implements Closeable {
             }
         }
         return bins;
+    }
+
+    public synchronized boolean hasMoment(UUID playerId, String type) throws SQLException {
+        String sql = "SELECT 1 FROM moments WHERE uuid = ? AND type = ? LIMIT 1";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, playerId.toString());
+            statement.setString(2, type);
+            try (ResultSet rs = statement.executeQuery()) {
+                return rs.next();
+            }
+        }
     }
 
     @Override

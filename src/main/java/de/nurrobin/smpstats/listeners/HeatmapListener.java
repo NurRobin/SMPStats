@@ -1,7 +1,6 @@
 package de.nurrobin.smpstats.listeners;
 
 import de.nurrobin.smpstats.heatmap.HeatmapService;
-import de.nurrobin.smpstats.heatmap.HeatmapType;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -17,11 +16,11 @@ public class HeatmapListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
-        heatmapService.track(HeatmapType.MINING, event.getBlock().getLocation());
+        heatmapService.track("MINING", event.getBlock().getLocation());
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onDeath(PlayerDeathEvent event) {
-        heatmapService.track(HeatmapType.DEATH, event.getEntity().getLocation());
+        heatmapService.track("DEATH", event.getEntity().getLocation());
     }
 }

@@ -1,21 +1,22 @@
 api:
-  enabled: true
-  bind_address: "0.0.0.0"
-  port: 8765
-  api_key: "YouShouldChangeThisKey"
+  enabled: true            # HTTP API aktivieren
+  bind_address: "0.0.0.0"  # Bind-Adresse, i.d.R. 0.0.0.0
+  port: 8765               # API Port
+  api_key: "YouShouldChangeThisKey" # Setze einen geheimen Key
 
 tracking:
-  movement: true
-  blocks: true
-  kills: true
-  biomes: true
-  crafting: true
-  damage: true
-  consumption: true
+  movement: true      # Distanz-Tracking (Dimensionen)
+  blocks: true        # Blöcke platziert/abgebaut
+  kills: true         # Player/Mob-Kills
+  biomes: true        # Besuchte Biome
+  crafting: true      # Crafting-Anzahl
+  damage: true        # Schaden ausgeteilt/erhalten
+  consumption: true   # Konsumierte Items
 
-autosave_minutes: 5
+autosave_minutes: 5   # Autosave-Intervall (Minuten)
 
 skills:
+  # Gewichte bestimmen die "Skill-Score"-Berechnung. Nur Anzeige, kein Gameplay-Eingriff.
   mining:
     blocks_broken_weight: 0.05
   combat:
@@ -33,9 +34,25 @@ skills:
 
 moments:
   enabled: true
-  diamond_window_seconds: 30
-  flush_seconds: 10
+  flush_seconds: 10    # Prüft offene Merge-Fenster
+  definitions:
+    diamond_run:
+      type: block_break
+      title: "Diamanten Run"
+      detail: "Diamanten gefunden: {count}"
+      merge_seconds: 30
+      materials: [DIAMOND_ORE, DEEPSLATE_DIAMOND_ORE]
+    first_death:
+      type: first_death
+      title: "Erster Tod"
+      detail: "{player} ist das erste Mal gestorben."
+      first_only: true
+    big_fall_death:
+      type: death_fall
+      title: "Big Fall Death"
+      detail: "{player} fiel aus {fall} Blöcken."
+      min_fall_distance: 50
 
 heatmap:
   enabled: true
-  flush_minutes: 5
+  flush_minutes: 5     # Schreibintervall für Heatmap-Bins (Chunk-basiert)

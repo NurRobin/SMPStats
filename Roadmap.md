@@ -11,7 +11,7 @@ Größe: `S` (klein) | `M` (mittel) | `L` (groß) | `XL` (sehr groß)
 | Feature | Priorität | Größe | Status | Notizen |
 | --- | --- | --- | --- | --- |
 | Skill-Profile (Mining/Combat/Exploration/Builder/Farmer) | High | M | Done | Gewichte per Config, Anzeige in /stats, Basis-Berechnung aktiv |
-| Moments Engine (Firsts/Clutch/Fail, Merge-Window) | High | L | In Progress | Diamond-Window + First Death + Big Fall erfasst & gespeichert; noch: weitere Moments/Feed |
+| Moments Engine (Firsts/Clutch/Fail, Merge-Window) | High | L | In Progress | Benutzerdefinierbare Definitions (block_break/death/death_fall/first_death/damage_low_hp/death_explosion) + Merge, Persistenz; Feed fehlt noch |
 | Heatmaps / Activity Maps (Tode/Mining/Hotspots) | High | L | In Progress | Mining/Death-Bins + Flush + API; noch: Hotspots/mehr Typen |
 | Social Stats (Nähe-Zeit, gemeinsame Kills) | Medium | M | Todo | Sampler jede n Sekunden, Paar-Counter, Leaderboards |
 | Server Health / Cost Index | Medium | M | Todo | Chunks/Entities/Hopper/Redstone Counters, Monitoring-Fokus |
@@ -24,3 +24,9 @@ Größe: `S` (klein) | `M` (mittel) | `L` (groß) | `XL` (sehr groß)
 - Config-Erweiterungen & Docs (Weights, Windows, Regions, Season) – Todo
 - API-Endpunkte für neue Features – Todo
 - Tests/Validation (DB migrations, config parsing) – Todo
+
+## Nächste Schritte (konkret)
+- Moments: Feed/SSE + weitere Presets (MLG, Wither, Netherite, Advancements), Dedupe über DB für Firsts.
+- Heatmap: benannte Hotspot-Regionen + Filter pro Welt/Typ, optional Decay.
+- Social Stats: Nähe-Sampling + gemeinsame Kills, API/Leaderboards.
+- Tests: Integration mit MockBukkit für Commands/API; Validierung Moments-Parser mit mehr Typen.

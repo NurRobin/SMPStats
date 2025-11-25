@@ -7,7 +7,6 @@ import de.nurrobin.smpstats.StatsRecord;
 import de.nurrobin.smpstats.StatsService;
 import de.nurrobin.smpstats.moments.MomentService;
 import de.nurrobin.smpstats.heatmap.HeatmapService;
-import de.nurrobin.smpstats.heatmap.HeatmapType;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -160,8 +159,7 @@ public class ApiServer {
             }
             String typeRaw = path.startsWith("/") ? path.substring(1) : path;
             try {
-                HeatmapType type = HeatmapType.valueOf(typeRaw.toUpperCase());
-                sendJson(exchange, 200, heatmapService.loadTop(type, 200));
+                sendJson(exchange, 200, heatmapService.loadTop(typeRaw.toUpperCase(), 200));
             } catch (IllegalArgumentException e) {
                 sendText(exchange, 400, "Invalid heatmap type");
             }

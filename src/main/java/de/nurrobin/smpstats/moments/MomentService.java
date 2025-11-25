@@ -9,6 +9,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -18,7 +19,8 @@ public class MomentService {
     private final Plugin plugin;
     private final StatsStorage storage;
     private Settings settings;
-    private final Map<UUID, ActiveWindow> windows = new ConcurrentHashMap<>();
+    private List<MomentDefinition> definitions = new ArrayList<>();
+    private final Map<Key, ActiveWindow> windows = new ConcurrentHashMap<>();
     private final Gson gson = new Gson();
     private int flushTaskId = -1;
 
@@ -26,10 +28,12 @@ public class MomentService {
         this.plugin = plugin;
         this.storage = storage;
         this.settings = settings;
+        this.definitions = settings.getMomentDefinitions();
     }
 
     public void updateSettings(Settings settings) {
         this.settings = settings;
+        this.definitions = settings.getMomentDefinitions();
     }
 
     public void start() {
@@ -48,46 +52,50 @@ public class MomentService {
         flushAll();
     }
 
-    public void onDiamondFound(Player player, Location location) {
-        if (!settings.isMomentsEnabled()) {
-            return;
+    public void onBlockBreak(Player player, Location location, org.bukkit.Material material) {
+        if (!settings.isMomentsEnabled()) return;
+        for (MomentDefinition def : definitions) {
+            if (def.getTrigger() != MomentDefinition.TriggerType.BLOCK_BREAK) continue;
+            if (!def.matchesMaterial(material)) continue;
+            handleWindow(player.getUniqueId(), def, location);
         }
-        long now = System.currentTimeMillis();
-        ActiveWindow current = windows.get(player.getUniqueId());
-        long windowMillis = settings.getDiamondWindowSeconds() * 1000L;
-        if (current == null || current.type != MomentType.DIAMOND_FIND || (now - current.lastUpdate) > windowMillis) {
-            // close old window if present
-            flushWindow(player.getUniqueId(), current);
-            current = new ActiveWindow(MomentType.DIAMOND_FIND, now, location);
-            windows.put(player.getUniqueId(), current);
-        }
-        current.count++;
-        current.lastUpdate = now;
-        current.lastLocation = location;
     }
 
-    public void onFirstDeath(Player player, Location location) {
-        if (!settings.isMomentsEnabled()) {
-            return;
+    public void onDeath(Player player, Location location, double fallDistance, String cause, boolean selfExplosion) {
+        if (!settings.isMomentsEnabled()) return;
+        for (MomentDefinition def : definitions) {
+            switch (def.getTrigger()) {
+                case FIRST_DEATH -> handleFirstOnly(player, def, location);
+                case DEATH_FALL -> {
+                    if (fallDistance >= def.getMinFallDistance() && def.matchesCause(cause)) {
+                        emitInstant(player, def, location, Map.of("fall", fallDistance));
+                    }
+                }
+                case DEATH_EXPLOSION -> {
+                    if (def.matchesCause(cause) && (!def.isRequireSelf() || selfExplosion)) {
+                        emitInstant(player, def, location, Map.of("cause", cause));
+                    }
+                }
+                case DEATH -> {
+                    if (def.matchesCause(cause)) {
+                        emitInstant(player, def, location, Map.of("cause", cause));
+                    }
+                }
+                default -> { }
+            }
         }
-        // Only first death: check existing moments for this type? For simplicity store once per session using window map
-        UUID uuid = player.getUniqueId();
-        String key = "first-death-" + uuid;
-        if (windows.containsKey(uuid) && windows.get(uuid).metadata != null && key.equals(windows.get(uuid).metadata)) {
-            return;
-        }
-        saveMoment(MomentEntry.fromLocation(uuid, MomentType.FIRST_DEATH, "Erster Tod", player.getName() + " ist das erste Mal gestorben.", null, location, System.currentTimeMillis(), System.currentTimeMillis()));
-        ActiveWindow marker = new ActiveWindow(MomentType.FIRST_DEATH, System.currentTimeMillis(), location);
-        marker.metadata = key;
-        windows.put(uuid, marker);
     }
 
-    public void onBigFallDeath(Player player, Location location, double fallDistance) {
-        if (!settings.isMomentsEnabled()) {
-            return;
+    public void onDamage(Player player, double finalDamage, String cause) {
+        if (!settings.isMomentsEnabled()) return;
+        double resultingHealth = Math.max(0, player.getHealth() - finalDamage);
+        for (MomentDefinition def : definitions) {
+            if (def.getTrigger() != MomentDefinition.TriggerType.DAMAGE_LOW_HP) continue;
+            if (!def.matchesCause(cause)) continue;
+            if (resultingHealth > 0 && resultingHealth <= def.getMaxHealthAfterDamage()) {
+                emitInstant(player, def, player.getLocation(), Map.of("health", String.format("%.1f", resultingHealth)));
+            }
         }
-        String detail = String.format("%s fiel aus %.1f Blöcken Höhe.", player.getName(), fallDistance);
-        saveMoment(MomentEntry.fromLocation(player.getUniqueId(), MomentType.BIG_FALL_DEATH, "Big Fall Death", detail, null, location, System.currentTimeMillis(), System.currentTimeMillis()));
     }
 
     public List<MomentEntry> getRecentMoments(int limit) {
@@ -101,32 +109,32 @@ public class MomentService {
 
     private void flushStale() {
         long now = System.currentTimeMillis();
-        long windowMillis = settings.getDiamondWindowSeconds() * 1000L;
-        for (Map.Entry<UUID, ActiveWindow> entry : windows.entrySet()) {
+        for (Map.Entry<Key, ActiveWindow> entry : windows.entrySet()) {
             ActiveWindow window = entry.getValue();
-            if (window.type == MomentType.DIAMOND_FIND && (now - window.lastUpdate) > windowMillis) {
+            long windowMillis = window.mergeSeconds * 1000L;
+            if ((now - window.lastUpdate) > windowMillis) {
                 flushWindow(entry.getKey(), window);
             }
         }
     }
 
     private void flushAll() {
-        for (Map.Entry<UUID, ActiveWindow> entry : windows.entrySet()) {
+        for (Map.Entry<Key, ActiveWindow> entry : windows.entrySet()) {
             flushWindow(entry.getKey(), entry.getValue());
         }
         windows.clear();
     }
 
-    private void flushWindow(UUID playerId, ActiveWindow window) {
+    private void flushWindow(Key key, ActiveWindow window) {
         if (window == null) {
             return;
         }
-        if (window.type == MomentType.DIAMOND_FIND && window.count > 0 && window.origin != null) {
-            String detail = "Diamanten gefunden: " + window.count;
+        if (window.count > 0 && window.origin != null) {
+            String detail = window.detailTemplate.replace("{count}", String.valueOf(window.count)).replace("{player}", window.playerName);
             String payload = gson.toJson(Map.of("count", window.count));
-            saveMoment(MomentEntry.fromLocation(playerId, MomentType.DIAMOND_FIND, "Diamanten Run", detail, payload, window.origin, window.startedAt, window.lastUpdate));
+            saveMoment(MomentEntry.fromLocation(key.playerId, key.definitionId, window.title, detail, payload, window.origin, window.startedAt, window.lastUpdate));
         }
-        windows.remove(playerId);
+        windows.remove(key);
     }
 
     private void saveMoment(MomentEntry entry) {
@@ -137,21 +145,85 @@ public class MomentService {
         }
     }
 
+    private void handleWindow(UUID playerId, MomentDefinition def, Location location) {
+        long now = System.currentTimeMillis();
+        Key key = new Key(playerId, def.getId());
+        ActiveWindow window = windows.get(key);
+        long windowMillis = def.getMergeSeconds() * 1000L;
+        if (window == null || (now - window.lastUpdate) > windowMillis) {
+            flushWindow(key, window);
+            window = new ActiveWindow(def.getId(), def.getTitle(), def.getDetail(), def.getMergeSeconds(), location, now, resolvePlayerName(playerId));
+            windows.put(key, window);
+        }
+        window.count++;
+        window.lastUpdate = now;
+        window.lastLocation = location;
+    }
+
+    private void handleFirstOnly(Player player, MomentDefinition def, Location location) {
+        try {
+            if (def.isFirstOnly() && storage.hasMoment(player.getUniqueId(), def.getId())) {
+                return;
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Moment duplicate check failed: " + e.getMessage());
+        }
+        emitInstant(player, def, location, Map.of());
+    }
+
+    private void emitInstant(Player player, MomentDefinition def, Location location, Map<String, Object> payload) {
+        String detail = format(def.getDetail(), player, payload);
+        String title = format(def.getTitle(), player, payload);
+        String payloadJson = payload.isEmpty() ? null : gson.toJson(payload);
+        saveMoment(MomentEntry.fromLocation(player.getUniqueId(), def.getId(), title, detail, payloadJson, location, System.currentTimeMillis(), System.currentTimeMillis()));
+    }
+
+    private String format(String template, Player player, Map<String, Object> payload) {
+        if (template == null) {
+            return "";
+        }
+        String out = template.replace("{player}", player.getName());
+        if (payload.containsKey("fall")) {
+            out = out.replace("{fall}", String.format("%.1f", payload.get("fall")));
+        }
+        if (payload.containsKey("count")) {
+            out = out.replace("{count}", String.valueOf(payload.get("count")));
+        }
+        if (payload.containsKey("health")) {
+            out = out.replace("{health}", String.valueOf(payload.get("health")));
+        }
+        return out;
+    }
+
+    private String resolvePlayerName(UUID uuid) {
+        Player player = Bukkit.getPlayer(uuid);
+        return player != null ? player.getName() : "unknown";
+    }
+
+    private record Key(UUID playerId, String definitionId) {
+    }
+
     private static class ActiveWindow {
-        private final MomentType type;
+        private final String type;
+        private final String title;
+        private final String detailTemplate;
+        private final long mergeSeconds;
         private final long startedAt;
         private long lastUpdate;
         private int count;
         private Location origin;
         private Location lastLocation;
-        private String metadata;
+        private final String playerName;
 
-        ActiveWindow(MomentType type, long startedAt, Location origin) {
+        ActiveWindow(String type, String title, String detailTemplate, long mergeSeconds, Location origin, long startedAt, String playerName) {
             this.type = type;
+            this.title = title;
+            this.detailTemplate = detailTemplate != null ? detailTemplate : "";
+            this.mergeSeconds = mergeSeconds;
+            this.origin = origin;
             this.startedAt = startedAt;
             this.lastUpdate = startedAt;
-            this.origin = origin;
-            this.count = 0;
+            this.playerName = playerName;
         }
     }
 }

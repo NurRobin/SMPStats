@@ -20,6 +20,7 @@ public class Settings {
     private final long momentsFlushSeconds;
     private final boolean heatmapEnabled;
     private final int heatmapFlushMinutes;
+    private final java.util.List<de.nurrobin.smpstats.moments.MomentDefinition> momentDefinitions;
 
     public Settings(boolean trackMovement,
                     boolean trackBlocks,
@@ -37,7 +38,8 @@ public class Settings {
                     long diamondWindowSeconds,
                     long momentsFlushSeconds,
                     boolean heatmapEnabled,
-                    int heatmapFlushMinutes) {
+                    int heatmapFlushMinutes,
+                    java.util.List<de.nurrobin.smpstats.moments.MomentDefinition> momentDefinitions) {
         this.trackMovement = trackMovement;
         this.trackBlocks = trackBlocks;
         this.trackKills = trackKills;
@@ -55,6 +57,7 @@ public class Settings {
         this.momentsFlushSeconds = momentsFlushSeconds;
         this.heatmapEnabled = heatmapEnabled;
         this.heatmapFlushMinutes = heatmapFlushMinutes;
+        this.momentDefinitions = momentDefinitions;
     }
 
     public boolean isTrackMovement() {
@@ -123,5 +126,9 @@ public class Settings {
 
     public int getHeatmapFlushMinutes() {
         return heatmapFlushMinutes;
+    }
+
+    public java.util.List<de.nurrobin.smpstats.moments.MomentDefinition> getMomentDefinitions() {
+        return momentDefinitions;
     }
 }

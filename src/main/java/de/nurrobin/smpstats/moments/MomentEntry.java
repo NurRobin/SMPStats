@@ -7,7 +7,7 @@ import java.util.UUID;
 public class MomentEntry {
     private final Long id;
     private final UUID playerId;
-    private final MomentType type;
+    private final String type;
     private final String title;
     private final String detail;
     private final String payload;
@@ -20,7 +20,7 @@ public class MomentEntry {
 
     public MomentEntry(Long id,
                        UUID playerId,
-                       MomentType type,
+                       String type,
                        String title,
                        String detail,
                        String payload,
@@ -44,7 +44,7 @@ public class MomentEntry {
         this.endedAt = endedAt;
     }
 
-    public static MomentEntry fromLocation(UUID playerId, MomentType type, String title, String detail, String payload, Location location, long startedAt, long endedAt) {
+    public static MomentEntry fromLocation(UUID playerId, String type, String title, String detail, String payload, Location location, long startedAt, long endedAt) {
         return new MomentEntry(null, playerId, type, title, detail, payload,
                 location.getWorld() != null ? location.getWorld().getName() : "unknown",
                 location.getBlockX(), location.getBlockY(), location.getBlockZ(),
@@ -59,7 +59,7 @@ public class MomentEntry {
         return playerId;
     }
 
-    public MomentType getType() {
+    public String getType() {
         return type;
     }
 

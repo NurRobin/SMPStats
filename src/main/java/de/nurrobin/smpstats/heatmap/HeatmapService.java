@@ -46,7 +46,7 @@ public class HeatmapService {
         flush();
     }
 
-    public void track(HeatmapType type, Location location) {
+    public void track(String type, Location location) {
         if (!settings.isHeatmapEnabled()) {
             return;
         }
@@ -57,7 +57,7 @@ public class HeatmapService {
         pending.merge(key, 1L, Long::sum);
     }
 
-    public List<HeatmapBin> loadTop(HeatmapType type, int limit) {
+    public List<HeatmapBin> loadTop(String type, int limit) {
         try {
             return storage.loadHeatmapBins(type, limit);
         } catch (SQLException e) {
@@ -82,8 +82,8 @@ public class HeatmapService {
         }
     }
 
-    private record BinKey(HeatmapType type, String world, int chunkX, int chunkZ) {
-        static BinKey fromLocation(HeatmapType type, Location location) {
+    private record BinKey(String type, String world, int chunkX, int chunkZ) {
+        static BinKey fromLocation(String type, Location location) {
             World world = location.getWorld();
             return new BinKey(type, world != null ? world.getName() : "unknown", location.getBlockX() >> 4, location.getBlockZ() >> 4);
         }

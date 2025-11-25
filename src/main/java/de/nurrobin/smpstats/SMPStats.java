@@ -14,6 +14,7 @@ import de.nurrobin.smpstats.listeners.HeatmapListener;
 import de.nurrobin.smpstats.skills.SkillWeights;
 import de.nurrobin.smpstats.moments.MomentService;
 import de.nurrobin.smpstats.heatmap.HeatmapService;
+import de.nurrobin.smpstats.moments.MomentConfigParser;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -154,9 +155,12 @@ public class SMPStats extends JavaPlugin {
         boolean heatmapEnabled = config.getBoolean("heatmap.enabled", true);
         int heatmapFlushMinutes = Math.max(1, config.getInt("heatmap.flush_minutes", 5));
 
+        MomentConfigParser parser = new MomentConfigParser();
+        java.util.List<de.nurrobin.smpstats.moments.MomentDefinition> momentDefinitions = parser.parse(config.getConfigurationSection("moments"));
+
         return new Settings(movement, blocks, kills, biomes, crafting, damage, consumption,
                 apiEnabled, apiPort, apiKey, autosaveMinutes, skillWeights,
-                momentsEnabled, diamondWindowSeconds, momentsFlushSeconds, heatmapEnabled, heatmapFlushMinutes);
+                momentsEnabled, diamondWindowSeconds, momentsFlushSeconds, heatmapEnabled, heatmapFlushMinutes, momentDefinitions);
     }
 
     private void registerListeners() {
