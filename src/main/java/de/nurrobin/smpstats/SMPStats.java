@@ -22,6 +22,7 @@ import de.nurrobin.smpstats.timeline.DeathReplayService;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.PluginManager;
@@ -29,8 +30,10 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Objects;
 
 public class SMPStats extends JavaPlugin {
+    private static final int CONFIG_VERSION = 2;
     private StatsStorage storage;
     private StatsService statsService;
     private Settings settings;
@@ -45,6 +48,7 @@ public class SMPStats extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        ensureConfigVersion();
         this.settings = loadSettings();
 
         try {
@@ -123,6 +127,7 @@ public class SMPStats extends JavaPlugin {
 
     public void reloadPluginConfig(CommandSender sender) {
         reloadConfig();
+        ensureConfigVersion();
         this.settings = loadSettings();
         statsService.updateSettings(settings);
         if (momentService != null) {
@@ -215,6 +220,27 @@ public class SMPStats extends JavaPlugin {
                 momentsEnabled, diamondWindowSeconds, momentsFlushSeconds, heatmapEnabled, heatmapFlushMinutes, momentDefinitions, hotspots,
                 socialEnabled, socialSampleSeconds, timelineEnabled,
                 deathReplayEnabled, deathReplayInventoryItems, deathReplayNearbyRadius, deathReplayLimit);
+    }
+
+    private void ensureConfigVersion() {
+        FileConfiguration config = getConfig();
+        int current = config.getInt("config_version", 1);
+        if (current > CONFIG_VERSION) {
+            getLogger().warning("Config version (" + current + ") is newer than expected (" + CONFIG_VERSION + ").");
+            return;
+        }
+        if (current < CONFIG_VERSION) {
+            getLogger().info("Updating config.yml from version " + current + " to " + CONFIG_VERSION + " ...");
+            YamlConfiguration defaults = YamlConfiguration.loadConfiguration(
+                    new java.io.InputStreamReader(Objects.requireNonNull(getResource("config.yml")), java.nio.charset.StandardCharsets.UTF_8));
+            for (String key : defaults.getKeys(true)) {
+                if (!config.isSet(key)) {
+                    config.set(key, defaults.get(key));
+                }
+            }
+            config.set("config_version", CONFIG_VERSION);
+            saveConfig();
+        }
     }
 
     private java.util.List<HotspotDefinition> parseHotspots(org.bukkit.configuration.ConfigurationSection section) {

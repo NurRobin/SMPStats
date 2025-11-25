@@ -1,5 +1,5 @@
 name: SMPStats
-version: 0.5.1
+version: 0.5.2
 main: de.nurrobin.smpstats.SMPStats
 api-version: '1.21'
 author: nurrobin

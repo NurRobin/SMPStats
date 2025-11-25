@@ -1,3 +1,5 @@
+config_version: 2
+
 api:
   enabled: true            # HTTP API aktivieren
   bind_address: "0.0.0.0"  # Bind-Adresse, i.d.R. 0.0.0.0
