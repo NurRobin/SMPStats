@@ -33,4 +33,44 @@ class HeatmapListenerTest {
         listener.onDeath(deathEvent);
         verify(service).track("DEATH", deathLoc);
     }
+
+    @Test
+    void tracksOresAndDamage() {
+        HeatmapService service = mock(HeatmapService.class);
+        HeatmapListener listener = new HeatmapListener(service);
+
+        // Test Ore Mining
+        BlockBreakEvent oreEvent = mock(BlockBreakEvent.class);
+        Location oreLoc = mock(Location.class);
+        org.bukkit.block.Block oreBlock = mock(org.bukkit.block.Block.class);
+        when(oreEvent.getBlock()).thenReturn(oreBlock);
+        when(oreBlock.getLocation()).thenReturn(oreLoc);
+        when(oreBlock.getType()).thenReturn(org.bukkit.Material.DIAMOND_ORE);
+
+        listener.onBlockBreak(oreEvent);
+        verify(service).track("MINING", oreLoc);
+        verify(service).track("MINING_DIAMOND_ORE", oreLoc);
+
+        // Test Ancient Debris
+        when(oreBlock.getType()).thenReturn(org.bukkit.Material.ANCIENT_DEBRIS);
+        listener.onBlockBreak(oreEvent);
+        verify(service).track("MINING_ANCIENT_DEBRIS", oreLoc);
+
+        // Test Damage (Player)
+        org.bukkit.event.entity.EntityDamageEvent damageEvent = mock(org.bukkit.event.entity.EntityDamageEvent.class);
+        org.bukkit.entity.Player player = mock(org.bukkit.entity.Player.class);
+        Location playerLoc = mock(Location.class);
+        when(damageEvent.getEntity()).thenReturn(player);
+        when(player.getLocation()).thenReturn(playerLoc);
+
+        listener.onDamage(damageEvent);
+        verify(service).track("DAMAGE", playerLoc);
+
+        // Test Damage (Non-Player)
+        org.bukkit.entity.Entity entity = mock(org.bukkit.entity.Entity.class);
+        when(damageEvent.getEntity()).thenReturn(entity);
+        listener.onDamage(damageEvent);
+        // Should not track again (verify count is still 1)
+        verify(service).track("DAMAGE", playerLoc);
+    }
 }
