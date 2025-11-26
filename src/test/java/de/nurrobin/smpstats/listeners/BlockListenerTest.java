@@ -12,12 +12,49 @@ import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
 
+import org.bukkit.block.TileState;
+import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.NamespacedKey;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class BlockListenerTest {
+
+    @Test
+    void setsOwnerOnTileState() {
+        SMPStats plugin = mock(SMPStats.class);
+        Settings settings = mock(Settings.class);
+        when(settings.isTrackBlocks()).thenReturn(true);
+        when(plugin.getSettings()).thenReturn(settings);
+
+        StatsService stats = mock(StatsService.class);
+        BlockListener listener = new BlockListener(plugin, stats);
+
+        Player player = mock(Player.class);
+        UUID uuid = UUID.randomUUID();
+        when(player.getUniqueId()).thenReturn(uuid);
+
+        Block block = mock(Block.class);
+        TileState tileState = mock(TileState.class);
+        PersistentDataContainer pdc = mock(PersistentDataContainer.class);
+        when(tileState.getPersistentDataContainer()).thenReturn(pdc);
+        when(block.getState()).thenReturn(tileState);
+
+        BlockPlaceEvent place = mock(BlockPlaceEvent.class);
+        when(place.getPlayer()).thenReturn(player);
+        when(place.getBlock()).thenReturn(block);
+        
+        listener.onBlockPlace(place);
+        
+        verify(pdc).set(any(NamespacedKey.class), eq(PersistentDataType.STRING), eq(uuid.toString()));
+        verify(tileState).update();
+    }
 
     @Test
     void countsBlocksWhenTrackingEnabled() {
