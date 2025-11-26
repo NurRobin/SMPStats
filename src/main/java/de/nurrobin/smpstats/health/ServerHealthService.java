@@ -101,8 +101,12 @@ public class ServerHealthService {
                     }
                 }
                 
-                // Collect entity owners during initial pass
-                for (Entity e : chunk.getEntities()) {
+                // Get entity array once to avoid multiple iterations
+                Entity[] chunkEntitiesArray = chunk.getEntities();
+                int chunkEntities = chunkEntitiesArray.length;
+                
+                // Collect entity owners during single pass
+                for (Entity e : chunkEntitiesArray) {
                     if (e instanceof Tameable tameable && tameable.getOwner() != null) {
                         ownerCounts.merge(tameable.getOwner().getUniqueId(), 1, Integer::sum);
                     }
@@ -111,10 +115,11 @@ public class ServerHealthService {
                 worldHoppers += chunkHoppers;
                 worldRedstone += chunkRedstone;
                 
-                int chunkEntities = chunk.getEntities().length;
                 int load = chunkEntities + chunkHoppers + chunkRedstone; // Simple load metric
                 if (load > 0) {
-                    chunkSnapshots.add(new ChunkSnapshot(chunk, chunkEntities, chunkHoppers + chunkRedstone, load, ownerCounts));
+                    // Store extracted chunk data instead of Chunk reference to avoid memory leaks
+                    chunkSnapshots.add(new ChunkSnapshot(chunk.getWorld().getName(), chunk.getX(), chunk.getZ(), 
+                            chunkEntities, chunkHoppers + chunkRedstone, load, ownerCounts));
                 }
             }
             totalChunks += worldChunks;
@@ -130,7 +135,6 @@ public class ServerHealthService {
         
         for (int i = 0; i < Math.min(10, chunkSnapshots.size()); i++) {
             ChunkSnapshot cs = chunkSnapshots.get(i);
-            Chunk c = cs.chunk;
             
             String topOwner = "Unknown";
             if (!cs.ownerCounts.isEmpty()) {
@@ -139,7 +143,7 @@ public class ServerHealthService {
                 if (topOwner == null) topOwner = "Unknown (" + topUuid.toString().substring(0, 8) + ")";
             }
             
-            hotChunks.add(new HealthSnapshot.HotChunk(c.getWorld().getName(), c.getX(), c.getZ(), cs.entities, cs.tileEntities, topOwner));
+            hotChunks.add(new HealthSnapshot.HotChunk(cs.worldName, cs.chunkX, cs.chunkZ, cs.entities, cs.tileEntities, topOwner));
         }
 
         double costIndex = computeCostIndex(totalChunks, totalEntities, totalHoppers, totalRedstone);
@@ -160,7 +164,8 @@ public class ServerHealthService {
         latest.set(new HealthSnapshot(System.currentTimeMillis(), tps, memUsed, memMax, totalChunks, totalEntities, totalHoppers, totalRedstone, costIndex, worlds, hotChunks));
     }
 
-    private record ChunkSnapshot(Chunk chunk, int entities, int tileEntities, int load, Map<UUID, Integer> ownerCounts) {}
+    /** Stores extracted chunk data to avoid holding Chunk references which could prevent garbage collection */
+    private record ChunkSnapshot(String worldName, int chunkX, int chunkZ, int entities, int tileEntities, int load, Map<UUID, Integer> ownerCounts) {}
 
     private double computeCostIndex(int chunks, int entities, int hoppers, int redstone) {
         double value = chunks * settings.getHealthChunkWeight()

@@ -124,14 +124,22 @@ public class HotChunksGui implements InventoryGui, InventoryHolder {
                         if (player.getOpenInventory() != null
                                 && player.getOpenInventory().getTopInventory() != null
                                 && player.getOpenInventory().getTopInventory().getHolder() == this) {
-                            // Reset the item back to original
-                            inventory.setItem(slot, createGuiItem(Material.MAGMA_BLOCK,
-                                    Component.text("Chunk: " + chunk.x() + ", " + chunk.z(), NamedTextColor.GOLD),
-                                    Component.text("World: " + chunk.world(), NamedTextColor.GRAY),
-                                    Component.text("Entities: " + chunk.entityCount(), NamedTextColor.RED),
-                                    Component.text("Tile Entities: " + chunk.tileEntityCount(), NamedTextColor.YELLOW),
-                                    Component.text("Top Owner: " + chunk.topOwner(), NamedTextColor.AQUA),
-                                    Component.text("Click to Teleport", NamedTextColor.DARK_GRAY)));
+                            // Fetch fresh snapshot data to avoid displaying stale information
+                            HealthSnapshot latestSnapshot = healthService.getLatest();
+                            if (latestSnapshot != null && latestSnapshot.hotChunks() != null 
+                                    && slot < latestSnapshot.hotChunks().size()) {
+                                HealthSnapshot.HotChunk latestChunk = latestSnapshot.hotChunks().get(slot);
+                                inventory.setItem(slot, createGuiItem(Material.MAGMA_BLOCK,
+                                        Component.text("Chunk: " + latestChunk.x() + ", " + latestChunk.z(), NamedTextColor.GOLD),
+                                        Component.text("World: " + latestChunk.world(), NamedTextColor.GRAY),
+                                        Component.text("Entities: " + latestChunk.entityCount(), NamedTextColor.RED),
+                                        Component.text("Tile Entities: " + latestChunk.tileEntityCount(), NamedTextColor.YELLOW),
+                                        Component.text("Top Owner: " + latestChunk.topOwner(), NamedTextColor.AQUA),
+                                        Component.text("Click to Teleport", NamedTextColor.DARK_GRAY)));
+                            } else {
+                                // Chunk no longer in hot chunks list, show placeholder
+                                inventory.setItem(slot, createGuiItem(Material.GRAY_STAINED_GLASS_PANE, Component.text(" ")));
+                            }
                         }
                     }
                 }, 100L); // 5 seconds

@@ -39,8 +39,7 @@ public class SStatsCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(ChatColor.RED + "Konsole: /sstats user <player>");
                 return true;
             }
-            // Default to GUI if no args provided? Or keep text stats?
-            // Let's keep text stats for now as default, but maybe add a config option later.
+            // Show text stats by default when no arguments are provided
             StatsFormatter.render(sender, plugin, statsService, player.getUniqueId(), player.getName());
             return true;
         }

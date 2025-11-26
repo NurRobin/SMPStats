@@ -22,6 +22,11 @@ public class MainMenuGui implements InventoryGui, InventoryHolder {
     private final StatsService statsService;
     private final ServerHealthService healthService;
 
+    /**
+     * Creates a new MainMenuGui instance.
+     * Note: The inventory is empty until {@link #open(Player)} is called,
+     * which initializes items based on the player's permissions.
+     */
     public MainMenuGui(SMPStats plugin, GuiManager guiManager, StatsService statsService, ServerHealthService healthService) {
         this.plugin = plugin;
         this.guiManager = guiManager;
@@ -30,6 +35,10 @@ public class MainMenuGui implements InventoryGui, InventoryHolder {
         this.inventory = Bukkit.createInventory(this, 27, Component.text("SMPStats Menu", NamedTextColor.DARK_BLUE));
     }
 
+    /**
+     * Initializes the inventory items based on the player's permissions.
+     * Called by {@link #open(Player)} before displaying the inventory.
+     */
     private void initializeItems(Player player) {
         // My Stats - use player's head
         inventory.setItem(11, createPlayerHead(player, Component.text("My Stats", NamedTextColor.GOLD), 
