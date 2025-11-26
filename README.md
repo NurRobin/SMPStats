@@ -16,10 +16,14 @@ SMPStats evolves from a player statistics plugin into a comprehensive **Minecraf
 - **Server-wide analytics** with per-player drill-down
 - **Trend analysis** over arbitrary time ranges
 - **Dynamic heatmaps** generated at query time with configurable grid sizes
-- **Social graph clustering** — discover who plays with whom
+- **Social graph clustering** — discover who plays with whom, identify groups automatically
 - **Rolling-window event detection** — capture meaningful gameplay moments automatically
+- **Real-time insights** — see who's farming what right now, track live activity
+- **Rich in-game GUI** — chest-menu style interface with meaningful visual insights
 - **Efficient data storage** with SQLite (PostgreSQL/Elasticsearch planned)
 - **REST API** for external dashboards and visualization tools
+
+**Design Philosophy:** Lightweight but expressive — powerful analytics without sacrificing server performance or configuration complexity.
 
 ---
 

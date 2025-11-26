@@ -4,6 +4,15 @@
 
 ---
 
+## Design Principles
+
+- **Lightweight but Expressive:** Powerful analytics without sacrificing server performance or configuration complexity
+- **Storage Efficiency:** Track everything relevant without ballooning to 50GB — smart compression and decay
+- **Unique Insights:** Go beyond common stats to discover social dynamics, streaks, and behavioral patterns
+- **Configurable Everything:** Events, triggers, and analytics should be definable without code changes
+
+---
+
 ## Milestone History
 
 ### ✅ Milestone 1 — Foundations (Completed)
@@ -43,7 +52,9 @@
 | Resource-Specific Heatmaps | Medium | M | Todo | Diamond, iron, gold mining patterns |
 | Biome-Filtered Views | Low | S | Todo | Filter any heatmap by biome type |
 | Time-Range Filters | Medium | M | Todo | `from=3d`, `from=1w`, arbitrary ranges |
-| `/stats` GUI Enhancement | Medium | L | Todo | Rich in-game UI with heatmap previews |
+| In-Game GUI (Chest Menu) | High | L | Todo | Rich chest-menu style interface with visual insights |
+| Live Activity Dashboard | Medium | M | Todo | "Who's farming what right now" real-time view |
+| Player Comparison Views | Medium | M | Todo | Side-by-side stat comparisons in GUI |
 
 **Technical Details:**
 ```
@@ -61,15 +72,17 @@ Grid Aggregation:
 
 ### 🤝 Milestone 3 — Social Dynamics
 
-> Advanced player-proximity tracking, automatic group detection, and social graph analysis.
+> Advanced player-proximity tracking, automatic group detection, and social graph analysis. Understand how groups form on the server and which players are active together.
 
 | Feature | Priority | Size | Status | Description |
 |---------|----------|------|--------|-------------|
 | Enhanced Proximity Tracking | High | M | Todo | 10-block radius, 120+ second threshold |
 | Automatic Group Detection | High | L | Todo | Clustering algorithm for 3+ player groups |
+| Group Formation Tracking | High | M | Todo | Track how groups form, grow, and dissolve over time |
 | Interaction Matrices | Medium | M | Todo | N×N player interaction strength grid |
 | Social Graph Export | Medium | M | Todo | JSON/GraphML for visualization tools |
 | "Who Plays With Whom" API | High | M | Todo | Query player relationships and groups |
+| Active Together Detection | Medium | M | Todo | Identify which players are consistently online together |
 | Time-Filtered Social Data | Medium | S | Todo | "Last 6h", "past week", "this month" |
 | Group Hangout Zones | Medium | M | Todo | Heatmaps of where groups spend time |
 | Party Session Detection | Low | L | Todo | Automatically detect coordinated play sessions |
