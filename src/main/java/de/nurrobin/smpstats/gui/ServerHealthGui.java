@@ -63,7 +63,8 @@ public class ServerHealthGui implements InventoryGui, InventoryHolder {
 
         inventory.setItem(13, createGuiItem(Material.CREEPER_HEAD, Component.text("Entities", NamedTextColor.RED),
                 Component.text(String.valueOf(snapshot.entities()), NamedTextColor.WHITE),
-                Component.text("Click for history", NamedTextColor.DARK_GRAY)));
+                Component.text("Left-click: History chart", NamedTextColor.DARK_GRAY),
+                Component.text("Right-click: Entity breakdown", NamedTextColor.GRAY)));
 
         inventory.setItem(14, createGuiItem(Material.HOPPER, Component.text("Hoppers", NamedTextColor.GRAY),
                 Component.text(String.valueOf(snapshot.hoppers()), NamedTextColor.WHITE),
@@ -144,8 +145,14 @@ public class ServerHealthGui implements InventoryGui, InventoryHolder {
                     HealthChartGui.MetricType.MEMORY, HealthChartGui.TimeScale.FIVE_MINUTES));
             case 12 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
                     HealthChartGui.MetricType.CHUNKS, HealthChartGui.TimeScale.FIVE_MINUTES));
-            case 13 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
-                    HealthChartGui.MetricType.ENTITIES, HealthChartGui.TimeScale.FIVE_MINUTES));
+            case 13 -> {
+                if (event.getClick().isRightClick()) {
+                    guiManager.openGui(player, new EntityBreakdownGui(plugin, guiManager, healthService, 0));
+                } else {
+                    guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
+                            HealthChartGui.MetricType.ENTITIES, HealthChartGui.TimeScale.FIVE_MINUTES));
+                }
+            }
             case 14 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
                     HealthChartGui.MetricType.HOPPERS, HealthChartGui.TimeScale.FIVE_MINUTES));
             case 15 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
