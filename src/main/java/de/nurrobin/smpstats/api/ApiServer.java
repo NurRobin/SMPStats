@@ -196,9 +196,11 @@ public class ApiServer {
             long until = queryParam(uri, "until").map(Long::parseLong).orElse(System.currentTimeMillis());
             double decay = queryParam(uri, "decay").map(Double::parseDouble).orElse(settings.getHeatmapDecayHalfLifeHours());
             String world = queryParam(uri, "world").orElse("world");
+            int gridSize = queryParam(uri, "grid").map(Integer::parseInt).orElse(16);
+            if (gridSize <= 0) gridSize = 16;
 
             try {
-                sendJson(exchange, 200, heatmapService.generateHeatmap(typeRaw.toUpperCase(), world, since, until, decay));
+                sendJson(exchange, 200, heatmapService.generateHeatmap(typeRaw.toUpperCase(), world, since, until, decay, gridSize));
             } catch (IllegalArgumentException e) {
                 sendText(exchange, 400, "Invalid heatmap type");
             }
