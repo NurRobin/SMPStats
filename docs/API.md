@@ -122,9 +122,14 @@ Returned by `/timeline/range/*`. Same numeric keys as timeline entries but repre
 - Response: `text/event-stream` containing one `data: <MomentEntry-json>\n\n` block per moment. It sends the snapshot once; it is not a long-lived live stream.
 
 ### GET `/heatmap/{type}`
-- Purpose: top heatmap bins.
-- Path: `type` (uppercased internally). Built-in emitters use `MINING` and `DEATH`.
-- Response: list of up to 200 `HeatmapBin` records ordered by count.
+- Purpose: aggregated heatmap data (by chunk).
+- Path: `type` (uppercased internally). Built-in emitters use `MINING`, `DEATH`, `POSITION`.
+- Query:
+  - `since` (long, default: 7 days ago): Start timestamp (ms).
+  - `until` (long, default: now): End timestamp (ms).
+  - `decay` (double, default: from settings): Half-life in hours for time-decay weighting. Set to 0 to disable decay.
+  - `world` (string, default: "world"): World name to filter by.
+- Response: list of `HeatmapBin` records (chunkX, chunkZ, count/weight) ordered by weight descending.
 - Errors: `400 Invalid heatmap type` if an illegal value triggers an `IllegalArgumentException`.
 
 ### GET `/heatmap/hotspots/{type}`
