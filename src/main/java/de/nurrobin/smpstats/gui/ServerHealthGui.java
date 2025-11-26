@@ -11,12 +11,8 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 
-import java.util.Arrays;
-import java.util.Map;
-
-import static de.nurrobin.smpstats.gui.GuiUtils.createGuiItem;
+import static de.nurrobin.smpstats.gui.GuiUtils.*;
 
 public class ServerHealthGui implements InventoryGui, InventoryHolder {
     private final SMPStats plugin;
@@ -33,11 +29,12 @@ public class ServerHealthGui implements InventoryGui, InventoryHolder {
     }
 
     private void initializeItems() {
+        inventory.clear();
+        
         var snapshot = healthService.getLatest();
         if (snapshot == null) {
             inventory.setItem(13, createGuiItem(Material.BARRIER, Component.text("No data yet", NamedTextColor.RED)));
-            // Back Button
-            inventory.setItem(22, createGuiItem(Material.ARROW, Component.text("Back", NamedTextColor.RED)));
+            addNavigationButtons();
             return;
         }
 
@@ -45,13 +42,17 @@ public class ServerHealthGui implements InventoryGui, InventoryHolder {
         double tps = Math.min(20.0, Math.round(snapshot.tps() * 100.0) / 100.0);
         NamedTextColor tpsColor = tps >= 18.0 ? NamedTextColor.GREEN : (tps >= 15.0 ? NamedTextColor.YELLOW : NamedTextColor.RED);
         inventory.setItem(10, createGuiItem(Material.CLOCK, Component.text("TPS", NamedTextColor.GOLD),
-                Component.text(String.valueOf(tps), tpsColor)));
+                Component.text(String.valueOf(tps), tpsColor),
+                Component.text(getTpsStatus(tps), tpsColor)));
 
         // Memory
         long usedMb = snapshot.memoryUsed() / 1024 / 1024;
         long maxMb = snapshot.memoryMax() / 1024 / 1024;
+        int memoryPercent = (int) ((usedMb * 100) / maxMb);
+        NamedTextColor memColor = memoryPercent < 70 ? NamedTextColor.GREEN : (memoryPercent < 85 ? NamedTextColor.YELLOW : NamedTextColor.RED);
         inventory.setItem(11, createGuiItem(Material.ENDER_CHEST, Component.text("Memory", NamedTextColor.AQUA),
-                Component.text(usedMb + "MB / " + maxMb + "MB", NamedTextColor.WHITE)));
+                Component.text(usedMb + "MB / " + maxMb + "MB", memColor),
+                Component.text(memoryPercent + "% used", NamedTextColor.GRAY)));
 
         inventory.setItem(12, createGuiItem(Material.GRASS_BLOCK, Component.text("Chunks", NamedTextColor.GREEN),
                 Component.text(String.valueOf(snapshot.chunks()), NamedTextColor.WHITE)));
@@ -65,15 +66,26 @@ public class ServerHealthGui implements InventoryGui, InventoryHolder {
         inventory.setItem(15, createGuiItem(Material.REDSTONE, Component.text("Redstone", NamedTextColor.DARK_RED),
                 Component.text(String.valueOf(snapshot.redstone()), NamedTextColor.WHITE)));
         
+        double costIndex = snapshot.costIndex();
+        NamedTextColor costColor = costIndex < 50 ? NamedTextColor.GREEN : (costIndex < 100 ? NamedTextColor.YELLOW : NamedTextColor.RED);
         inventory.setItem(16, createGuiItem(Material.EMERALD, Component.text("Cost Index", NamedTextColor.DARK_GREEN),
-                Component.text(String.valueOf(snapshot.costIndex()), NamedTextColor.WHITE)));
+                Component.text(String.format("%.1f", costIndex), costColor),
+                Component.text(getCostStatus(costIndex), NamedTextColor.GRAY)));
 
+        addNavigationButtons();
+    }
+
+    private void addNavigationButtons() {
         // Hot Chunks Button
         inventory.setItem(18, createGuiItem(Material.MAGMA_CREAM, Component.text("Hot Chunks", NamedTextColor.GOLD),
                 Component.text("View chunks with high load", NamedTextColor.GRAY)));
 
         // Back Button
         inventory.setItem(22, createGuiItem(Material.ARROW, Component.text("Back", NamedTextColor.RED)));
+
+        // Refresh Button  
+        inventory.setItem(26, createGuiItem(Material.SUNFLOWER, Component.text("Refresh", NamedTextColor.GREEN),
+                Component.text("Click to refresh data", NamedTextColor.GRAY)));
 
         // Fill background
         ItemStack filler = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, Component.text(" "));
@@ -82,6 +94,20 @@ public class ServerHealthGui implements InventoryGui, InventoryHolder {
                 inventory.setItem(i, filler);
             }
         }
+    }
+
+    private String getTpsStatus(double tps) {
+        if (tps >= 19.5) return "Excellent";
+        if (tps >= 18.0) return "Good";
+        if (tps >= 15.0) return "Fair";
+        return "Poor";
+    }
+
+    private String getCostStatus(double cost) {
+        if (cost < 30) return "Low load";
+        if (cost < 50) return "Moderate load";
+        if (cost < 100) return "High load";
+        return "Critical load";
     }
 
     @Override
@@ -97,10 +123,16 @@ public class ServerHealthGui implements InventoryGui, InventoryHolder {
     @Override
     public void handleClick(InventoryClickEvent event) {
         Player player = (Player) event.getWhoClicked();
+        playClickSound(player);
+        
         if (event.getSlot() == 18) {
             guiManager.openGui(player, new HotChunksGui(plugin, guiManager, healthService));
         } else if (event.getSlot() == 22) {
             guiManager.openGui(player, new MainMenuGui(plugin, guiManager, plugin.getStatsService(), healthService));
+        } else if (event.getSlot() == 26) {
+            playSuccessSound(player);
+            initializeItems();
+            player.sendMessage(Component.text("Server health refreshed!", NamedTextColor.GREEN));
         }
     }
 }

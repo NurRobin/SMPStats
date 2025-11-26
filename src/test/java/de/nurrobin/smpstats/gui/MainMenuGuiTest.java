@@ -42,11 +42,12 @@ class MainMenuGuiTest {
     }
 
     @Test
-    void showsMenuItems() {
+    void showsMenuItemsAfterOpen() {
         MainMenuGui gui = new MainMenuGui(plugin, guiManager, statsService, healthService);
+        gui.open(player); // Items are now initialized on open
         Inventory inv = gui.getInventory();
 
-        // My Stats
+        // My Stats (player head is set on open)
         assertNotNull(inv.getItem(11));
         assertEquals(Material.PLAYER_HEAD, inv.getItem(11).getType());
 
@@ -62,6 +63,7 @@ class MainMenuGuiTest {
     @Test
     void opensMyStats() {
         MainMenuGui gui = new MainMenuGui(plugin, guiManager, statsService, healthService);
+        gui.open(player);
         
         InventoryClickEvent event = mock(InventoryClickEvent.class);
         when(event.getSlot()).thenReturn(11);
@@ -76,6 +78,7 @@ class MainMenuGuiTest {
     void opensServerHealthWithPermission() {
         player.addAttachment(plugin, "smpstats.health", true);
         MainMenuGui gui = new MainMenuGui(plugin, guiManager, statsService, healthService);
+        gui.open(player);
         
         InventoryClickEvent event = mock(InventoryClickEvent.class);
         when(event.getSlot()).thenReturn(13);
@@ -90,6 +93,7 @@ class MainMenuGuiTest {
     void deniesServerHealthWithoutPermission() {
         // Player doesn't have permission by default
         MainMenuGui gui = new MainMenuGui(plugin, guiManager, statsService, healthService);
+        gui.open(player);
         
         InventoryClickEvent event = mock(InventoryClickEvent.class);
         when(event.getSlot()).thenReturn(13);
@@ -98,7 +102,19 @@ class MainMenuGuiTest {
         gui.handleClick(event);
         
         verify(guiManager, never()).openGui(eq(player), any(ServerHealthGui.class));
-        // Should send message
-        // assertEquals(Component.text("You do not have permission to view server health.", NamedTextColor.RED), player.nextComponentMessage());
+    }
+
+    @Test
+    void opensLeaderboards() {
+        MainMenuGui gui = new MainMenuGui(plugin, guiManager, statsService, healthService);
+        gui.open(player);
+        
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(15);
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        gui.handleClick(event);
+        
+        verify(guiManager).openGui(eq(player), any(LeaderboardsGui.class));
     }
 }

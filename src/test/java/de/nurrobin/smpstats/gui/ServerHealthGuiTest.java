@@ -110,7 +110,7 @@ class ServerHealthGuiTest {
     }
 
     @Test
-    void backButtonClosesInventory() {
+    void backButtonNavigatesToMainMenu() {
         ServerHealthGui gui = new ServerHealthGui(plugin, guiManager, healthService);
         
         InventoryClickEvent event = mock(InventoryClickEvent.class);
@@ -119,7 +119,41 @@ class ServerHealthGuiTest {
         
         gui.handleClick(event);
         
-        // Verify close logic (assuming it closes inventory)
-        // Since we can't easily verify closeInventory on player without spy, we assume it works if no exception
+        verify(guiManager).openGui(eq(player), any(MainMenuGui.class));
+    }
+
+    @Test
+    void refreshButtonRefreshesData() {
+        HealthSnapshot snapshot = new HealthSnapshot(
+            System.currentTimeMillis(), 19.0, 100 * 1024 * 1024, 200 * 1024 * 1024, 
+            50, 100, 10, 20, 5.0, Collections.emptyMap(), Collections.emptyList()
+        );
+        when(healthService.getLatest()).thenReturn(snapshot);
+        
+        ServerHealthGui gui = new ServerHealthGui(plugin, guiManager, healthService);
+        
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(26); // Refresh button
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        gui.handleClick(event);
+        
+        // Verify data was fetched again
+        verify(healthService, atLeast(2)).getLatest();
+    }
+
+    @Test
+    void hasRefreshButton() {
+        HealthSnapshot snapshot = new HealthSnapshot(
+            System.currentTimeMillis(), 19.0, 100 * 1024 * 1024, 200 * 1024 * 1024, 
+            50, 100, 10, 20, 5.0, Collections.emptyMap(), Collections.emptyList()
+        );
+        when(healthService.getLatest()).thenReturn(snapshot);
+
+        ServerHealthGui gui = new ServerHealthGui(plugin, guiManager, healthService);
+        Inventory inv = gui.getInventory();
+
+        assertNotNull(inv.getItem(26));
+        assertEquals(Material.SUNFLOWER, inv.getItem(26).getType());
     }
 }
