@@ -19,8 +19,10 @@ class HeatmapListenerTest {
 
         BlockBreakEvent breakEvent = mock(BlockBreakEvent.class);
         Location breakLoc = mock(Location.class);
-        when(breakEvent.getBlock()).thenReturn(mock(org.bukkit.block.Block.class));
-        when(breakEvent.getBlock().getLocation()).thenReturn(breakLoc);
+        org.bukkit.block.Block block = mock(org.bukkit.block.Block.class);
+        when(breakEvent.getBlock()).thenReturn(block);
+        when(block.getLocation()).thenReturn(breakLoc);
+        when(block.getType()).thenReturn(org.bukkit.Material.STONE);
         listener.onBlockBreak(breakEvent);
         verify(service).track("MINING", breakLoc);
 

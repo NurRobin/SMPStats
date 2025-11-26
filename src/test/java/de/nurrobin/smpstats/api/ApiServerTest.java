@@ -151,7 +151,7 @@ class ApiServerTest {
         handler.handle(missing);
         assertEquals(400, missing.status);
 
-        doThrow(new IllegalArgumentException("bad")).when(heatmap).generateHeatmap(eq("BAD"), anyString(), anyLong(), anyLong(), anyDouble());
+        doThrow(new IllegalArgumentException("bad")).when(heatmap).generateHeatmap(eq("BAD"), anyString(), anyLong(), anyLong(), anyDouble(), anyInt());
         FakeExchange invalid = new FakeExchange("/heatmap/BAD", API_KEY);
         handler.handle(invalid);
         assertEquals(400, invalid.status);
