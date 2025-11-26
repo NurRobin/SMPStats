@@ -11,14 +11,14 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class MomentServiceTest {
@@ -90,6 +90,86 @@ class MomentServiceTest {
         ArgumentCaptor<MomentEntry> moments = ArgumentCaptor.forClass(MomentEntry.class);
         verify(storage, times(2)).saveMoment(moments.capture());
         assertTrue(moments.getAllValues().get(1).getDetail().contains("HP"));
+    }
+
+    @Test
+    void flushesStaleWindowViaScheduler() throws Exception {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        StatsStorage storage = mock(StatsStorage.class);
+
+        MomentDefinition gain = new MomentDefinition("gain", MomentDefinition.TriggerType.ITEM_GAIN,
+                "Gained", "Items {count}", 0, false, Set.of(Material.DIAMOND), 0, 0, Set.of(), false, Set.of());
+        Settings settings = settings(List.of(gain));
+
+        MomentService service = new MomentService(plugin, storage, settings);
+
+        Player player = mock(Player.class);
+        UUID uuid = UUID.randomUUID();
+        when(player.getUniqueId()).thenReturn(uuid);
+        when(player.getName()).thenReturn("Alex");
+        Location loc = mock(Location.class);
+
+        org.bukkit.scheduler.BukkitScheduler scheduler = mock(org.bukkit.scheduler.BukkitScheduler.class);
+        org.bukkit.scheduler.BukkitTask task = mock(org.bukkit.scheduler.BukkitTask.class);
+        when(task.getTaskId()).thenReturn(7);
+
+        AtomicReference<Runnable> scheduled = new AtomicReference<>();
+        try (var bukkit = org.mockito.Mockito.mockStatic(org.bukkit.Bukkit.class)) {
+            bukkit.when(org.bukkit.Bukkit::getScheduler).thenReturn(scheduler);
+            bukkit.when(() -> org.bukkit.Bukkit.getPlayer(uuid)).thenReturn(player);
+            when(scheduler.runTaskTimerAsynchronously(eq(plugin), any(Runnable.class), anyLong(), anyLong()))
+                    .thenAnswer(invocation -> {
+                        scheduled.set(invocation.getArgument(1));
+                        return task;
+                    });
+
+            service.start();
+            service.onItemGain(player, Material.DIAMOND, loc);
+
+            scheduled.get().run(); // flushes because mergeSeconds = 0
+            service.shutdown();
+        }
+
+        ArgumentCaptor<MomentEntry> captor = ArgumentCaptor.forClass(MomentEntry.class);
+        verify(storage).saveMoment(captor.capture());
+        MomentEntry entry = captor.getValue();
+        assertTrue(entry.getDetail().contains("2") || entry.getDetail().contains("1"));
+    }
+
+    @Test
+    void handlesMultipleDeathTriggersAndErrorsGracefully() throws Exception {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        StatsStorage storage = mock(StatsStorage.class);
+
+        MomentDefinition fall = new MomentDefinition("fall", MomentDefinition.TriggerType.DEATH_FALL,
+                "Fall {fall}", "Ouch", 0, false, Set.of(), 5, 0, Set.of("FALL"), false, Set.of());
+        MomentDefinition explosion = new MomentDefinition("boom", MomentDefinition.TriggerType.DEATH_EXPLOSION,
+                "Boom", "Exploded", 0, false, Set.of(), 0, 0, Set.of("CREEPER"), true, Set.of());
+        MomentDefinition death = new MomentDefinition("death", MomentDefinition.TriggerType.DEATH,
+                "Death", "Fire", 0, false, Set.of(), 0, 0, Set.of("FIRE"), false, Set.of());
+        Settings settings = settings(List.of(fall, explosion, death));
+
+        MomentService service = new MomentService(plugin, storage, settings);
+
+        Player player = mock(Player.class);
+        when(player.getUniqueId()).thenReturn(UUID.randomUUID());
+        when(player.getName()).thenReturn("Alex");
+        Location loc = mock(Location.class);
+
+        service.onDeath(player, loc, 10, "FALL", false);
+        service.onDeath(player, loc, 0, "CREEPER", true);
+        service.onDeath(player, loc, 0, "FIRE", false);
+
+        when(storage.loadMomentsSince(anyLong(), anyInt())).thenThrow(new java.sql.SQLException("fail"));
+        when(storage.queryMoments(any(), anyString(), anyLong(), anyInt())).thenThrow(new java.sql.SQLException("fail"));
+
+        ArgumentCaptor<MomentEntry> captor = ArgumentCaptor.forClass(MomentEntry.class);
+        verify(storage, times(3)).saveMoment(captor.capture());
+        assertEquals("Fall 10.0", captor.getAllValues().get(0).getTitle());
+        assertTrue(service.getMomentsSince(0, 5).isEmpty());
+        assertTrue(service.queryMoments(UUID.randomUUID(), "any", 0, 1).isEmpty());
     }
 
     private Settings settings(List<MomentDefinition> defs) {

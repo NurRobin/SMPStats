@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.logging.Logger;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 class HeatmapServiceTest {
@@ -46,6 +48,20 @@ class HeatmapServiceTest {
         HeatmapService service = new HeatmapService(plugin, storage, settings);
         service.track("BREAK", null);
         verify(storage, never()).incrementHeatmapBin(any(), any(), anyInt(), anyInt(), anyLong());
+    }
+
+    @Test
+    void returnsEmptyOnStorageErrors() throws Exception {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        StatsStorage storage = mock(StatsStorage.class);
+        when(storage.loadHeatmapBins(anyString(), anyInt())).thenThrow(new java.sql.SQLException("fail"));
+        when(storage.loadHotspotCounts(anyString())).thenThrow(new java.sql.SQLException("fail"));
+        Settings settings = settings(true, List.of());
+
+        HeatmapService service = new HeatmapService(plugin, storage, settings);
+        assertTrue(service.loadTop("BREAK", 5).isEmpty());
+        assertTrue(service.loadHotspots("BREAK").isEmpty());
     }
 
     private Settings settings(boolean enabled, List<HotspotDefinition> hotspots) {
