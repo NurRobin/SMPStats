@@ -5,7 +5,7 @@
 
     <groupId>de.nurrobin</groupId>
     <artifactId>smpstats</artifactId>
-    <version>0.6.0</version>
+    <version>0.7.0</version>
     <name>SMPStats</name>
     <description>Paper 1.21.x player statistics plugin</description>
 
