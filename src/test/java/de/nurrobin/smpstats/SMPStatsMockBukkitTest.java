@@ -20,7 +20,7 @@ class SMPStatsMockBukkitTest {
         }
     }
 
-    @Disabled("MockBukkit build requires Paper 1.21.10 API, current plugin uses 1.21.1")
+    @Disabled("MockBukkit build still mismatches Paper 1.21.10 materials; update when compatible")
     @Test
     void pluginLoadsRegistersCommandsAndReloads() {
         server = MockBukkit.mock();

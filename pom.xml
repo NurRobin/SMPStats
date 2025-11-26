@@ -30,7 +30,7 @@
         <dependency>
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
-            <version>1.21.1-R0.1-SNAPSHOT</version>
+            <version>1.21.10-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -56,9 +56,9 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>com.github.MockBukkit</groupId>
-            <artifactId>MockBukkit</artifactId>
-            <version>v1.21-6975baa89d-1</version>
+            <groupId>org.mockbukkit.mockbukkit</groupId>
+            <artifactId>mockbukkit-v1.21</artifactId>
+            <version>4.98.0</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
