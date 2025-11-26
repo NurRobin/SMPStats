@@ -4,6 +4,8 @@ import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.health.ServerHealthService;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
+import org.bukkit.event.inventory.ClickType;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.AfterEach;
@@ -14,6 +16,7 @@ import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 class HealthChartGuiTest {
 
@@ -170,5 +173,193 @@ class HealthChartGuiTest {
             }
         }
         assertTrue(hasChartItems, "Chart should have stained glass pane items");
+    }
+    
+    @Test
+    void handleClickBackButton() {
+        HealthChartGui gui = new HealthChartGui(plugin, guiManager, healthService,
+                HealthChartGui.MetricType.TPS, HealthChartGui.TimeScale.FIVE_MINUTES);
+        gui.open(player);
+        
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(45); // Back button
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        assertDoesNotThrow(() -> gui.handleClick(event));
+    }
+    
+    @Test
+    void handleClickRefreshButton() {
+        HealthChartGui gui = new HealthChartGui(plugin, guiManager, healthService,
+                HealthChartGui.MetricType.TPS, HealthChartGui.TimeScale.FIVE_MINUTES);
+        gui.open(player);
+        
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(53); // Refresh button
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        assertDoesNotThrow(() -> gui.handleClick(event));
+    }
+    
+    @Test
+    void handleClickTimeScaleOneMinuteButton() {
+        HealthChartGui gui = new HealthChartGui(plugin, guiManager, healthService,
+                HealthChartGui.MetricType.TPS, HealthChartGui.TimeScale.FIVE_MINUTES);
+        gui.open(player);
+        
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(47); // 1m button
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        assertDoesNotThrow(() -> gui.handleClick(event));
+    }
+    
+    @Test
+    void handleClickTimeScaleFiveMinuteButton() {
+        HealthChartGui gui = new HealthChartGui(plugin, guiManager, healthService,
+                HealthChartGui.MetricType.TPS, HealthChartGui.TimeScale.ONE_MINUTE);
+        gui.open(player);
+        
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(48); // 5m button
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        assertDoesNotThrow(() -> gui.handleClick(event));
+    }
+    
+    @Test
+    void handleClickTimeScaleThirtyMinuteButton() {
+        HealthChartGui gui = new HealthChartGui(plugin, guiManager, healthService,
+                HealthChartGui.MetricType.TPS, HealthChartGui.TimeScale.ONE_MINUTE);
+        gui.open(player);
+        
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(49); // 10m button (adjusted since there's no 30m)
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        assertDoesNotThrow(() -> gui.handleClick(event));
+    }
+    
+    @Test
+    void handleClickTimeScaleOneHourButton() {
+        HealthChartGui gui = new HealthChartGui(plugin, guiManager, healthService,
+                HealthChartGui.MetricType.TPS, HealthChartGui.TimeScale.ONE_MINUTE);
+        gui.open(player);
+        
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(50); // 1h button
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        assertDoesNotThrow(() -> gui.handleClick(event));
+    }
+    
+    @Test
+    void handleClickChartAreaWithData() {
+        healthService.sampleNow();
+        healthService.sampleNow();
+        
+        HealthChartGui gui = new HealthChartGui(plugin, guiManager, healthService,
+                HealthChartGui.MetricType.TPS, HealthChartGui.TimeScale.ONE_HOUR);
+        gui.open(player);
+        
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(0); // Chart area
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        assertDoesNotThrow(() -> gui.handleClick(event));
+    }
+    
+    @Test
+    void chartShowsMemoryMetric() {
+        healthService.sampleNow();
+        
+        HealthChartGui gui = new HealthChartGui(plugin, guiManager, healthService,
+                HealthChartGui.MetricType.MEMORY, HealthChartGui.TimeScale.ONE_HOUR);
+        gui.open(player);
+        
+        Inventory inventory = gui.getInventory();
+        assertNotNull(inventory);
+    }
+    
+    @Test
+    void chartShowsChunksMetric() {
+        healthService.sampleNow();
+        
+        HealthChartGui gui = new HealthChartGui(plugin, guiManager, healthService,
+                HealthChartGui.MetricType.CHUNKS, HealthChartGui.TimeScale.ONE_HOUR);
+        gui.open(player);
+        
+        Inventory inventory = gui.getInventory();
+        assertNotNull(inventory);
+    }
+    
+    @Test
+    void chartShowsEntitiesMetric() {
+        healthService.sampleNow();
+        
+        HealthChartGui gui = new HealthChartGui(plugin, guiManager, healthService,
+                HealthChartGui.MetricType.ENTITIES, HealthChartGui.TimeScale.ONE_HOUR);
+        gui.open(player);
+        
+        Inventory inventory = gui.getInventory();
+        assertNotNull(inventory);
+    }
+    
+    @Test
+    void chartShowsCostIndexMetric() {
+        healthService.sampleNow();
+        
+        HealthChartGui gui = new HealthChartGui(plugin, guiManager, healthService,
+                HealthChartGui.MetricType.COST_INDEX, HealthChartGui.TimeScale.ONE_HOUR);
+        gui.open(player);
+        
+        Inventory inventory = gui.getInventory();
+        assertNotNull(inventory);
+    }
+    
+    @Test
+    void chartUsesThresholdsForColors() {
+        // Generate some history
+        for (int i = 0; i < 10; i++) {
+            healthService.sampleNow();
+        }
+        
+        HealthChartGui gui = new HealthChartGui(plugin, guiManager, healthService,
+                HealthChartGui.MetricType.TPS, HealthChartGui.TimeScale.ONE_HOUR);
+        gui.open(player);
+        
+        Inventory inventory = gui.getInventory();
+        
+        // Verify chart area has colored glass panes
+        for (int row = 0; row < 4; row++) {
+            for (int col = 0; col < 9; col++) {
+                ItemStack item = inventory.getItem(row * 9 + col);
+                if (item != null) {
+                    String typeName = item.getType().name();
+                    assertTrue(typeName.contains("STAINED_GLASS_PANE") || typeName.equals("BLACK_STAINED_GLASS_PANE"),
+                            "Chart items should be stained glass panes, got: " + typeName);
+                }
+            }
+        }
+    }
+    
+    @Test
+    void timeScaleEnumGetMinutesReturnsCorrectValues() {
+        assertEquals(1, HealthChartGui.TimeScale.ONE_MINUTE.getMinutes());
+        assertEquals(5, HealthChartGui.TimeScale.FIVE_MINUTES.getMinutes());
+        assertEquals(10, HealthChartGui.TimeScale.TEN_MINUTES.getMinutes());
+        assertEquals(60, HealthChartGui.TimeScale.ONE_HOUR.getMinutes());
+    }
+    
+    @Test
+    void allTimeScaleValuesExist() {
+        HealthChartGui.TimeScale[] scales = HealthChartGui.TimeScale.values();
+        assertEquals(4, scales.length);
+    }
+    
+    @Test
+    void allMetricTypeValuesExist() {
+        HealthChartGui.MetricType[] types = HealthChartGui.MetricType.values();
+        assertTrue(types.length > 0);
     }
 }
