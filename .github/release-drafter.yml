@@ -1,25 +1,102 @@
-name-template: "SMPStats v$NEXT_PATCH_VERSION"
-tag-template: "v$NEXT_PATCH_VERSION"
+name-template: "SMPStats v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
 change-template: "- $TITLE (#$NUMBER) @$AUTHOR"
 no-changes-template: "- No changes"
+
 categories:
   - title: 🚀 Features
     labels: [feature, enhancement, feat]
-  - title: 🛠️ Fixes
+  - title: 🛠️ Bug Fixes
     labels: [bug, fix, bugfix]
   - title: ♻️ Refactors
     labels: [refactor]
+  - title: 🔒 Security
+    labels: [security]
+  - title: ⚡ Performance
+    labels: [performance, perf]
   - title: 📖 Documentation
     labels: [docs, documentation]
+  - title: 🧪 Testing
+    labels: [test, testing]
   - title: 🧹 Maintenance
     labels: [chore, maintenance, dependencies]
+
 version-resolver:
   major:
-    labels: [major]
+    labels: [major, breaking]
   minor:
     labels: [minor, feature, enhancement, feat]
   patch:
-    labels: [patch, bug, fix, bugfix, chore, maintenance]
+    labels: [patch, bug, fix, bugfix, chore, maintenance, docs]
+  default: patch
+
+autolabeler:
+  - label: 'feature'
+    branch:
+      - '/^feat(ure)?[/-].+/'
+    title:
+      - '/^feat(\(.+\))?:/i'
+  - label: 'bug'
+    branch:
+      - '/^fix[/-].+/'
+    title:
+      - '/^fix(\(.+\))?:/i'
+  - label: 'refactor'
+    branch:
+      - '/^refactor[/-].+/'
+    title:
+      - '/^refactor(\(.+\))?:/i'
+  - label: 'chore'
+    branch:
+      - '/^chore[/-].+/'
+    title:
+      - '/^chore(\(.+\))?:/i'
+  - label: 'docs'
+    branch:
+      - '/^docs?[/-].+/'
+    title:
+      - '/^docs?(\(.+\))?:/i'
+    files:
+      - '*.md'
+      - 'docs/**/*'
+  - label: 'test'
+    branch:
+      - '/^test[/-].+/'
+    title:
+      - '/^test(\(.+\))?:/i'
+    files:
+      - 'src/test/**/*'
+      - '**/*Test.java'
+  - label: 'dependencies'
+    files:
+      - 'pom.xml'
+      - '.github/dependabot.yml'
+  - label: 'performance'
+    title:
+      - '/^perf(\(.+\))?:/i'
+  - label: 'security'
+    title:
+      - '/^security(\(.+\))?:/i'
+
 template: |
-  ## Changes
+  ## What's Changed
+  
   $CHANGES
+  
+  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+  
+  ## Installation
+  
+  Download `SMPStats-v$RESOLVED_VERSION.jar` and place it in your server's `plugins` folder.
+  
+  ### Verification
+  
+  All release artifacts include SHA256 checksums and GPG signatures for verification:
+  
+  ```bash
+  # Verify checksum
+  sha256sum -c SMPStats-v$RESOLVED_VERSION.jar.sha256
+  
+  # Verify GPG signature (if available)
+  gpg --verify SMPStats-v$RESOLVED_VERSION.jar.asc SMPStats-v$RESOLVED_VERSION.jar
+  ```

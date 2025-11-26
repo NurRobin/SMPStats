@@ -2,7 +2,7 @@ config_version: 3
 
 api:
   enabled: true            # Enable HTTP API
-  bind_address: "0.0.0.0"  # Bind address, usually 0.0.0.0
+  bind_address: "127.0.0.1"  # Bind address, usually 127.0.0.1 for local access (discord bots, etc), if you need external access use 0.0.0.0 or your server IP
   port: 8765               # API port
   api_key: "YouShouldChangeThisKey" # Set a secret key
 

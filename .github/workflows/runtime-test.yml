@@ -6,35 +6,28 @@ on:
     branches:
       - main
       - dev
+    paths:
+      - '**.java'
+      - 'pom.xml'
+      - 'src/**'
+      - 'plugin.yml'
+      - '.github/workflows/runtime-test.yml'
   pull_request:
     branches:
       - main
       - dev
+    paths:
+      - '**.java'
+      - 'pom.xml'
+      - 'src/**'
+      - 'plugin.yml'
+      - '.github/workflows/runtime-test.yml'
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: maven
-      
-      - name: Build plugin
-        run: mvn -B -ntp clean package -DskipTests
-      
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: plugin-${{ github.run_id }}
-          path: target/SMPStats.jar
-          retention-days: 1
+    uses: ./.github/workflows/build.yml
+    with:
+      skip-tests: true
   
   runtime-test:
     name: Test on Paper ${{ matrix.mcVersion }}
@@ -58,7 +51,7 @@ jobs:
         with:
           server-version: ${{ matrix.mcVersion }}
           java-version: ${{ matrix.javaVersion }}
-          artifact-name: plugin-${{ github.run_id }}
+          artifact-name: ${{ needs.build.outputs.artifact-name }}
       
       - name: Check if plugin loaded successfully
         if: always()

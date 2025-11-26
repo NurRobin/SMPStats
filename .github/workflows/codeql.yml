@@ -3,8 +3,18 @@ name: CodeQL
 on:
   push:
     branches: [main, dev]
+    paths:
+      - '**.java'
+      - 'pom.xml'
+      - 'src/**'
+      - '.github/workflows/codeql.yml'
   pull_request:
     branches: [main, dev]
+    paths:
+      - '**.java'
+      - 'pom.xml'
+      - 'src/**'
+      - '.github/workflows/codeql.yml'
   schedule:
     - cron: "0 3 * * 1"
   workflow_dispatch:

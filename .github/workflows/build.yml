@@ -1,0 +1,84 @@
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      upload-coverage:
+        description: 'Upload coverage reports'
+        required: false
+        type: boolean
+        default: false
+      skip-tests:
+        description: 'Skip running tests'
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      artifact-name:
+        description: 'Name of the uploaded artifact'
+        value: ${{ jobs.build.outputs.artifact-name }}
+      version:
+        description: 'Project version from pom.xml'
+        value: ${{ jobs.build.outputs.version }}
+    secrets:
+      CODECOV_TOKEN:
+        required: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-name: ${{ steps.output.outputs.artifact-name }}
+      version: ${{ steps.version.outputs.version }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          cache: maven
+
+      - name: Get project version
+        id: version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Project version: $VERSION"
+
+      - name: Build with tests
+        if: ${{ !inputs.skip-tests }}
+        run: mvn -B -ntp verify -T 1C
+
+      - name: Build without tests
+        if: ${{ inputs.skip-tests }}
+        run: mvn -B -ntp clean package -DskipTests -T 1C
+
+      - name: Upload built jar
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: SMPStats-${{ github.run_id }}
+          path: |
+            target/SMPStats.jar
+            target/site/jacoco/**
+            target/jacoco.exec
+          retention-days: 1
+          if-no-files-found: warn
+
+      - name: Upload coverage to Codecov
+        if: ${{ inputs.upload-coverage && !inputs.skip-tests }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: target/site/jacoco/jacoco.xml
+          fail_ci_if_error: false
+
+      - name: Set output
+        id: output
+        run: echo "artifact-name=SMPStats-${{ github.run_id }}" >> $GITHUB_OUTPUT
