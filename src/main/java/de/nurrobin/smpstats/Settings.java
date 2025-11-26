@@ -20,6 +20,7 @@ public class Settings {
     private final long momentsFlushSeconds;
     private final boolean heatmapEnabled;
     private final int heatmapFlushMinutes;
+    private final double heatmapDecayHalfLifeHours;
     private final java.util.List<de.nurrobin.smpstats.moments.MomentDefinition> momentDefinitions;
     private final java.util.List<de.nurrobin.smpstats.heatmap.HotspotDefinition> heatmapHotspots;
     private final boolean socialEnabled;
@@ -60,6 +61,7 @@ public class Settings {
                     long momentsFlushSeconds,
                     boolean heatmapEnabled,
                     int heatmapFlushMinutes,
+                    double heatmapDecayHalfLifeHours,
                     java.util.List<de.nurrobin.smpstats.moments.MomentDefinition> momentDefinitions,
                     java.util.List<de.nurrobin.smpstats.heatmap.HotspotDefinition> heatmapHotspots,
                     boolean socialEnabled,
@@ -99,6 +101,7 @@ public class Settings {
         this.momentsFlushSeconds = momentsFlushSeconds;
         this.heatmapEnabled = heatmapEnabled;
         this.heatmapFlushMinutes = heatmapFlushMinutes;
+        this.heatmapDecayHalfLifeHours = heatmapDecayHalfLifeHours;
         this.momentDefinitions = momentDefinitions;
         this.heatmapHotspots = heatmapHotspots;
         this.socialEnabled = socialEnabled;
@@ -189,6 +192,10 @@ public class Settings {
 
     public int getHeatmapFlushMinutes() {
         return heatmapFlushMinutes;
+    }
+
+    public double getHeatmapDecayHalfLifeHours() {
+        return heatmapDecayHalfLifeHours;
     }
 
     public java.util.List<de.nurrobin.smpstats.moments.MomentDefinition> getMomentDefinitions() {

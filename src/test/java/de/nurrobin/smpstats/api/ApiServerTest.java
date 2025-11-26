@@ -59,7 +59,7 @@ class ApiServerTest {
                 new de.nurrobin.smpstats.skills.SkillWeights.ExplorationWeights(0, 0),
                 new de.nurrobin.smpstats.skills.SkillWeights.BuilderWeights(0),
                 new de.nurrobin.smpstats.skills.SkillWeights.FarmerWeights(0, 0)
-        ), true, 0, 0, true, 1, List.of(), List.of(), true, 1, 1, true, true, true, 1, 1, true, 1, 0, 0, 0, 0, true, 1, 1, "", 1, 1);
+        ), true, 0L, 0L, true, 1, 1.0, List.of(), List.of(), true, 1, 1, true, true, true, 1, 1, true, 1, 0, 0, 0, 0, true, 1, 1, "", 1, 1);
         moments = mock(MomentService.class);
         heatmap = mock(HeatmapService.class);
         timeline = mock(TimelineService.class);
@@ -151,7 +151,7 @@ class ApiServerTest {
         handler.handle(missing);
         assertEquals(400, missing.status);
 
-        doThrow(new IllegalArgumentException("bad")).when(heatmap).loadTop(eq("BAD"), anyInt());
+        doThrow(new IllegalArgumentException("bad")).when(heatmap).generateHeatmap(eq("BAD"), anyString(), anyLong(), anyLong(), anyDouble());
         FakeExchange invalid = new FakeExchange("/heatmap/BAD", API_KEY);
         handler.handle(invalid);
         assertEquals(400, invalid.status);
@@ -160,7 +160,7 @@ class ApiServerTest {
         handler.handle(ok);
         assertEquals(200, ok.status);
 
-        when(heatmap.loadHotspots("BREAK")).thenReturn(Map.of("spawn", 5L));
+        when(heatmap.loadHotspots("BREAK")).thenReturn(Map.of("spawn", 5.0));
         var hotspots = server.heatmapHotspotHandler();
         FakeExchange hotspotsReq = new FakeExchange("/heatmap/hotspots/break", API_KEY);
         hotspots.handle(hotspotsReq);

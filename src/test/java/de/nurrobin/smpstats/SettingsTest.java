@@ -27,7 +27,7 @@ class SettingsTest {
 
         Settings settings = new Settings(true, true, true, true, true, true, true,
                 true, 1234, "KEY", 10, weights,
-                true, 11, 12, true, 13, List.of(moment), List.of(hotspot),
+                true, 11L, 12L, true, 13, 1.0, List.of(moment), List.of(hotspot),
                 true, 14, 15, true,
                 true, true, 16, 17,
                 true, 18, 0.1, 0.2, 0.3, 0.4,
