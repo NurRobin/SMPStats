@@ -268,23 +268,6 @@ class SStatsCommandTest {
     }
 
     @Test
-    void testGuiCommandOpensGuiForPlayer() {
-        // This test requires MockBukkit since MainMenuGui uses Bukkit.createInventory
-        // Use a separate MockBukkit-based integration test
-        // Here we just verify the console rejection case works
-        SMPStats plugin = mock(SMPStats.class);
-        StatsService statsService = mock(StatsService.class);
-        GuiManager guiManager = mock(GuiManager.class);
-        ServerHealthService healthService = mock(ServerHealthService.class);
-        SStatsCommand cmd = new SStatsCommand(plugin, statsService, guiManager, healthService);
-        
-        // We can't test the Player case here without MockBukkit because MainMenuGui 
-        // constructor calls Bukkit.createInventory()
-        // The testGuiCommandRejectsConsole test below covers the console rejection logic
-        assertTrue(true); // Placeholder - full GUI test is in MainMenuGuiTest
-    }
-
-    @Test
     void testGuiCommandRejectsConsole() {
         SMPStats plugin = mock(SMPStats.class);
         StatsService statsService = mock(StatsService.class);

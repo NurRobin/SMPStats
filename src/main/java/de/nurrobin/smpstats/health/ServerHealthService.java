@@ -69,6 +69,7 @@ public class ServerHealthService {
         int totalRedstone = 0;
         Map<String, HealthSnapshot.WorldBreakdown> worlds = new LinkedHashMap<>();
         List<ChunkSnapshot> chunkSnapshots = new ArrayList<>();
+        NamespacedKey ownerKey = new NamespacedKey(plugin, "owner");
 
         for (World world : Bukkit.getWorlds()) {
             Chunk[] chunks = world.getLoadedChunks();
@@ -79,6 +80,8 @@ public class ServerHealthService {
             for (Chunk chunk : chunks) {
                 int chunkHoppers = 0;
                 int chunkRedstone = 0;
+                Map<UUID, Integer> ownerCounts = new HashMap<>();
+                
                 for (BlockState state : chunk.getTileEntities()) {
                     Material type = state.getType();
                     if (type == Material.HOPPER) {
@@ -87,14 +90,31 @@ public class ServerHealthService {
                     if (isRedstoneBlock(type)) {
                         chunkRedstone++;
                     }
+                    // Collect owner info during initial pass to avoid re-scanning
+                    if (state instanceof TileState tileState) {
+                        String uuidStr = tileState.getPersistentDataContainer().get(ownerKey, PersistentDataType.STRING);
+                        if (uuidStr != null) {
+                            try {
+                                ownerCounts.merge(UUID.fromString(uuidStr), 1, Integer::sum);
+                            } catch (IllegalArgumentException ignored) {}
+                        }
+                    }
                 }
+                
+                // Collect entity owners during initial pass
+                for (Entity e : chunk.getEntities()) {
+                    if (e instanceof Tameable tameable && tameable.getOwner() != null) {
+                        ownerCounts.merge(tameable.getOwner().getUniqueId(), 1, Integer::sum);
+                    }
+                }
+                
                 worldHoppers += chunkHoppers;
                 worldRedstone += chunkRedstone;
                 
                 int chunkEntities = chunk.getEntities().length;
                 int load = chunkEntities + chunkHoppers + chunkRedstone; // Simple load metric
                 if (load > 0) {
-                    chunkSnapshots.add(new ChunkSnapshot(chunk, chunkEntities, chunkHoppers + chunkRedstone, load));
+                    chunkSnapshots.add(new ChunkSnapshot(chunk, chunkEntities, chunkHoppers + chunkRedstone, load, ownerCounts));
                 }
             }
             totalChunks += worldChunks;
@@ -104,40 +124,17 @@ public class ServerHealthService {
             worlds.put(world.getName(), new HealthSnapshot.WorldBreakdown(worldChunks, worldEntities, worldHoppers, worldRedstone));
         }
         
-        // Process Hot Chunks
+        // Process Hot Chunks - owner info already collected during initial pass
         chunkSnapshots.sort(Comparator.comparingInt(ChunkSnapshot::load).reversed());
         List<HealthSnapshot.HotChunk> hotChunks = new ArrayList<>();
-        NamespacedKey ownerKey = new NamespacedKey(plugin, "owner");
         
         for (int i = 0; i < Math.min(10, chunkSnapshots.size()); i++) {
             ChunkSnapshot cs = chunkSnapshots.get(i);
             Chunk c = cs.chunk;
             
-            // Determine Owner
-            Map<UUID, Integer> ownerCounts = new HashMap<>();
-            
-            // Check Entities
-            for (Entity e : c.getEntities()) {
-                if (e instanceof Tameable tameable && tameable.getOwner() != null) {
-                    ownerCounts.merge(tameable.getOwner().getUniqueId(), 1, Integer::sum);
-                }
-            }
-            
-            // Check Tile Entities
-            for (BlockState state : c.getTileEntities()) {
-                if (state instanceof TileState tileState) {
-                    String uuidStr = tileState.getPersistentDataContainer().get(ownerKey, PersistentDataType.STRING);
-                    if (uuidStr != null) {
-                        try {
-                            ownerCounts.merge(UUID.fromString(uuidStr), 1, Integer::sum);
-                        } catch (IllegalArgumentException ignored) {}
-                    }
-                }
-            }
-            
             String topOwner = "Unknown";
-            if (!ownerCounts.isEmpty()) {
-                UUID topUuid = Collections.max(ownerCounts.entrySet(), Map.Entry.comparingByValue()).getKey();
+            if (!cs.ownerCounts.isEmpty()) {
+                UUID topUuid = Collections.max(cs.ownerCounts.entrySet(), Map.Entry.comparingByValue()).getKey();
                 topOwner = Bukkit.getOfflinePlayer(topUuid).getName();
                 if (topOwner == null) topOwner = "Unknown (" + topUuid.toString().substring(0, 8) + ")";
             }
@@ -163,7 +160,7 @@ public class ServerHealthService {
         latest.set(new HealthSnapshot(System.currentTimeMillis(), tps, memUsed, memMax, totalChunks, totalEntities, totalHoppers, totalRedstone, costIndex, worlds, hotChunks));
     }
 
-    private record ChunkSnapshot(Chunk chunk, int entities, int tileEntities, int load) {}
+    private record ChunkSnapshot(Chunk chunk, int entities, int tileEntities, int load, Map<UUID, Integer> ownerCounts) {}
 
     private double computeCostIndex(int chunks, int entities, int hoppers, int redstone) {
         double value = chunks * settings.getHealthChunkWeight()

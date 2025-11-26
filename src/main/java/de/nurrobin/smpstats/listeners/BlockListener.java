@@ -24,14 +24,16 @@ public class BlockListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
+        if (!plugin.getSettings().isTrackBlocks()) {
+            return;
+        }
+        
+        // Set owner on tile entities for hot chunk attribution
         if (event.getBlock().getState() instanceof TileState tileState) {
             tileState.getPersistentDataContainer().set(ownerKey, PersistentDataType.STRING, event.getPlayer().getUniqueId().toString());
             tileState.update();
         }
-
-        if (!plugin.getSettings().isTrackBlocks()) {
-            return;
-        }
+        
         statsService.addBlocksPlaced(event.getPlayer().getUniqueId());
     }
 

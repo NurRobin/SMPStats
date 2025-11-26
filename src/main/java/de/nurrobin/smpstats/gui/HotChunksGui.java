@@ -27,8 +27,8 @@ public class HotChunksGui implements InventoryGui, InventoryHolder {
     private final ServerHealthService healthService;
     private final Inventory inventory;
     
-    // Track pending teleport confirmations: playerUUID -> chunk slot
-    private static final Map<UUID, Integer> pendingTeleports = new HashMap<>();
+    // Track pending teleport confirmations: playerUUID -> chunk slot (instance variable for thread safety)
+    private final Map<UUID, Integer> pendingTeleports = new HashMap<>();
 
     public HotChunksGui(SMPStats plugin, GuiManager guiManager, ServerHealthService healthService) {
         this.plugin = plugin;
@@ -120,14 +120,19 @@ public class HotChunksGui implements InventoryGui, InventoryHolder {
                 // Schedule reset after 5 seconds
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     if (pendingTeleports.remove(player.getUniqueId()) != null) {
-                        // Reset the item back to original
-                        inventory.setItem(slot, createGuiItem(Material.MAGMA_BLOCK,
-                                Component.text("Chunk: " + chunk.x() + ", " + chunk.z(), NamedTextColor.GOLD),
-                                Component.text("World: " + chunk.world(), NamedTextColor.GRAY),
-                                Component.text("Entities: " + chunk.entityCount(), NamedTextColor.RED),
-                                Component.text("Tile Entities: " + chunk.tileEntityCount(), NamedTextColor.YELLOW),
-                                Component.text("Top Owner: " + chunk.topOwner(), NamedTextColor.AQUA),
-                                Component.text("Click to Teleport", NamedTextColor.DARK_GRAY)));
+                        // Only reset if the player is still viewing this GUI
+                        if (player.getOpenInventory() != null
+                                && player.getOpenInventory().getTopInventory() != null
+                                && player.getOpenInventory().getTopInventory().getHolder() == this) {
+                            // Reset the item back to original
+                            inventory.setItem(slot, createGuiItem(Material.MAGMA_BLOCK,
+                                    Component.text("Chunk: " + chunk.x() + ", " + chunk.z(), NamedTextColor.GOLD),
+                                    Component.text("World: " + chunk.world(), NamedTextColor.GRAY),
+                                    Component.text("Entities: " + chunk.entityCount(), NamedTextColor.RED),
+                                    Component.text("Tile Entities: " + chunk.tileEntityCount(), NamedTextColor.YELLOW),
+                                    Component.text("Top Owner: " + chunk.topOwner(), NamedTextColor.AQUA),
+                                    Component.text("Click to Teleport", NamedTextColor.DARK_GRAY)));
+                        }
                     }
                 }, 100L); // 5 seconds
             }
