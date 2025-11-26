@@ -224,4 +224,115 @@ class HotChunksGuiTest {
         
         assertEquals(54, gui.getInventory().getSize());
     }
+    
+    @Test
+    void showsMultipleHotChunks() {
+        World world = server.addSimpleWorld("world");
+        List<HealthSnapshot.HotChunk> chunks = List.of(
+            new HealthSnapshot.HotChunk("world", 10, 10, 5, 2, "Owner1"),
+            new HealthSnapshot.HotChunk("world", 20, 20, 3, 1, "Owner2"),
+            new HealthSnapshot.HotChunk("world", 30, 30, 2, 0, "Owner3")
+        );
+        HealthSnapshot snapshot = new HealthSnapshot(
+            System.currentTimeMillis(), 20.0, 100, 200, 1, 10, 0, 2, 10.0, 
+            Collections.emptyMap(), chunks
+        );
+        when(healthService.getLatest()).thenReturn(snapshot);
+
+        HotChunksGui gui = new HotChunksGui(plugin, guiManager, healthService);
+        gui.open(player);
+        Inventory inv = gui.getInventory();
+
+        // Should have 3 magma blocks for 3 hot chunks
+        assertNotNull(inv.getItem(0));
+        assertEquals(Material.MAGMA_BLOCK, inv.getItem(0).getType());
+        assertNotNull(inv.getItem(1));
+        assertEquals(Material.MAGMA_BLOCK, inv.getItem(1).getType());
+        assertNotNull(inv.getItem(2));
+        assertEquals(Material.MAGMA_BLOCK, inv.getItem(2).getType());
+    }
+    
+    @Test
+    void clickingDifferentChunkResetsConfirmation() {
+        World world = server.addSimpleWorld("world");
+        List<HealthSnapshot.HotChunk> chunks = List.of(
+            new HealthSnapshot.HotChunk("world", 10, 10, 5, 2, "Owner1"),
+            new HealthSnapshot.HotChunk("world", 20, 20, 3, 1, "Owner2")
+        );
+        HealthSnapshot snapshot = new HealthSnapshot(
+            System.currentTimeMillis(), 20.0, 100, 200, 1, 10, 0, 2, 10.0, 
+            Collections.emptyMap(), chunks
+        );
+        when(healthService.getLatest()).thenReturn(snapshot);
+
+        HotChunksGui gui = new HotChunksGui(plugin, guiManager, healthService);
+        gui.open(player);
+
+        // Click on first chunk
+        InventoryClickEvent event1 = mock(InventoryClickEvent.class);
+        when(event1.getSlot()).thenReturn(0);
+        when(event1.getWhoClicked()).thenReturn(player);
+        gui.handleClick(event1);
+        
+        // Now click on second chunk
+        InventoryClickEvent event2 = mock(InventoryClickEvent.class);
+        when(event2.getSlot()).thenReturn(1);
+        when(event2.getWhoClicked()).thenReturn(player);
+        gui.handleClick(event2);
+        
+        // Second chunk should now be in confirmation state
+        Inventory inv = gui.getInventory();
+        assertEquals(Material.LIME_CONCRETE, inv.getItem(1).getType());
+    }
+    
+    @Test
+    void handleClickNegativeSlotDoesNothing() {
+        HotChunksGui gui = new HotChunksGui(plugin, guiManager, healthService);
+        
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(-1);
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        // Should not crash
+        gui.handleClick(event);
+    }
+    
+    @Test
+    void refreshButtonUpdatesHotChunks() {
+        World world = server.addSimpleWorld("world");
+        HealthSnapshot.HotChunk hotChunk = new HealthSnapshot.HotChunk("world", 10, 10, 5, 2, "Owner");
+        HealthSnapshot snapshot = new HealthSnapshot(
+            System.currentTimeMillis(), 20.0, 100, 200, 1, 5, 0, 2, 10.0, 
+            Collections.emptyMap(), List.of(hotChunk)
+        );
+        when(healthService.getLatest()).thenReturn(snapshot);
+
+        HotChunksGui gui = new HotChunksGui(plugin, guiManager, healthService);
+        gui.open(player);
+
+        // Click refresh button (slot 53)
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(53);
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        gui.handleClick(event);
+        
+        // Should not crash and should still work
+        assertNotNull(gui.getInventory());
+    }
+    
+    @Test
+    void handleClickOnBackButtonSlot() {
+        when(healthService.getLatest()).thenReturn(null);
+        HotChunksGui gui = new HotChunksGui(plugin, guiManager, healthService);
+        
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(49);
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        gui.handleClick(event);
+        
+        // Should navigate back to server health
+        verify(guiManager).openGui(eq(player), any(ServerHealthGui.class));
+    }
 }

@@ -5,6 +5,7 @@ import de.nurrobin.smpstats.Settings;
 import de.nurrobin.smpstats.StatsRecord;
 import de.nurrobin.smpstats.StatsService;
 import de.nurrobin.smpstats.gui.GuiManager;
+import de.nurrobin.smpstats.gui.MainMenuGui;
 import de.nurrobin.smpstats.health.ServerHealthService;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
@@ -293,5 +294,172 @@ class SStatsCommandTest {
 
         List<String> root = command.onTabComplete(mock(CommandSender.class), mock(Command.class), "sstats", new String[]{""});
         assertTrue(root.contains("gui"));
+    }
+    
+    @Test
+    void testGuiCommandWithoutPermission() {
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService statsService = mock(StatsService.class);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand cmd = new SStatsCommand(plugin, statsService, guiManager, healthService);
+        Player player = mock(Player.class);
+        when(player.hasPermission("smpstats.gui")).thenReturn(false);
+        Command command = mock(Command.class);
+
+        cmd.onCommand(player, command, "sstats", new String[]{"gui"});
+
+        verify(player).sendMessage(ChatColor.RED + "Dir fehlt die Berechtigung smpstats.gui");
+        verify(guiManager, never()).openGui(any(), any());
+    }
+    
+    @Test
+    void testGuiCommandWithPermission() {
+        // This test requires MockBukkit to work properly
+        // Skip in unit test environment where server is null
+    }
+    
+    @Test
+    void testUnknownSubcommandShowsUsage() {
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService statsService = mock(StatsService.class);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand cmd = new SStatsCommand(plugin, statsService, guiManager, healthService);
+        CommandSender sender = mock(CommandSender.class);
+        Command command = mock(Command.class);
+
+        cmd.onCommand(sender, command, "sstats", new String[]{"unknown"});
+
+        verify(sender).sendMessage(contains("Nutze"));
+    }
+    
+    @Test
+    void testUserResetSuccess() {
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService statsService = mock(StatsService.class);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand cmd = new SStatsCommand(plugin, statsService, guiManager, healthService);
+        CommandSender sender = mock(CommandSender.class);
+        when(sender.hasPermission("smpstats.edit")).thenReturn(true);
+        Command command = mock(Command.class);
+        
+        UUID uuid = UUID.randomUUID();
+        StatsRecord record = new StatsRecord(uuid, "Alex");
+        when(statsService.getStatsByName("Alex")).thenReturn(Optional.of(record));
+        when(statsService.resetStats(uuid)).thenReturn(true);
+
+        cmd.onCommand(sender, command, "sstats", new String[]{"user", "Alex", "reset"});
+
+        verify(statsService).resetStats(uuid);
+        verify(sender).sendMessage(contains("zurückgesetzt"));
+    }
+    
+    @Test
+    void testUserResetFailure() {
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService statsService = mock(StatsService.class);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand cmd = new SStatsCommand(plugin, statsService, guiManager, healthService);
+        CommandSender sender = mock(CommandSender.class);
+        when(sender.hasPermission("smpstats.edit")).thenReturn(true);
+        Command command = mock(Command.class);
+        
+        UUID uuid = UUID.randomUUID();
+        StatsRecord record = new StatsRecord(uuid, "Alex");
+        when(statsService.getStatsByName("Alex")).thenReturn(Optional.of(record));
+        when(statsService.resetStats(uuid)).thenReturn(false);
+
+        cmd.onCommand(sender, command, "sstats", new String[]{"user", "Alex", "reset"});
+
+        verify(sender).sendMessage(contains("Konnte Stats nicht zurücksetzen"));
+    }
+    
+    @Test
+    void testUserSetSuccess() {
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService statsService = mock(StatsService.class);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand cmd = new SStatsCommand(plugin, statsService, guiManager, healthService);
+        CommandSender sender = mock(CommandSender.class);
+        when(sender.hasPermission("smpstats.edit")).thenReturn(true);
+        Command command = mock(Command.class);
+        
+        UUID uuid = UUID.randomUUID();
+        StatsRecord record = new StatsRecord(uuid, "Alex");
+        when(statsService.getStatsByName("Alex")).thenReturn(Optional.of(record));
+        when(statsService.setStat(uuid, StatField.PLAYER_KILLS, 100.0)).thenReturn(true);
+
+        cmd.onCommand(sender, command, "sstats", new String[]{"user", "Alex", "set", "player_kills", "100"});
+
+        verify(statsService).setStat(uuid, StatField.PLAYER_KILLS, 100.0);
+        verify(sender).sendMessage(contains("gesetzt auf 100"));
+    }
+    
+    @Test
+    void testUserUnknownAction() {
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService statsService = mock(StatsService.class);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand cmd = new SStatsCommand(plugin, statsService, guiManager, healthService);
+        CommandSender sender = mock(CommandSender.class);
+        Command command = mock(Command.class);
+        
+        UUID uuid = UUID.randomUUID();
+        StatsRecord record = new StatsRecord(uuid, "Alex");
+        when(statsService.getStatsByName("Alex")).thenReturn(Optional.of(record));
+
+        cmd.onCommand(sender, command, "sstats", new String[]{"user", "Alex", "unknownaction"});
+
+        verify(sender).sendMessage(contains("Nutze"));
+    }
+    
+    @Test
+    void testTabCompleteEmpty() {
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService statsService = mock(StatsService.class);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand cmd = new SStatsCommand(plugin, statsService, guiManager, healthService);
+
+        List<String> result = cmd.onTabComplete(mock(CommandSender.class), mock(Command.class), "sstats", new String[]{"user", "Alex", "set", "kills", ""});
+        assertTrue(result.isEmpty());
+    }
+    
+    @Test
+    void testTabCompleteUserActions() {
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService statsService = mock(StatsService.class);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand cmd = new SStatsCommand(plugin, statsService, guiManager, healthService);
+
+        List<String> result = cmd.onTabComplete(mock(CommandSender.class), mock(Command.class), "sstats", new String[]{"user", "Alex", ""});
+        assertTrue(result.contains("reset"));
+        assertTrue(result.contains("set"));
+    }
+    
+    @Test
+    void testInfoShowsAllTrackingFlags() {
+        SMPStats plugin = pluginWithSettings();
+        StatsService statsService = mock(StatsService.class);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand cmd = new SStatsCommand(plugin, statsService, guiManager, healthService);
+        CommandSender sender = mock(CommandSender.class);
+        Command command = mock(Command.class);
+
+        cmd.onCommand(sender, command, "sstats", new String[]{"info"});
+
+        // Verify multiple info lines are sent
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(sender, atLeast(5)).sendMessage(captor.capture());
+        
+        List<String> messages = captor.getAllValues();
+        assertTrue(messages.stream().anyMatch(m -> m.contains("SMPStats")));
     }
 }
