@@ -89,6 +89,10 @@ public class HeatmapService {
     }
 
     public List<HeatmapBin> generateHeatmap(String type, String world, long since, long until, double decayHalfLifeHours) {
+        return generateHeatmap(type, world, since, until, decayHalfLifeHours, 16);
+    }
+
+    public List<HeatmapBin> generateHeatmap(String type, String world, long since, long until, double decayHalfLifeHours, int gridSize) {
         try {
             List<HeatmapEvent> events = storage.getHeatmapEvents(type, world, since, until);
             Map<Long, Double> chunkValues = new HashMap<>();
@@ -96,7 +100,10 @@ public class HeatmapService {
             double halfLifeMillis = decayHalfLifeHours * 3600 * 1000;
 
             for (HeatmapEvent event : events) {
-                long chunkKey = (((long) (int) (event.x()) >> 4) & 0xFFFFFFFFL) | ((((long) (int) (event.z()) >> 4) & 0xFFFFFFFFL) << 32);
+                int binX = (int) Math.floor(event.x() / gridSize);
+                int binZ = (int) Math.floor(event.z() / gridSize);
+                long chunkKey = ((long) binX & 0xFFFFFFFFL) | (((long) binZ & 0xFFFFFFFFL) << 32);
+
                 double value = event.value();
                 if (decayHalfLifeHours > 0) {
                     long age = now - event.timestamp();
@@ -111,7 +118,7 @@ public class HeatmapService {
             for (Map.Entry<Long, Double> entry : chunkValues.entrySet()) {
                 int cx = (int) (entry.getKey() & 0xFFFFFFFFL);
                 int cz = (int) (entry.getKey() >>> 32);
-                bins.add(new HeatmapBin(type, world, cx, cz, entry.getValue()));
+                bins.add(new HeatmapBin(type, world, cx, cz, gridSize, entry.getValue()));
             }
             // Sort by value desc
             bins.sort((a, b) -> Double.compare(b.getCount(), a.getCount()));

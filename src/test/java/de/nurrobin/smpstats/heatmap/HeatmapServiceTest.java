@@ -147,6 +147,54 @@ class HeatmapServiceTest {
         }
     }
 
+    @Test
+    void aggregatesWithCustomGridSize() throws Exception {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        StatsStorage storage = mock(StatsStorage.class);
+        Settings settings = settings(true, List.of());
+
+        HeatmapService service = new HeatmapService(plugin, storage, settings);
+
+        long now = System.currentTimeMillis();
+        // Two events:
+        // (10, 10) -> Grid 16: (0,0). Grid 8: (1,1).
+        // (20, 20) -> Grid 16: (1,1). Grid 8: (2,2).
+        // (12, 12) -> Grid 16: (0,0). Grid 8: (1,1).
+
+        when(storage.getHeatmapEvents(anyString(), anyString(), anyLong(), anyLong()))
+                .thenReturn(List.of(
+                        new HeatmapEvent(10, 64, 10, 1.0, now),
+                        new HeatmapEvent(20, 64, 20, 1.0, now),
+                        new HeatmapEvent(12, 64, 12, 1.0, now)
+                ));
+
+        // Grid Size 16
+        List<HeatmapBin> bins16 = service.generateHeatmap("BREAK", "world", 0, now, 0.0, 16);
+        // (10,10) and (12,12) are in (0,0). (20,20) is in (1,1).
+        // So 2 bins. (0,0) count 2. (1,1) count 1.
+        assertEquals(2, bins16.size());
+        HeatmapBin bin00 = bins16.stream().filter(b -> b.getX() == 0 && b.getZ() == 0).findFirst().orElseThrow();
+        assertEquals(2.0, bin00.getCount(), 0.01);
+        assertEquals(16, bin00.getGridSize());
+
+        // Grid Size 8
+        List<HeatmapBin> bins8 = service.generateHeatmap("BREAK", "world", 0, now, 0.0, 8);
+        // (10,10) -> (1,1). (12,12) -> (1,1). (20,20) -> (2,2).
+        // So 2 bins. (1,1) count 2. (2,2) count 1.
+        assertEquals(2, bins8.size());
+        HeatmapBin bin11 = bins8.stream().filter(b -> b.getX() == 1 && b.getZ() == 1).findFirst().orElseThrow();
+        assertEquals(2.0, bin11.getCount(), 0.01);
+        assertEquals(8, bin11.getGridSize());
+
+        // Grid Size 32
+        List<HeatmapBin> bins32 = service.generateHeatmap("BREAK", "world", 0, now, 0.0, 32);
+        // (10,10) -> (0,0). (12,12) -> (0,0). (20,20) -> (0,0).
+        // So 1 bin. (0,0) count 3.
+        assertEquals(1, bins32.size());
+        assertEquals(3.0, bins32.get(0).getCount(), 0.01);
+    }
+
     private Settings settings(boolean enabled, List<HotspotDefinition> hotspots) {
         SkillWeights weights = new SkillWeights(
                 new SkillWeights.MiningWeights(0),

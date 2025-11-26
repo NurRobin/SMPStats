@@ -87,3 +87,25 @@ SMPStats is a Paper 1.21.x Minecraft plugin for tracking player statistics, mome
 - **Logging**: Use `plugin.getLogger()` instead of `System.out`.
 - **Async**: Use `Bukkit.getScheduler().runTaskAsynchronously` for heavy DB operations or API calls.
 - **Nullability**: Assume Bukkit API returns non-null unless specified. Use `Optional` for internal service returns where appropriate.
+
+# Always document and here is how to do it:
+Always document your changes in the docs/changelog/ folder with the determined version -> vX.Y.Z -> v1.3.5.md for example.
+if you make changes in one branch, look at the pom.xml file to determine the next version. There is a script for that.
+If you make changes that are not backward compatible, bump the major version.
+If you make changes that are backward compatible, bump the minor version.
+If you make changes that are just fixes, bump the patch version.
+If you are unsure, ask the project maintainer.
+
+# Aim for a Test Coverage of at least 80%
+The project aims for a test coverage of at least 80%. Make sure to write tests for your code changes and verify the coverage before merging.
+This is important so we can quickly identify issues and ensure the stability of the project. So also use Tests to debug your code and find mistakes.
+
+# Commit Title Guidelines
+- Use feat/fix/docs/chore as prefixes.
+- Keep it under 50 characters.
+- Use dashes to separate words. -> "feat/add-new-heatmap-module" and not "feat: add new heatmap module"
+
+# Pull Request Guidelines
+- Provide a clear title and description of your changes.
+- Reference any related issues or tickets.
+- Ensure all tests pass and coverage is adequate.
