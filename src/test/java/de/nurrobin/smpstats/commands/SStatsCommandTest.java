@@ -118,15 +118,16 @@ class SStatsCommandTest {
         command.onCommand(editor, mock(Command.class), "sstats", new String[]{"user", "Alex", "set", "unknown", "1"});
         verify(editor).sendMessage(ChatColor.RED + "Unbekannter Stat: unknown");
 
+        when(stats.setStat(record.getUuid(), StatField.DEATHS, Double.NaN)).thenReturn(false);
         command.onCommand(editor, mock(Command.class), "sstats", new String[]{"user", "Alex", "set", "deaths", "NaN"});
         verify(stats).setStat(record.getUuid(), StatField.DEATHS, Double.NaN);
         verify(editor).sendMessage(ChatColor.RED + "Konnte Stat nicht setzen.");
 
-        reset(editor, stats);
-        when(editor.hasPermission("smpstats.edit")).thenReturn(true);
+        CommandSender editor2 = mock(CommandSender.class);
+        when(editor2.hasPermission("smpstats.edit")).thenReturn(true);
         when(stats.getStatsByName("Alex")).thenReturn(Optional.of(record));
         when(stats.setStat(record.getUuid(), StatField.DEATHS, 2.0)).thenReturn(true);
-        command.onCommand(editor, mock(Command.class), "sstats", new String[]{"user", "Alex", "set", "deaths", "2"});
+        command.onCommand(editor2, mock(Command.class), "sstats", new String[]{"user", "Alex", "set", "deaths", "2"});
         verify(stats).setStat(record.getUuid(), StatField.DEATHS, 2.0);
     }
 

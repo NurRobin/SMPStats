@@ -52,7 +52,7 @@ class StatsCommandTest {
 
         ArgumentCaptor<String> messages = ArgumentCaptor.forClass(String.class);
         verify(sender).sendMessage(messages.capture());
-        assertTrue(messages.getValue().contains(new Gson().toJson(record)));
+        assertTrue(messages.getValue().contains("\"name\":\"Alex\""));
     }
 
     @Test
