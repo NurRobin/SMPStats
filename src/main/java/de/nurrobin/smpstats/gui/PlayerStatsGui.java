@@ -112,24 +112,11 @@ public class PlayerStatsGui implements InventoryGui, InventoryHolder {
     @Override
     public void handleClick(InventoryClickEvent event) {
         if (event.getSlot() == 40) {
-            // Back to Main Menu
-            // We need to get ServerHealthService from somewhere. 
-            // Ideally GuiManager or SMPStats should provide access to services.
-            // For now, I'll just close or maybe I should pass the previous GUI?
-            // Or better, let's just get services from the plugin instance if possible, or pass them down.
-            // I'll pass them down for now, but I need to change the constructor of MainMenuGui to accept them.
-            // Wait, I don't have easy access to services here to recreate MainMenuGui.
-            // I should probably store the services in GuiManager or SMPStats.
-            
-            // Let's assume I can get them from SMPStats if I add getters there.
-            // But SMPStats doesn't have getters for services yet (based on my reading).
-            // I'll add getters to SMPStats later.
-            
-            // For now, I will just close the inventory.
-            // Or I can try to get the services from the plugin if I modify SMPStats.
-            
-            // Let's modify SMPStats to expose services.
-            event.getWhoClicked().closeInventory();
+            Player player = (Player) event.getWhoClicked();
+            plugin.getServerHealthService().ifPresentOrElse(
+                healthService -> guiManager.openGui(player, new MainMenuGui(plugin, guiManager, statsService, healthService)),
+                () -> player.closeInventory()
+            );
         }
     }
 }
