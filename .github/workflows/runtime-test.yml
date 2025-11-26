@@ -44,10 +44,6 @@ jobs:
       fail-fast: false  # Continue testing other versions even if one fails
       matrix:
         include:
-          # Latest 1.20.x (Java 21 supported)
-          - mcVersion: '1.20.6'
-            javaVersion: '21'
-
           # Paper 1.21.x (Java 21 required)
           - mcVersion: '1.21.1'
             javaVersion: '21'
