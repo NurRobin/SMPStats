@@ -80,12 +80,13 @@ class StatsStorageTest {
     @Test
     void heatmapAndHotspotCountersAccumulate() throws Exception {
         StatsStorage storage = newStorage();
-        storage.incrementHeatmapBin("break", "world", 1, 2, 3.0, 0L);
-        storage.incrementHeatmapBin("break", "world", 1, 2, 2.0, 0L);
+        storage.insertHeatmapEntries(List.of(
+                new HeatmapEntry("break", "world", 16, 64, 32, 1.0, System.currentTimeMillis()),
+                new HeatmapEntry("break", "world", 16, 64, 32, 1.0, System.currentTimeMillis())
+        ));
 
-        List<de.nurrobin.smpstats.heatmap.HeatmapBin> bins = storage.loadHeatmapBins("break", 10);
-        assertEquals(1, bins.size());
-        assertEquals(5.0, bins.get(0).getCount());
+        List<HeatmapEvent> events = storage.getHeatmapEvents("break", "world", 0, System.currentTimeMillis());
+        assertEquals(2, events.size());
 
         storage.incrementHotspot("break", "spawn", "world", 4.0, 0L);
         storage.incrementHotspot("break", "spawn", "world", 1.0, 0L);
@@ -202,17 +203,17 @@ class StatsStorageTest {
         long halfLife = 1000L; // 1 second
 
         // Initial insert
-        storage.incrementHeatmapBin("break", "world", 1, 2, 100.0, halfLife);
+        storage.incrementHotspot("break", "spawn", "world", 100.0, halfLife);
 
         // Wait 1 second
         Thread.sleep(1100);
 
         // Update with 0 delta to trigger decay
-        storage.incrementHeatmapBin("break", "world", 1, 2, 0.0, halfLife);
+        storage.incrementHotspot("break", "spawn", "world", 0.0, halfLife);
 
-        List<de.nurrobin.smpstats.heatmap.HeatmapBin> bins = storage.loadHeatmapBins("break", 10);
-        assertEquals(1, bins.size());
-        double count = bins.get(0).getCount();
+        Map<String, Double> hotspots = storage.loadHotspotCounts("break");
+        assertEquals(1, hotspots.size());
+        double count = hotspots.get("spawn");
         assertTrue(count < 60.0 && count > 40.0, "Count should be around 50, but was " + count);
     }
 

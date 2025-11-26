@@ -182,7 +182,7 @@ class MomentServiceTest {
         );
         return new Settings(true, true, true, true, true, true, true,
                 false, 0, "KEY", 1, weights,
-                true, 0, 1, true, 1, defs, List.of(),
+                true, 0L, 1L, true, 1, 1.0, defs, List.of(),
                 false, 1, 1, false,
                 true, true, 1, 1,
                 false, 1, 0, 0, 0, 0,

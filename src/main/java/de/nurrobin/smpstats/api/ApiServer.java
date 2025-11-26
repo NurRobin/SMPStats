@@ -191,8 +191,14 @@ public class ApiServer {
                 return;
             }
             String typeRaw = path.startsWith("/") ? path.substring(1) : path;
+
+            long since = queryParam(uri, "since").map(Long::parseLong).orElse(System.currentTimeMillis() - 7L * 24 * 3600 * 1000);
+            long until = queryParam(uri, "until").map(Long::parseLong).orElse(System.currentTimeMillis());
+            double decay = queryParam(uri, "decay").map(Double::parseDouble).orElse(settings.getHeatmapDecayHalfLifeHours());
+            String world = queryParam(uri, "world").orElse("world");
+
             try {
-                sendJson(exchange, 200, heatmapService.loadTop(typeRaw.toUpperCase(), 200));
+                sendJson(exchange, 200, heatmapService.generateHeatmap(typeRaw.toUpperCase(), world, since, until, decay));
             } catch (IllegalArgumentException e) {
                 sendText(exchange, 400, "Invalid heatmap type");
             }

@@ -34,7 +34,7 @@ class HeatmapServiceTest {
         service.track("BREAK", loc);
         service.shutdown(); // flush pending counts
 
-        verify(storage).incrementHeatmapBin("BREAK", "world", 2, 3, 1.0, 0L);
+        verify(storage).insertHeatmapEntries(anyList());
         verify(storage).incrementHotspot("BREAK", "spawn", "world", 1.0, 0L);
     }
 
@@ -47,7 +47,7 @@ class HeatmapServiceTest {
 
         HeatmapService service = new HeatmapService(plugin, storage, settings);
         service.track("BREAK", null);
-        verify(storage, never()).incrementHeatmapBin(any(), any(), anyInt(), anyInt(), anyDouble(), anyLong());
+        verify(storage, never()).insertHeatmapEntries(anyList());
     }
 
     @Test
@@ -74,7 +74,7 @@ class HeatmapServiceTest {
         );
         return new Settings(true, true, true, true, true, true, true,
                 false, 0, "KEY", 1, weights,
-                true, 0, 1, enabled, 1, 0.0, List.of(), hotspots,
+                true, 0L, 1L, enabled, 1, 0.0, List.of(), hotspots,
                 false, 1, 1, false,
                 true, true, 1, 1,
                 false, 1, 0, 0, 0, 0,
