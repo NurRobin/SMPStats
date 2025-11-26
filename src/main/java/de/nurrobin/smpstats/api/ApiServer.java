@@ -151,22 +151,9 @@ public class ApiServer {
                 }
             } catch (IllegalArgumentException ex) {
                 sendText(exchange, 400, "Invalid UUID");
+            }
         }
     }
-
-    // Exposed for testing to exercise handler logic without binding sockets
-    HttpHandler statsHandler() { return new StatsHandler(); }
-    HttpHandler onlineHandler() { return new OnlineHandler(); }
-    HttpHandler recentMomentsHandler() { return new RecentMomentsHandler(); }
-    HttpHandler queryMomentsHandler() { return new QueryMomentsHandler(); }
-    HttpHandler momentsStreamHandler() { return new MomentsStreamHandler(); }
-    HttpHandler heatmapHandler() { return new HeatmapHandler(); }
-    HttpHandler heatmapHotspotHandler() { return new HeatmapHotspotHandler(); }
-    HttpHandler timelineHandler() { return new TimelineHandler(); }
-    HttpHandler socialTopHandler() { return new SocialTopHandler(); }
-    HttpHandler deathReplayHandler() { return new DeathReplayHandler(); }
-    HttpHandler healthHandler() { return new HealthHandler(); }
-}
 
     private class OnlineHandler implements HttpHandler {
         @Override
