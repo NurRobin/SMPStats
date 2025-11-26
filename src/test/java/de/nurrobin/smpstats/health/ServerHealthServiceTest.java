@@ -116,7 +116,7 @@ class ServerHealthServiceTest {
         );
         return new Settings(true, true, true, true, true, true, true,
                 false, 0, "KEY", 1, weights,
-                true, 0, 1, true, 1, List.of(), List.of(),
+                true, 0L, 1L, true, 1, 1.0, List.of(), List.of(),
                 false, 1, 1, false,
                 true, true, 1, 1,
                 enabled, 1, 0.2, 0.02, 0.2, 0.1,

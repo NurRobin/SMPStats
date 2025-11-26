@@ -35,7 +35,7 @@ import java.sql.SQLException;
 import java.util.Objects;
 
 public class SMPStats extends JavaPlugin {
-    private static final int CONFIG_VERSION = 3;
+    private static final int CONFIG_VERSION = 4;
     private StatsStorage storage;
     private StatsService statsService;
     private Settings settings;
@@ -236,6 +236,7 @@ public class SMPStats extends JavaPlugin {
 
         boolean heatmapEnabled = config.getBoolean("heatmap.enabled", true);
         int heatmapFlushMinutes = Math.max(1, config.getInt("heatmap.flush_minutes", 5));
+        double heatmapDecayHalfLifeHours = Math.max(0, config.getDouble("heatmap.decay_half_life_hours", 0.0));
 
         MomentConfigParser parser = new MomentConfigParser();
         java.util.List<de.nurrobin.smpstats.moments.MomentDefinition> momentDefinitions = parser.parse(config.getConfigurationSection("moments"));
@@ -268,7 +269,7 @@ public class SMPStats extends JavaPlugin {
 
         return new Settings(movement, blocks, kills, biomes, crafting, damage, consumption,
                 apiEnabled, apiPort, apiKey, autosaveMinutes, skillWeights,
-                momentsEnabled, diamondWindowSeconds, momentsFlushSeconds, heatmapEnabled, heatmapFlushMinutes, momentDefinitions, hotspots,
+                momentsEnabled, diamondWindowSeconds, momentsFlushSeconds, heatmapEnabled, heatmapFlushMinutes, heatmapDecayHalfLifeHours, momentDefinitions, hotspots,
                 socialEnabled, socialSampleSeconds, socialNearbyRadius, timelineEnabled,
                 deathReplayEnabled, deathReplayInventoryItems, deathReplayNearbyRadius, deathReplayLimit,
                 healthEnabled, healthSampleMinutes, healthChunkWeight, healthEntityWeight, healthHopperWeight, healthRedstoneWeight,

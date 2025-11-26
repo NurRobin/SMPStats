@@ -1,4 +1,4 @@
-config_version: 3
+config_version: 4
 
 api:
   enabled: true            # Enable HTTP API
@@ -74,6 +74,7 @@ moments:
 heatmap:
   enabled: true
   flush_minutes: 5     # Write interval for heatmap bins (chunk-based)
+  decay_half_life_hours: 0.0 # Half-life in hours for heatmap decay. 0.0 = disabled.
   hotspots:
     spawn:
       name: "Spawn"

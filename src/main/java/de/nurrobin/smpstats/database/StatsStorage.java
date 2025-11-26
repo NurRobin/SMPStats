@@ -29,7 +29,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public class StatsStorage implements Closeable {
-    private static final int SCHEMA_VERSION = 5;
+    private static final int SCHEMA_VERSION = 7;
     private static final Type STRING_SET = new TypeToken<Set<String>>() {
     }.getType();
 
@@ -84,6 +84,14 @@ public class StatsStorage implements Closeable {
             if (currentVersion == 4) {
                 addSocialSharedKillColumns();
                 currentVersion = 5;
+            }
+            if (currentVersion == 5) {
+                migrateToDoubleHeatmapCounts();
+                currentVersion = 6;
+            }
+            if (currentVersion == 6) {
+                addHeatmapEventsTable();
+                currentVersion = 7;
             }
             setUserVersion(currentVersion);
             connection.commit();
@@ -457,68 +465,47 @@ public class StatsStorage implements Closeable {
         );
     }
 
-    public synchronized void incrementHeatmapBin(String type, String world, int chunkX, int chunkZ, long delta) throws SQLException {
-        String sql = """
-                INSERT INTO heatmap_bins (type, world, chunk_x, chunk_z, count)
+    public synchronized void incrementHotspot(String type, String hotspot, String world, double delta, long halfLife) throws SQLException {
+        long now = System.currentTimeMillis();
+        String sql;
+        if (halfLife > 0) {
+            sql = """
+                INSERT INTO heatmap_hotspots (type, hotspot, world, count, last_updated)
                 VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(type, world, chunk_x, chunk_z) DO UPDATE SET
-                    count = count + excluded.count;
-                """;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, type);
-            statement.setString(2, world);
-            statement.setInt(3, chunkX);
-            statement.setInt(4, chunkZ);
-            statement.setLong(5, delta);
-            statement.executeUpdate();
-        }
-    }
-
-    public synchronized List<HeatmapBin> loadHeatmapBins(String type, int limit) throws SQLException {
-        String sql = "SELECT * FROM heatmap_bins WHERE type = ? ORDER BY count DESC LIMIT ?";
-        List<HeatmapBin> bins = new ArrayList<>();
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, type);
-            statement.setInt(2, limit);
-            try (ResultSet rs = statement.executeQuery()) {
-                while (rs.next()) {
-                    bins.add(new HeatmapBin(
-                            rs.getString("type"),
-                            rs.getString("world"),
-                            rs.getInt("chunk_x"),
-                            rs.getInt("chunk_z"),
-                            rs.getLong("count")
-                    ));
-                }
-            }
-        }
-        return bins;
-    }
-
-    public synchronized void incrementHotspot(String type, String hotspot, String world, long delta) throws SQLException {
-        String sql = """
-                INSERT INTO heatmap_hotspots (type, hotspot, world, count)
-                VALUES (?, ?, ?, ?)
                 ON CONFLICT(type, hotspot, world) DO UPDATE SET
-                    count = count + excluded.count;
+                    count = (count * pow(0.5, (excluded.last_updated - last_updated) / ?)) + excluded.count,
+                    last_updated = excluded.last_updated;
                 """;
+        } else {
+            sql = """
+                INSERT INTO heatmap_hotspots (type, hotspot, world, count, last_updated)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(type, hotspot, world) DO UPDATE SET
+                    count = count + excluded.count,
+                    last_updated = excluded.last_updated;
+                """;
+        }
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, type);
             statement.setString(2, hotspot);
             statement.setString(3, world);
-            statement.setLong(4, delta);
+            statement.setDouble(4, delta);
+            statement.setLong(5, now);
+            if (halfLife > 0) {
+                statement.setDouble(6, (double) halfLife);
+            }
             statement.executeUpdate();
         }
     }
 
-    public synchronized Map<String, Long> loadHotspotCounts(String type) throws SQLException {
+    public synchronized Map<String, Double> loadHotspotCounts(String type) throws SQLException {
         String sql = "SELECT hotspot, count FROM heatmap_hotspots WHERE type = ? ORDER BY count DESC";
-        Map<String, Long> map = new LinkedHashMap<>();
+        Map<String, Double> map = new LinkedHashMap<>();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, type);
             try (ResultSet rs = statement.executeQuery()) {
                 while (rs.next()) {
-                    map.put(rs.getString("hotspot"), rs.getLong("count"));
+                    map.put(rs.getString("hotspot"), rs.getDouble("count"));
                 }
             }
         }
@@ -890,5 +877,126 @@ public class StatsStorage implements Closeable {
         double latestVal = ((Number) latest.getOrDefault(key, 0)).doubleValue();
         double baseVal = baseline != null ? ((Number) baseline.getOrDefault(key, 0)).doubleValue() : 0.0;
         return latestVal - baseVal;
+    }
+
+    private void migrateToDoubleHeatmapCounts() throws SQLException {
+        long now = System.currentTimeMillis();
+        try (Statement st = connection.createStatement()) {
+            // Heatmap Bins
+            st.execute("ALTER TABLE heatmap_bins RENAME TO heatmap_bins_old;");
+            st.execute("""
+                    CREATE TABLE heatmap_bins (
+                        type TEXT NOT NULL,
+                        world TEXT NOT NULL,
+                        chunk_x INTEGER NOT NULL,
+                        chunk_z INTEGER NOT NULL,
+                        count REAL NOT NULL DEFAULT 0,
+                        last_updated INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY (type, world, chunk_x, chunk_z)
+                    );
+                    """);
+            st.execute("INSERT INTO heatmap_bins (type, world, chunk_x, chunk_z, count, last_updated) " +
+                    "SELECT type, world, chunk_x, chunk_z, CAST(count AS REAL), " + now + " FROM heatmap_bins_old;");
+            st.execute("DROP TABLE heatmap_bins_old;");
+
+            // Heatmap Hotspots
+            st.execute("ALTER TABLE heatmap_hotspots RENAME TO heatmap_hotspots_old;");
+            st.execute("""
+                    CREATE TABLE heatmap_hotspots (
+                        type TEXT NOT NULL,
+                        hotspot TEXT NOT NULL,
+                        world TEXT NOT NULL,
+                        count REAL NOT NULL DEFAULT 0,
+                        last_updated INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY (type, hotspot, world)
+                    );
+                    """);
+            st.execute("INSERT INTO heatmap_hotspots (type, hotspot, world, count, last_updated) " +
+                    "SELECT type, hotspot, world, CAST(count AS REAL), " + now + " FROM heatmap_hotspots_old;");
+            st.execute("DROP TABLE heatmap_hotspots_old;");
+        }
+    }
+
+    private void addHeatmapEventsTable() throws SQLException {
+        try (Statement st = connection.createStatement()) {
+            st.execute("""
+                    CREATE TABLE IF NOT EXISTS heatmap_events (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        type TEXT NOT NULL,
+                        world TEXT NOT NULL,
+                        x REAL NOT NULL,
+                        y REAL NOT NULL,
+                        z REAL NOT NULL,
+                        value REAL NOT NULL,
+                        timestamp INTEGER NOT NULL
+                    );
+                    """);
+            st.execute("CREATE INDEX IF NOT EXISTS idx_heatmap_events_type_time ON heatmap_events(type, timestamp);");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_heatmap_events_world ON heatmap_events(world);");
+            
+            // Drop old table as it is incompatible with the new event-based system
+            st.execute("DROP TABLE IF EXISTS heatmap_bins;");
+        }
+    }
+
+    public void insertHeatmapEvent(String type, String world, double x, double y, double z, double value, long timestamp) throws SQLException {
+        String sql = "INSERT INTO heatmap_events (type, world, x, y, z, value, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, type);
+            ps.setString(2, world);
+            ps.setDouble(3, x);
+            ps.setDouble(4, y);
+            ps.setDouble(5, z);
+            ps.setDouble(6, value);
+            ps.setLong(7, timestamp);
+            ps.executeUpdate();
+        }
+    }
+
+    public void insertHeatmapEntries(List<HeatmapEntry> entries) throws SQLException {
+        String sql = "INSERT INTO heatmap_events (type, world, x, y, z, value, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        connection.setAutoCommit(false);
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            for (HeatmapEntry entry : entries) {
+                ps.setString(1, entry.type());
+                ps.setString(2, entry.world());
+                ps.setDouble(3, entry.x());
+                ps.setDouble(4, entry.y());
+                ps.setDouble(5, entry.z());
+                ps.setDouble(6, entry.value());
+                ps.setLong(7, entry.timestamp());
+                ps.addBatch();
+            }
+            ps.executeBatch();
+            connection.commit();
+        } catch (SQLException e) {
+            connection.rollback();
+            throw e;
+        } finally {
+            connection.setAutoCommit(true);
+        }
+    }
+
+    public List<HeatmapEvent> getHeatmapEvents(String type, String world, long since, long until) throws SQLException {
+        List<HeatmapEvent> events = new ArrayList<>();
+        String sql = "SELECT x, y, z, value, timestamp FROM heatmap_events WHERE type = ? AND world = ? AND timestamp >= ? AND timestamp <= ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, type);
+            ps.setString(2, world);
+            ps.setLong(3, since);
+            ps.setLong(4, until);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    events.add(new HeatmapEvent(
+                            rs.getDouble("x"),
+                            rs.getDouble("y"),
+                            rs.getDouble("z"),
+                            rs.getDouble("value"),
+                            rs.getLong("timestamp")
+                    ));
+                }
+            }
+        }
+        return events;
     }
 }
