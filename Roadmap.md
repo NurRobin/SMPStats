@@ -43,13 +43,13 @@
 
 | Feature | Priority | Size | Status | Description |
 |---------|----------|------|--------|-------------|
-| Exponential Decay Model | High | M | Todo | `weight = exp(-Δt / τ)` for time-weighted aggregation |
-| Configurable Grid Sizes | High | M | Todo | Chunk (16×16), 8×8, 32×32, 64×64 cell options |
-| Multi-Layer Heatmaps | High | L | Todo | Movement, mining, deaths, damage as separate queryable layers |
-| Dynamic Query Engine | High | L | Todo | On-demand aggregation at query time |
-| Movement Heatmaps | Medium | M | Todo | Player presence and travel patterns |
-| Damage Heatmaps | Medium | M | Todo | PvP hotspots, mob damage zones |
-| Resource-Specific Heatmaps | Medium | M | Todo | Diamond, iron, gold mining patterns |
+| Exponential Decay Model | High | M | ✅ Done | `weight = exp(-Δt / τ)` for time-weighted aggregation |
+| Configurable Grid Sizes | High | M | ✅ Done | Chunk (16×16), 8×8, 32×32, 64×64 cell options |
+| Multi-Layer Heatmaps | High | L | ✅ Done | Movement, mining, deaths, damage as separate queryable layers |
+| Dynamic Query Engine | High | L | ✅ Done | On-demand aggregation at query time |
+| Movement Heatmaps | Medium | M | ✅ Done | Player presence and travel patterns |
+| Damage Heatmaps | Medium | M | ✅ Done | PvP hotspots, mob damage zones |
+| Resource-Specific Heatmaps | Medium | M | ✅ Done | Diamond, iron, gold mining patterns |
 | Biome-Filtered Views | Low | S | Todo | Filter any heatmap by biome type |
 | Time-Range Filters | Medium | M | Todo | `from=3d`, `from=1w`, arbitrary ranges |
 | In-Game GUI (Chest Menu) | High | L | Todo | Rich chest-menu style interface with visual insights |

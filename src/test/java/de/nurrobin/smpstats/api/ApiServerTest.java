@@ -151,7 +151,7 @@ class ApiServerTest {
         handler.handle(missing);
         assertEquals(400, missing.status);
 
-        doThrow(new IllegalArgumentException("bad")).when(heatmap).generateHeatmap(eq("BAD"), anyString(), anyLong(), anyLong(), anyDouble());
+        doThrow(new IllegalArgumentException("bad")).when(heatmap).generateHeatmap(eq("BAD"), anyString(), anyLong(), anyLong(), anyDouble(), anyInt());
         FakeExchange invalid = new FakeExchange("/heatmap/BAD", API_KEY);
         handler.handle(invalid);
         assertEquals(400, invalid.status);
@@ -166,6 +166,23 @@ class ApiServerTest {
         hotspots.handle(hotspotsReq);
         assertEquals(200, hotspotsReq.status);
         assertTrue(hotspotsReq.body().contains("spawn"));
+    }
+
+    @Test
+    void heatmapEndpointsGridSize() throws Exception {
+        var handler = server.heatmapHandler();
+        
+        // Test grid size
+        FakeExchange grid = new FakeExchange("/heatmap/break?grid=32", API_KEY);
+        handler.handle(grid);
+        assertEquals(200, grid.status);
+        verify(heatmap).generateHeatmap(eq("BREAK"), anyString(), anyLong(), anyLong(), anyDouble(), eq(32));
+
+        // Test invalid grid size (should default to 16)
+        FakeExchange invalidGrid = new FakeExchange("/heatmap/break?grid=-5", API_KEY);
+        handler.handle(invalidGrid);
+        assertEquals(200, invalidGrid.status);
+        verify(heatmap).generateHeatmap(eq("BREAK"), anyString(), anyLong(), anyLong(), anyDouble(), eq(16));
     }
 
     @Test
