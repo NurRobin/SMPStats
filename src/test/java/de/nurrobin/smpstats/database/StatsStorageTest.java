@@ -26,8 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
 
 class StatsStorageTest {
 
@@ -215,6 +215,56 @@ class StatsStorageTest {
         assertEquals(1, hotspots.size());
         double count = hotspots.get("spawn");
         assertTrue(count < 60.0 && count > 40.0, "Count should be around 50, but was " + count);
+    }
+
+    @Test
+    void loadsExistingUserInLoadOrCreate() throws Exception {
+        StatsStorage storage = newStorage();
+        UUID uuid = UUID.randomUUID();
+        
+        // First call creates
+        StatsRecord created = storage.loadOrCreate(uuid, "User1");
+        assertEquals("User1", created.getName());
+        
+        // Second call loads existing and updates name
+        StatsRecord loaded = storage.loadOrCreate(uuid, "User1_Updated");
+        assertEquals("User1_Updated", loaded.getName());
+        assertEquals(created.getFirstJoin(), loaded.getFirstJoin());
+    }
+
+    @Test
+    void notifiesAdminsOnSchemaMismatch() throws Exception {
+        Path dataDir = Files.createDirectory(tempDir.resolve("plugin-data-" + UUID.randomUUID()));
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getDataFolder()).thenReturn(dataDir.toFile());
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        
+        // Mock players for notification
+        org.bukkit.entity.Player admin = mock(org.bukkit.entity.Player.class);
+        when(admin.isOp()).thenReturn(true);
+        org.bukkit.entity.Player user = mock(org.bukkit.entity.Player.class);
+        when(user.isOp()).thenReturn(false);
+        
+        Server server = mock(Server.class);
+        doReturn(List.of(admin, user)).when(server).getOnlinePlayers();
+        when(plugin.getServer()).thenReturn(server);
+
+        // Manually create DB with high version
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection("jdbc:sqlite:" + dataDir.resolve("stats.db").toAbsolutePath())) {
+            try (java.sql.Statement st = conn.createStatement()) {
+                st.execute("PRAGMA user_version=999;");
+            }
+        }
+
+        StatsStorage storage = new StatsStorage(plugin);
+        try {
+            storage.init();
+        } catch (java.sql.SQLException ignored) {
+            // Expected
+        }
+        
+        verify(admin).sendMessage(org.mockito.ArgumentMatchers.contains("Database schema (999) is newer"));
+        verify(user, never()).sendMessage(anyString());
     }
 
     private StatsStorage newStorage() throws IOException, java.sql.SQLException {
