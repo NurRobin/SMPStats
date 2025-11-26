@@ -1,0 +1,37 @@
+name: Dependency Report
+
+on:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-report:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          cache: maven
+
+      - name: Generate dependency update report
+        run: |
+          mvn -B -ntp versions:display-dependency-updates -DoutputFile=dependency-updates.txt
+          mvn -B -ntp versions:display-plugin-updates -DoutputFile=plugin-updates.txt
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-updates
+          path: |
+            dependency-updates.txt
+            plugin-updates.txt

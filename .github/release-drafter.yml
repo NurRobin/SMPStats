@@ -1,0 +1,25 @@
+name-template: "SMPStats v$NEXT_PATCH_VERSION"
+tag-template: "v$NEXT_PATCH_VERSION"
+change-template: "- $TITLE (#$NUMBER) @$AUTHOR"
+no-changes-template: "- No changes"
+categories:
+  - title: 🚀 Features
+    labels: [feature, enhancement, feat]
+  - title: 🛠️ Fixes
+    labels: [bug, fix, bugfix]
+  - title: ♻️ Refactors
+    labels: [refactor]
+  - title: 📖 Documentation
+    labels: [docs, documentation]
+  - title: 🧹 Maintenance
+    labels: [chore, maintenance, dependencies]
+version-resolver:
+  major:
+    labels: [major]
+  minor:
+    labels: [minor, feature, enhancement, feat]
+  patch:
+    labels: [patch, bug, fix, bugfix, chore, maintenance]
+template: |
+  ## Changes
+  $CHANGES

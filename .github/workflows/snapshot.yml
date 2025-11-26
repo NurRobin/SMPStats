@@ -1,0 +1,53 @@
+name: Snapshot Build
+
+on:
+  push:
+    branches:
+      - dev
+      - "feat/**"
+      - "fix/**"
+      - "refactor/**"
+      - "chore/**"
+      - "docs/**"
+      - "test/**"
+  workflow_dispatch:
+
+concurrency:
+  group: snapshot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          cache: maven
+
+      - name: Build shaded jar
+        run: mvn -B -ntp package
+
+      - name: Rename snapshot jar
+        run: |
+          BRANCH="${GITHUB_REF_NAME//\//-}"
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          echo "SHORT_SHA=${SHORT_SHA}" >> "$GITHUB_ENV"
+          echo "BRANCH_SAFE=${BRANCH}" >> "$GITHUB_ENV"
+          mv target/SMPStats.jar "target/SMPStats-${BRANCH}-${SHORT_SHA}.jar"
+
+      - name: Upload snapshot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SMPStats-${{ env.BRANCH_SAFE }}-${{ env.SHORT_SHA }}
+          path: target/SMPStats-${{ env.BRANCH_SAFE }}-${{ env.SHORT_SHA }}.jar
