@@ -21,6 +21,7 @@ import de.nurrobin.smpstats.timeline.TimelineService;
 import de.nurrobin.smpstats.timeline.DeathReplayService;
 import de.nurrobin.smpstats.health.ServerHealthService;
 import de.nurrobin.smpstats.story.StoryService;
+import de.nurrobin.smpstats.gui.GuiManager;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -47,6 +48,7 @@ public class SMPStats extends JavaPlugin {
     private DeathReplayService deathReplayService;
     private ServerHealthService serverHealthService;
     private StoryService storyService;
+    private GuiManager guiManager;
     private int autosaveTaskId = -1;
 
     @Override
@@ -72,6 +74,7 @@ public class SMPStats extends JavaPlugin {
         this.deathReplayService = new DeathReplayService(this, storage, settings);
         this.serverHealthService = new ServerHealthService(this, settings);
         this.storyService = new StoryService(this, statsService, storage, momentService, settings);
+        this.guiManager = new GuiManager(this);
 
         registerListeners();
         registerCommands();
@@ -149,6 +152,14 @@ public class SMPStats extends JavaPlugin {
 
     public java.util.Optional<StoryService> getStoryService() {
         return java.util.Optional.ofNullable(storyService);
+    }
+
+    public StatsService getStatsService() {
+        return statsService;
+    }
+
+    public GuiManager getGuiManager() {
+        return guiManager;
     }
 
     public void reloadPluginConfig(CommandSender sender) {
@@ -328,30 +339,17 @@ public class SMPStats extends JavaPlugin {
         PluginManager pm = getServer().getPluginManager();
         pm.registerEvents(new JoinQuitListener(statsService), this);
         pm.registerEvents(new BlockListener(this, statsService), this);
-        pm.registerEvents(new CombatListener(this, statsService, socialStatsService), this);
         pm.registerEvents(new MovementListener(this, statsService), this);
+        pm.registerEvents(new CombatListener(this, statsService, socialStatsService), this);
         pm.registerEvents(new CraftingListener(this, statsService), this);
         pm.registerEvents(new MomentListener(momentService, deathReplayService), this);
         pm.registerEvents(new HeatmapListener(heatmapService), this);
+        pm.registerEvents(guiManager, this);
     }
 
     private void registerCommands() {
-        StatsCommand statsCommand = new StatsCommand(this, statsService);
-        if (getCommand("stats") != null) {
-            getCommand("stats").setExecutor(statsCommand);
-            getCommand("stats").setTabCompleter(statsCommand);
-        } else {
-            getLogger().warning("Command /stats is missing from plugin.yml");
-        }
-        SStatsCommand adminCommand = new SStatsCommand(this, statsService);
-        if (getCommand("smpstats") != null) {
-            getCommand("smpstats").setExecutor(adminCommand);
-            getCommand("smpstats").setTabCompleter(adminCommand);
-        }
-        if (getCommand("sstats") != null) {
-            getCommand("sstats").setExecutor(adminCommand);
-            getCommand("sstats").setTabCompleter(adminCommand);
-        }
+        Objects.requireNonNull(getCommand("stats")).setExecutor(new StatsCommand(this, statsService));
+        Objects.requireNonNull(getCommand("sstats")).setExecutor(new SStatsCommand(this, statsService, guiManager, serverHealthService));
     }
 
     private void startAutosave() {

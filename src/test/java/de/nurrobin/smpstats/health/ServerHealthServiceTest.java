@@ -19,6 +19,7 @@ import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -28,6 +29,7 @@ class ServerHealthServiceTest {
     void samplesWorldsAndSchedulesTask() {
         Plugin plugin = mock(Plugin.class);
         when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        when(plugin.getName()).thenReturn("SMPStats");
 
         World overworld = mock(World.class);
         when(overworld.getName()).thenReturn("world");
@@ -59,6 +61,7 @@ class ServerHealthServiceTest {
         try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
             bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
             bukkit.when(Bukkit::getWorlds).thenReturn(List.of(overworld, nether));
+            bukkit.when(Bukkit::getTPS).thenReturn(new double[]{19.5});
 
             Settings settings = settings(true);
             ServerHealthService service = new ServerHealthService(plugin, settings);
@@ -70,6 +73,15 @@ class ServerHealthServiceTest {
             assertEquals(4, snapshot.entities());
             assertEquals(1, snapshot.hoppers());
             assertEquals(2, snapshot.redstone());
+            assertEquals(19.5, snapshot.tps());
+            // Memory is hard to assert exactly, but should be > 0
+            assertTrue(snapshot.memoryUsed() > 0);
+            assertTrue(snapshot.memoryMax() > 0);
+            
+            // Verify Hot Chunks
+            assertNotNull(snapshot.hotChunks());
+            assertEquals(2, snapshot.hotChunks().size()); // 2 chunks with load
+            assertEquals("world", snapshot.hotChunks().get(0).world()); // Overworld has more entities/hoppers
 
             service.shutdown();
             verify(scheduler).cancelTask(5);
@@ -103,6 +115,10 @@ class ServerHealthServiceTest {
             states[i] = state;
         }
         when(chunk.getTileEntities()).thenReturn(states);
+        when(chunk.getEntities()).thenReturn(new org.bukkit.entity.Entity[0]);
+        World world = mock(World.class);
+        when(world.getName()).thenReturn("world");
+        when(chunk.getWorld()).thenReturn(world);
         return chunk;
     }
 

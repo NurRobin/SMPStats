@@ -4,6 +4,8 @@ import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.Settings;
 import de.nurrobin.smpstats.StatsRecord;
 import de.nurrobin.smpstats.StatsService;
+import de.nurrobin.smpstats.gui.GuiManager;
+import de.nurrobin.smpstats.health.ServerHealthService;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -54,7 +56,9 @@ class SStatsCommandTest {
     void showsInfoOutput() {
         SMPStats plugin = pluginWithSettings();
         StatsService stats = mock(StatsService.class);
-        SStatsCommand command = new SStatsCommand(plugin, stats);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand command = new SStatsCommand(plugin, stats, guiManager, healthService);
 
         CommandSender sender = mock(CommandSender.class);
         command.onCommand(sender, mock(Command.class), "sstats", new String[]{"info"});
@@ -66,7 +70,9 @@ class SStatsCommandTest {
     void handlesReloadPermissions() {
         SMPStats plugin = pluginWithSettings();
         StatsService stats = mock(StatsService.class);
-        SStatsCommand command = new SStatsCommand(plugin, stats);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand command = new SStatsCommand(plugin, stats, guiManager, healthService);
 
         CommandSender sender = mock(CommandSender.class);
         when(sender.hasPermission("smpstats.reload")).thenReturn(false);
@@ -82,7 +88,9 @@ class SStatsCommandTest {
     void handlesUserSubcommands() {
         SMPStats plugin = pluginWithSettings();
         StatsService stats = mock(StatsService.class);
-        SStatsCommand command = new SStatsCommand(plugin, stats);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand command = new SStatsCommand(plugin, stats, guiManager, healthService);
 
         CommandSender missingArgs = mock(CommandSender.class);
         command.onCommand(missingArgs, mock(Command.class), "sstats", new String[]{"user"});
@@ -136,7 +144,9 @@ class SStatsCommandTest {
         SMPStats plugin = pluginWithSettings();
         StatsService stats = mock(StatsService.class);
         when(stats.getOnlineNames()).thenReturn(List.of("Alex", "Bea"));
-        SStatsCommand command = new SStatsCommand(plugin, stats);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand command = new SStatsCommand(plugin, stats, guiManager, healthService);
 
         List<String> root = command.onTabComplete(mock(CommandSender.class), mock(Command.class), "sstats", new String[]{""});
         assertTrue(root.contains("info"));
@@ -155,7 +165,9 @@ class SStatsCommandTest {
     void handlesConsoleAndInvalidNumbers() {
         SMPStats plugin = pluginWithSettings();
         StatsService stats = mock(StatsService.class);
-        SStatsCommand command = new SStatsCommand(plugin, stats);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand command = new SStatsCommand(plugin, stats, guiManager, healthService);
 
         CommandSender console = mock(CommandSender.class);
         command.onCommand(console, mock(Command.class), "sstats", new String[]{});
@@ -167,5 +179,91 @@ class SStatsCommandTest {
         when(editor.hasPermission("smpstats.edit")).thenReturn(true);
         command.onCommand(editor, mock(Command.class), "sstats", new String[]{"user", "Alex", "set", "deaths", "abc"});
         verify(editor).sendMessage(ChatColor.RED + "Wert muss eine Zahl sein.");
+    }
+
+    @Test
+    void testNoArgsConsole() {
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService statsService = mock(StatsService.class);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand cmd = new SStatsCommand(plugin, statsService, guiManager, healthService);
+        CommandSender sender = mock(CommandSender.class);
+        Command command = mock(Command.class);
+
+        cmd.onCommand(sender, command, "sstats", new String[0]);
+
+        verify(sender).sendMessage(contains("Konsole: /sstats user <player>"));
+    }
+
+    @Test
+    void testNoArgsPlayer() {
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService statsService = mock(StatsService.class);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand cmd = new SStatsCommand(plugin, statsService, guiManager, healthService);
+        Player player = mock(Player.class);
+        UUID uuid = UUID.randomUUID();
+        when(player.getUniqueId()).thenReturn(uuid);
+        when(player.getName()).thenReturn("TestPlayer");
+        Command command = mock(Command.class);
+
+        StatsRecord record = new StatsRecord(uuid, "TestPlayer");
+        when(statsService.getStats(uuid)).thenReturn(Optional.of(record));
+
+        try (MockedStatic<StatsFormatter> formatter = mockStatic(StatsFormatter.class)) {
+            cmd.onCommand(player, command, "sstats", new String[0]);
+            formatter.verify(() -> StatsFormatter.render(player, plugin, statsService, uuid, "TestPlayer"));
+        }
+    }
+
+    @Test
+    void testInfo() {
+        SMPStats plugin = pluginWithSettings();
+        StatsService statsService = mock(StatsService.class);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand cmd = new SStatsCommand(plugin, statsService, guiManager, healthService);
+        CommandSender sender = mock(CommandSender.class);
+        Command command = mock(Command.class);
+
+        cmd.onCommand(sender, command, "sstats", new String[]{"info"});
+
+        verify(sender, atLeastOnce()).sendMessage(contains("SMPStats"));
+        verify(sender, atLeastOnce()).sendMessage(contains("Version"));
+    }
+
+    @Test
+    void testReloadNoPerm() {
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService statsService = mock(StatsService.class);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand cmd = new SStatsCommand(plugin, statsService, guiManager, healthService);
+        CommandSender sender = mock(CommandSender.class);
+        when(sender.hasPermission("smpstats.reload")).thenReturn(false);
+        Command command = mock(Command.class);
+
+        cmd.onCommand(sender, command, "sstats", new String[]{"reload"});
+
+        verify(sender).sendMessage(contains("fehlt die Berechtigung"));
+        verify(plugin, never()).reloadPluginConfig(any());
+    }
+
+    @Test
+    void testReloadSuccess() {
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService statsService = mock(StatsService.class);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand cmd = new SStatsCommand(plugin, statsService, guiManager, healthService);
+        CommandSender sender = mock(CommandSender.class);
+        when(sender.hasPermission("smpstats.reload")).thenReturn(true);
+        Command command = mock(Command.class);
+
+        cmd.onCommand(sender, command, "sstats", new String[]{"reload"});
+
+        verify(plugin).reloadPluginConfig(sender);
     }
 }
