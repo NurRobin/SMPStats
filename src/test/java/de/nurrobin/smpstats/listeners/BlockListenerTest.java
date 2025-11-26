@@ -1,20 +1,16 @@
 package de.nurrobin.smpstats.listeners;
 
 import de.nurrobin.smpstats.SMPStats;
-import de.nurrobin.smpstats.Settings;
 import de.nurrobin.smpstats.StatsService;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
-import org.bukkit.block.Chest;
 import org.bukkit.block.TileState;
-import org.bukkit.entity.Player;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -109,38 +105,43 @@ class BlockListenerTest {
 
     @Test
     void ignoresBlocksWhenTrackingDisabled() {
-        // Create a mock plugin with disabled tracking
-        // Use the real plugin for NamespacedKey creation, but mock settings
-        SMPStats mockPlugin = mock(SMPStats.class);
-        Settings settings = mock(Settings.class);
-        when(settings.isTrackBlocks()).thenReturn(false);
-        when(mockPlugin.getSettings()).thenReturn(settings);
-        // Return the real plugin name for NamespacedKey
-        when(mockPlugin.getName()).thenReturn(plugin.getName());
+        // Disable block tracking via config and save before reload
+        plugin.getConfig().set("tracking.blocks", false);
+        plugin.saveConfig();
+        plugin.reloadPluginConfig(server.getConsoleSender());
+        
+        // Verify tracking is now disabled
+        assertFalse(plugin.getSettings().isTrackBlocks(), "Block tracking should be disabled");
         
         StatsService stats = mock(StatsService.class);
-        
-        // Use the real plugin to create listener (for NamespacedKey), then test with mock settings
         BlockListener listener = new BlockListener(plugin, stats);
+        server.getPluginManager().registerEvents(listener, plugin);
         
-        // Now create a new listener with mock plugin that has tracking disabled
-        // Since NamespacedKey requires a valid plugin, we test the behavior differently:
-        // We create mock events and verify the handler respects the isTrackBlocks setting
+        WorldMock world = server.addSimpleWorld("disabledworld");
+        Block block = world.getBlockAt(0, 64, 0);
+        block.setType(Material.STONE);
         
-        // Create a listener with real plugin but we'll verify the mock scenario indirectly
-        // by testing that when isTrackBlocks returns false, stats methods are not called
-        SMPStats disabledPlugin = mock(SMPStats.class);
-        Settings disabledSettings = mock(Settings.class);
-        when(disabledSettings.isTrackBlocks()).thenReturn(false);
-        when(disabledPlugin.getSettings()).thenReturn(disabledSettings);
-        when(disabledPlugin.getName()).thenReturn("SMPStats");
+        // Place block - should be ignored
+        BlockPlaceEvent placeEvent = new BlockPlaceEvent(
+                block,
+                block.getState(),
+                block,
+                new ItemStack(Material.STONE),
+                player,
+                true,
+                EquipmentSlot.HAND
+        );
+        server.getPluginManager().callEvent(placeEvent);
+        verify(stats, never()).addBlocksPlaced(org.mockito.ArgumentMatchers.any());
         
-        StatsService mockStats = mock(StatsService.class);
-        // Cannot create BlockListener with mock plugin due to NamespacedKey
-        // So we test by verifying the real plugin's behavior
+        // Break block - should be ignored
+        BlockBreakEvent breakEvent = new BlockBreakEvent(block, player);
+        server.getPluginManager().callEvent(breakEvent);
+        verify(stats, never()).addBlocksBroken(org.mockito.ArgumentMatchers.any());
         
-        // Since we can't easily mock the NamespacedKey, verify that when tracking 
-        // is enabled on the real plugin, the stats are counted (proving the logic path works)
-        assertTrue(plugin.getSettings().isTrackBlocks(), "Plugin tracking should be enabled by default");
+        // Re-enable tracking for other tests
+        plugin.getConfig().set("tracking.blocks", true);
+        plugin.saveConfig();
+        plugin.reloadPluginConfig(server.getConsoleSender());
     }
 }
