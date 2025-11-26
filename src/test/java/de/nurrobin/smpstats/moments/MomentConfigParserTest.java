@@ -1,9 +1,12 @@
 package de.nurrobin.smpstats.moments;
 
+import org.bukkit.Material;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -11,50 +14,63 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MomentConfigParserTest {
 
+    private final MomentConfigParser parser = new MomentConfigParser();
+
     @Test
-    void loadsDefaultsWhenSectionMissing() {
-        MomentConfigParser parser = new MomentConfigParser();
-        List<MomentDefinition> defs = parser.parse(null);
-        assertFalse(defs.isEmpty());
+    void returnsDefaultsWhenNoSectionProvided() {
+        List<MomentDefinition> defaults = parser.parse(null);
+        assertFalse(defaults.isEmpty());
+        assertEquals(8, defaults.size());
+        assertTrue(defaults.stream().anyMatch(def -> def.getId().equals("diamond_run")));
+        assertTrue(defaults.stream().anyMatch(def -> def.getTrigger() == MomentDefinition.TriggerType.FIRST_DEATH));
     }
 
     @Test
-    void parsesCustomDefinitions() {
-        String yaml = """
-                moments:
-                  definitions:
-                    my_diamonds:
-                      type: block_break
-                      title: "Shiny"
-                      detail: "Found {count}"
-                      merge_seconds: 45
-                      materials: [DIAMOND_ORE]
-                    fall_fail:
-                      type: death_fall
-                      min_fall_distance: 60
-                      title: "Ouch"
-                      detail: "Fell {fall}"
-                    clutch:
-                      type: damage_low_hp
-                      max_health_after_damage: 1.0
-                      causes: [FALL]
-                """;
-        YamlConfiguration config = YamlConfiguration.loadConfiguration(new java.io.StringReader(yaml));
-        MomentConfigParser parser = new MomentConfigParser();
-        List<MomentDefinition> defs = parser.parse(config.getConfigurationSection("moments"));
+    void parsesCustomDefinitionsAndIgnoresInvalidValues() {
+        YamlConfiguration config = new YamlConfiguration();
+        ConfigurationSection definitions = config.createSection("definitions");
+        ConfigurationSection boss = definitions.createSection("boss");
+        boss.set("type", "boss_kill");
+        boss.set("title", "Boss fight");
+        boss.set("detail", "details here");
+        boss.set("merge_seconds", 12);
+        boss.set("first_only", true);
+        boss.set("materials", List.of("DIAMOND_BLOCK", "not_a_material"));
+        boss.set("min_fall_distance", 3.5);
+        boss.set("max_health_after_damage", 5.5);
+        boss.set("causes", List.of("lava", " "));
+        boss.set("require_self", true);
+        boss.set("entity_types", List.of("wither", "ENDER_DRAGON"));
 
-        assertEquals(3, defs.size());
-        MomentDefinition diamond = defs.stream().filter(d -> d.getId().equals("my_diamonds")).findFirst().orElseThrow();
-        assertEquals(MomentDefinition.TriggerType.BLOCK_BREAK, diamond.getTrigger());
-        assertEquals(45, diamond.getMergeSeconds());
-        assertTrue(diamond.getMaterials().stream().anyMatch(m -> m.name().equals("DIAMOND_ORE")));
+        ConfigurationSection fallback = definitions.createSection("fallback");
+        fallback.set("type", "unknown_type");
 
-        MomentDefinition fall = defs.stream().filter(d -> d.getId().equals("fall_fail")).findFirst().orElseThrow();
-        assertEquals(60, fall.getMinFallDistance(), 0.0001);
+        List<MomentDefinition> parsed = parser.parse(config);
+        assertEquals(2, parsed.size());
 
-        MomentDefinition clutch = defs.stream().filter(d -> d.getId().equals("clutch")).findFirst().orElseThrow();
-        assertEquals(MomentDefinition.TriggerType.DAMAGE_LOW_HP, clutch.getTrigger());
-        assertEquals(1.0, clutch.getMaxHealthAfterDamage(), 0.0001);
-        assertTrue(clutch.getCauses().contains("FALL"));
+        MomentDefinition bossDef = parsed.stream()
+                .filter(def -> def.getId().equals("boss"))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(MomentDefinition.TriggerType.BOSS_KILL, bossDef.getTrigger());
+        assertEquals("Boss fight", bossDef.getTitle());
+        assertEquals("details here", bossDef.getDetail());
+        assertEquals(12, bossDef.getMergeSeconds());
+        assertTrue(bossDef.isFirstOnly());
+        assertEquals(1, bossDef.getMaterials().size());
+        assertTrue(bossDef.getMaterials().contains(Material.DIAMOND_BLOCK));
+        assertEquals(3.5, bossDef.getMinFallDistance());
+        assertEquals(5.5, bossDef.getMaxHealthAfterDamage());
+        assertEquals(Set.of("LAVA"), bossDef.getCauses());
+        assertTrue(bossDef.isRequireSelf());
+        assertEquals(Set.of("WITHER", "ENDER_DRAGON"), bossDef.getEntityTypes());
+
+        MomentDefinition fallbackDef = parsed.stream()
+                .filter(def -> def.getId().equals("fallback"))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(MomentDefinition.TriggerType.BLOCK_BREAK, fallbackDef.getTrigger());
+        assertEquals("fallback", fallbackDef.getTitle());
+        assertEquals("", fallbackDef.getDetail());
     }
 }

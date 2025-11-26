@@ -1,0 +1,120 @@
+name: Runtime Test on Minecraft Servers
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+    branches:
+      - main
+      - dev
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+      
+      - name: Build plugin
+        run: mvn -B -ntp clean package -DskipTests
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-${{ github.run_id }}
+          path: target/SMPStats.jar
+          retention-days: 1
+  
+  runtime-test:
+    name: Test on Paper ${{ matrix.mcVersion }}
+    needs: [build]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false  # Continue testing other versions even if one fails
+      matrix:
+        include:
+          # Paper 1.21.x (Java 21 required)
+          - mcVersion: '1.21.1'
+            javaVersion: '21'
+          - mcVersion: '1.21.10'
+            javaVersion: '21'
+
+    
+    steps:        
+      - name: Runtime Test on Paper ${{ matrix.mcVersion }}
+        uses: FN-FAL113/minecraft-plugin-runtime-test@v1.1.7
+        id: runtime-test
+        with:
+          server-version: ${{ matrix.mcVersion }}
+          java-version: ${{ matrix.javaVersion }}
+          artifact-name: plugin-${{ github.run_id }}
+      
+      - name: Check if plugin loaded successfully
+        if: always()
+        run: |
+          echo "Checking server logs for plugin load status..."
+          
+          # Find the log file (could be in different locations)
+          LOGFILE=""
+          if [ -f "latest.log" ]; then
+            LOGFILE="latest.log"
+          elif [ -f "logs/latest.log" ]; then
+            LOGFILE="logs/latest.log"
+          else
+            echo "Searching for log files..."
+            find . -name "latest.log" -o -name "*.log" | head -5
+            LOGFILE=$(find . -name "latest.log" 2>/dev/null | head -1)
+          fi
+          
+          if [ -z "$LOGFILE" ]; then
+            echo "❌ Error: No log file found!"
+            exit 1
+          fi
+          
+          echo "Using log file: $LOGFILE"
+          echo "----------------------------------------"
+          
+          # Check for plugin loading errors
+          if grep -q "Could not load plugin 'SMPStats.jar'" "$LOGFILE"; then
+            echo "❌ Plugin failed to load!"
+            echo "Error details:"
+            grep -A 5 "Could not load plugin 'SMPStats.jar'" "$LOGFILE"
+            exit 1
+          fi
+          
+          # Check for API version mismatch
+          if grep -q "Unsupported API version" "$LOGFILE"; then
+            echo "❌ Unsupported API version!"
+            grep "Unsupported API version" "$LOGFILE"
+            exit 1
+          fi
+          
+          # Check for successful plugin enable
+          if grep -q "\[SMPStats\] Enabling SMPStats v" "$LOGFILE"; then
+            echo "✅ Plugin loaded successfully!"
+            grep "\[SMPStats\] Enabling SMPStats v" "$LOGFILE"
+            exit 0
+          else
+            echo "⚠️  Could not confirm plugin load (no 'Enabling SMPStats' message found)"
+            echo "Checking for plugin initialization..."
+            if grep -q "\[SMPStats\]" "$LOGFILE"; then
+              echo "✅ SMPStats messages found in logs:"
+              grep "\[SMPStats\]" "$LOGFILE" | head -5
+              exit 0
+            else
+              echo "❌ Plugin was not loaded"
+              exit 1
+            fi
+          fi
+

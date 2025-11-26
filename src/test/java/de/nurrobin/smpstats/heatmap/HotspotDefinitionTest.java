@@ -21,4 +21,24 @@ class HotspotDefinitionTest {
         assertTrue(hs.contains(inside));
         assertFalse(hs.contains(outside));
     }
+
+    @Test
+    void handlesNullsAndWorldMismatch() {
+        World world = Mockito.mock(World.class);
+        Mockito.when(world.getName()).thenReturn("world");
+        Location location = new Location(world, 10, 64, 10);
+
+        HotspotDefinition hs = new HotspotDefinition("spawn", "world", -50, -50, 50, 50);
+
+        assertFalse(hs.contains(null));
+        assertFalse(hs.contains(new Location(null, 0, 0, 0)));
+
+        World otherWorld = Mockito.mock(World.class);
+        Mockito.when(otherWorld.getName()).thenReturn("nether");
+        assertFalse(hs.contains(new Location(otherWorld, 10, 64, 10)));
+
+        // bounds are normalized even when min/max are swapped in constructor
+        HotspotDefinition reversed = new HotspotDefinition("spawn", "world", 50, 50, -50, -50);
+        assertTrue(reversed.contains(location));
+    }
 }
