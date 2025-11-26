@@ -3,8 +3,18 @@ name: CI
 on:
   pull_request:
     branches: [main, dev]
+    paths:
+      - '**.java'
+      - 'pom.xml'
+      - 'src/**'
+      - '.github/workflows/ci.yml'
   push:
-    branches: [dev]
+    branches: [dev, main]
+    paths:
+      - '**.java'
+      - 'pom.xml'
+      - 'src/**'
+      - '.github/workflows/ci.yml'
   workflow_dispatch:
 
 concurrency:
@@ -13,37 +23,8 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: "21"
-          distribution: "temurin"
-          cache: maven
-
-      - name: Build and test
-        run: mvn -B -ntp verify
-
-      - name: Upload built jar (for quick pull_request checks)
-        if: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/dev' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: SMPStats-${{ github.run_id }}
-          path: target/SMPStats.jar
-          if-no-files-found: ignore
-
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: target/site/jacoco/jacoco.xml
-          fail_ci_if_error: false
+    uses: ./.github/workflows/build.yml
+    with:
+      upload-coverage: true
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

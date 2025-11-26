@@ -8,8 +8,12 @@ on:
       - "fix/**"
       - "refactor/**"
       - "chore/**"
-      - "docs/**"
-      - "test/**"
+    paths:
+      - '**.java'
+      - 'pom.xml'
+      - 'src/**'
+      - 'plugin.yml'
+      - '.github/workflows/snapshot.yml'
   workflow_dispatch:
 
 concurrency:
@@ -35,8 +39,8 @@ jobs:
           distribution: "temurin"
           cache: maven
 
-      - name: Build shaded jar
-        run: mvn -B -ntp package
+      - name: Build shaded jar (parallel)
+        run: mvn -B -ntp package -T 1C
 
       - name: Rename snapshot jar
         run: |
