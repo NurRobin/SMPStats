@@ -49,9 +49,7 @@ public class GuiManager implements Listener {
             event.setCancelled(true);
         }
     }
-    
-    // Clean up when inventory is closed? 
-    // Actually, we should probably listen for InventoryCloseEvent to remove from map.
+
     @EventHandler
     public void onInventoryClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
         if (!(event.getPlayer() instanceof Player)) return;

@@ -18,6 +18,8 @@ import java.util.Arrays;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import static de.nurrobin.smpstats.gui.GuiUtils.createGuiItem;
+
 public class PlayerStatsGui implements InventoryGui, InventoryHolder {
     private final SMPStats plugin;
     private final GuiManager guiManager;
@@ -88,15 +90,6 @@ public class PlayerStatsGui implements InventoryGui, InventoryHolder {
                 inventory.setItem(i, filler);
             }
         }
-    }
-
-    private ItemStack createGuiItem(Material material, Component name, Component... lore) {
-        ItemStack item = new ItemStack(material, 1);
-        ItemMeta meta = item.getItemMeta();
-        meta.displayName(name);
-        meta.lore(Arrays.asList(lore));
-        item.setItemMeta(meta);
-        return item;
     }
 
     @Override

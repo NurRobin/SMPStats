@@ -17,6 +17,8 @@ import org.bukkit.inventory.meta.ItemMeta;
 import java.util.Arrays;
 import java.util.List;
 
+import static de.nurrobin.smpstats.gui.GuiUtils.createGuiItem;
+
 public class MainMenuGui implements InventoryGui, InventoryHolder {
     private final SMPStats plugin;
     private final GuiManager guiManager;
@@ -55,15 +57,6 @@ public class MainMenuGui implements InventoryGui, InventoryHolder {
                 inventory.setItem(i, filler);
             }
         }
-    }
-
-    private ItemStack createGuiItem(Material material, Component name, Component... lore) {
-        ItemStack item = new ItemStack(material, 1);
-        ItemMeta meta = item.getItemMeta();
-        meta.displayName(name);
-        meta.lore(Arrays.asList(lore));
-        item.setItemMeta(meta);
-        return item;
     }
 
     @Override
