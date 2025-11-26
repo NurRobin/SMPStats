@@ -12,12 +12,8 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 
-import java.util.Arrays;
-import java.util.List;
-
-import static de.nurrobin.smpstats.gui.GuiUtils.createGuiItem;
+import static de.nurrobin.smpstats.gui.GuiUtils.*;
 
 public class MainMenuGui implements InventoryGui, InventoryHolder {
     private final SMPStats plugin;
@@ -25,6 +21,7 @@ public class MainMenuGui implements InventoryGui, InventoryHolder {
     private final Inventory inventory;
     private final StatsService statsService;
     private final ServerHealthService healthService;
+    private Player viewer;
 
     public MainMenuGui(SMPStats plugin, GuiManager guiManager, StatsService statsService, ServerHealthService healthService) {
         this.plugin = plugin;
@@ -32,23 +29,26 @@ public class MainMenuGui implements InventoryGui, InventoryHolder {
         this.statsService = statsService;
         this.healthService = healthService;
         this.inventory = Bukkit.createInventory(this, 27, Component.text("SMPStats Menu", NamedTextColor.DARK_BLUE));
-        initializeItems();
     }
 
-    private void initializeItems() {
-        // My Stats
-        inventory.setItem(11, createGuiItem(Material.PLAYER_HEAD, Component.text("My Stats", NamedTextColor.GOLD), 
+    private void initializeItems(Player player) {
+        this.viewer = player;
+        
+        // My Stats - use player's head
+        inventory.setItem(11, createPlayerHead(player, Component.text("My Stats", NamedTextColor.GOLD), 
                 Component.text("View your personal statistics", NamedTextColor.GRAY)));
 
         // Server Health
         inventory.setItem(13, createGuiItem(Material.REDSTONE_BLOCK, Component.text("Server Health", NamedTextColor.RED), 
                 Component.text("View server performance metrics", NamedTextColor.GRAY),
-                Component.text("Requires Permission", NamedTextColor.DARK_RED)));
+                player.hasPermission("smpstats.health") 
+                    ? Component.text("Click to view", NamedTextColor.GREEN)
+                    : Component.text("Requires Permission", NamedTextColor.DARK_RED)));
 
-        // Leaderboards (Placeholder for now)
+        // Leaderboards
         inventory.setItem(15, createGuiItem(Material.GOLD_INGOT, Component.text("Leaderboards", NamedTextColor.YELLOW), 
                 Component.text("View top players", NamedTextColor.GRAY),
-                Component.text("Coming Soon", NamedTextColor.DARK_GRAY)));
+                Component.text("Click to view", NamedTextColor.GREEN)));
         
         // Fill background
         ItemStack filler = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, Component.text(" "));
@@ -66,22 +66,30 @@ public class MainMenuGui implements InventoryGui, InventoryHolder {
 
     @Override
     public void open(Player player) {
+        initializeItems(player);
         player.openInventory(inventory);
     }
 
     @Override
     public void handleClick(InventoryClickEvent event) {
         Player player = (Player) event.getWhoClicked();
+        playClickSound(player);
+        
         if (event.getSlot() == 11) {
             // Open My Stats
             guiManager.openGui(player, new PlayerStatsGui(plugin, guiManager, statsService, player));
         } else if (event.getSlot() == 13) {
             // Open Server Health
             if (!player.hasPermission("smpstats.health")) {
+                playErrorSound(player);
                 player.sendMessage(Component.text("You do not have permission to view server health.", NamedTextColor.RED));
                 return;
             }
-             guiManager.openGui(player, new ServerHealthGui(plugin, guiManager, healthService));
+            guiManager.openGui(player, new ServerHealthGui(plugin, guiManager, healthService));
+        } else if (event.getSlot() == 15) {
+            // Open Leaderboards
+            guiManager.openGui(player, new LeaderboardsGui(plugin, guiManager, statsService, healthService, 
+                    LeaderboardsGui.LeaderboardType.PLAYTIME, 0));
         }
     }
 }

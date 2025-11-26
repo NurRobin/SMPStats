@@ -65,4 +65,32 @@ class GuiUtilsTest {
         assertEquals(Component.text("Line 1", NamedTextColor.GRAY), lore.get(0));
         assertEquals(Component.text("Line 2", NamedTextColor.WHITE), lore.get(1));
     }
+
+    @Test
+    void createPlayerHead() {
+        org.mockbukkit.mockbukkit.entity.PlayerMock player = server.addPlayer("TestPlayer");
+        
+        ItemStack item = GuiUtils.createPlayerHead(player, 
+                Component.text("Player Head", NamedTextColor.GOLD),
+                Component.text("Description", NamedTextColor.GRAY));
+        
+        assertNotNull(item);
+        assertEquals(Material.PLAYER_HEAD, item.getType());
+        
+        org.bukkit.inventory.meta.SkullMeta meta = (org.bukkit.inventory.meta.SkullMeta) item.getItemMeta();
+        assertNotNull(meta);
+        assertEquals(Component.text("Player Head", NamedTextColor.GOLD), meta.displayName());
+        // Just verify owner is set (MockBukkit may return different objects)
+        assertNotNull(meta.getOwningPlayer());
+    }
+
+    @Test
+    void soundMethodsDoNotThrow() {
+        org.mockbukkit.mockbukkit.entity.PlayerMock player = server.addPlayer();
+        
+        // These should not throw
+        assertDoesNotThrow(() -> GuiUtils.playClickSound(player));
+        assertDoesNotThrow(() -> GuiUtils.playSuccessSound(player));
+        assertDoesNotThrow(() -> GuiUtils.playErrorSound(player));
+    }
 }

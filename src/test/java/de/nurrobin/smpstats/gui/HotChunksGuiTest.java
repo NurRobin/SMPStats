@@ -54,7 +54,7 @@ class HotChunksGuiTest {
     }
 
     @Test
-    void showsHotChunksAndTeleports() {
+    void showsHotChunksAndTeleportsAfterConfirmation() {
         World world = server.addSimpleWorld("world");
         HealthSnapshot.HotChunk hotChunk = new HealthSnapshot.HotChunk("world", 10, 10, 5, 2, "Owner");
         HealthSnapshot snapshot = new HealthSnapshot(
@@ -64,20 +64,56 @@ class HotChunksGuiTest {
         when(healthService.getLatest()).thenReturn(snapshot);
 
         HotChunksGui gui = new HotChunksGui(plugin, guiManager, healthService);
+        gui.open(player); // Clear pending confirmations
         Inventory inv = gui.getInventory();
 
         assertNotNull(inv.getItem(0));
         assertEquals(Material.MAGMA_BLOCK, inv.getItem(0).getType());
 
-        // Test Click
+        // First click - asks for confirmation
+        InventoryClickEvent event1 = mock(InventoryClickEvent.class);
+        when(event1.getSlot()).thenReturn(0);
+        when(event1.getWhoClicked()).thenReturn(player);
+        
+        gui.handleClick(event1);
+        
+        // Should change to lime concrete for confirmation
+        assertEquals(Material.LIME_CONCRETE, inv.getItem(0).getType());
+        
+        // Second click - confirms teleport
+        InventoryClickEvent event2 = mock(InventoryClickEvent.class);
+        when(event2.getSlot()).thenReturn(0);
+        when(event2.getWhoClicked()).thenReturn(player);
+        
+        gui.handleClick(event2);
+        
+        // Verify teleport happened
+        assertEquals(10 * 16 + 8, player.getLocation().getBlockX());
+        assertEquals(10 * 16 + 8, player.getLocation().getBlockZ());
+    }
+    
+    @Test
+    void firstClickShowsConfirmation() {
+        World world = server.addSimpleWorld("world");
+        HealthSnapshot.HotChunk hotChunk = new HealthSnapshot.HotChunk("world", 5, 5, 3, 1, "TestOwner");
+        HealthSnapshot snapshot = new HealthSnapshot(
+            System.currentTimeMillis(), 20.0, 100, 200, 1, 5, 0, 2, 10.0, 
+            Collections.emptyMap(), List.of(hotChunk)
+        );
+        when(healthService.getLatest()).thenReturn(snapshot);
+
+        HotChunksGui gui = new HotChunksGui(plugin, guiManager, healthService);
+        gui.open(player);
+
         InventoryClickEvent event = mock(InventoryClickEvent.class);
         when(event.getSlot()).thenReturn(0);
         when(event.getWhoClicked()).thenReturn(player);
         
         gui.handleClick(event);
         
-        assertEquals(10 * 16 + 8, player.getLocation().getBlockX());
-        assertEquals(10 * 16 + 8, player.getLocation().getBlockZ());
+        // Item should change to confirmation state
+        Inventory inv = gui.getInventory();
+        assertEquals(Material.LIME_CONCRETE, inv.getItem(0).getType());
     }
     
     @Test

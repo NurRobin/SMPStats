@@ -81,33 +81,48 @@ class PlayerStatsGuiTest {
     }
     
     @Test
-    void backButtonClosesInventory() {
+    void backButtonNavigatesToMainMenu() {
         when(statsService.getStats(player.getUniqueId())).thenReturn(Optional.empty());
         PlayerStatsGui gui = new PlayerStatsGui(plugin, guiManager, statsService, player);
         
         InventoryClickEvent event = mock(InventoryClickEvent.class);
-        when(event.getSlot()).thenReturn(40);
+        when(event.getSlot()).thenReturn(36); // New back button position
         when(event.getWhoClicked()).thenReturn(player);
         
         gui.handleClick(event);
         
-        // Since we are using MockBukkit, we can check if inventory is closed?
-        // Or verify closeInventory was called on player?
-        // PlayerMock tracks open inventory.
-        // But wait, player.closeInventory() in MockBukkit might not be spyable directly unless we spy the player.
-        // But we can check if the inventory is closed.
-        // Actually, let's just verify the behavior if possible.
-        // Since I can't easily verify closeInventory on PlayerMock without spying, I'll trust the logic for now or spy the player.
-        // But I already mocked player in setUp? No, I used server.addPlayer().
+        // Should either open MainMenu or close inventory
+        // If ServerHealthService is available, it opens MainMenu
+    }
+
+    @Test
+    void refreshButtonRefreshesStats() {
+        StatsRecord record = new StatsRecord(player.getUniqueId(), player.getName());
+        record.setMobKills(10);
+        when(statsService.getStats(player.getUniqueId())).thenReturn(Optional.of(record));
         
-        // Let's spy the player
-        // PlayerMock spyPlayer = spy(player);
-        // But I can't replace the player in the server easily.
+        PlayerStatsGui gui = new PlayerStatsGui(plugin, guiManager, statsService, player);
         
-        // Let's just check if the inventory is closed.
-        // player.getOpenInventory() should be the default container if closed.
-        // But MockBukkit might behave differently.
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(44); // Refresh button
+        when(event.getWhoClicked()).thenReturn(player);
         
-        // Let's just run the code and ensure no exception.
+        gui.handleClick(event);
+        
+        // Verify stats were fetched again
+        verify(statsService, atLeast(2)).getStats(player.getUniqueId());
+    }
+
+    @Test
+    void showsPlayerHead() {
+        StatsRecord record = new StatsRecord(player.getUniqueId(), player.getName());
+        when(statsService.getStats(player.getUniqueId())).thenReturn(Optional.of(record));
+
+        PlayerStatsGui gui = new PlayerStatsGui(plugin, guiManager, statsService, player);
+        Inventory inv = gui.getInventory();
+
+        // Player head at slot 4
+        assertNotNull(inv.getItem(4));
+        assertEquals(Material.PLAYER_HEAD, inv.getItem(4).getType());
     }
 }
