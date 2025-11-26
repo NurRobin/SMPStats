@@ -1,0 +1,278 @@
+name: Auto Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'pom.xml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version_changed: ${{ steps.check.outputs.changed }}
+      new_version: ${{ steps.check.outputs.version }}
+      version_type: ${{ steps.check.outputs.type }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+
+      - name: Check if version changed
+        id: check
+        run: |
+          # Get current version
+          CURRENT_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          
+          # Check if tag already exists
+          if git rev-parse "v$CURRENT_VERSION" >/dev/null 2>&1; then
+            echo "Tag v$CURRENT_VERSION already exists, skipping release"
+            echo "changed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Get previous version from git history
+          git checkout HEAD~1 -- pom.xml 2>/dev/null || {
+            echo "No previous version found, this might be first commit"
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+            echo "type=minor" >> $GITHUB_OUTPUT
+            git checkout HEAD -- pom.xml
+            exit 0
+          }
+          
+          PREVIOUS_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          git checkout HEAD -- pom.xml
+          
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "Version changed from $PREVIOUS_VERSION to $CURRENT_VERSION"
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+            
+            # Determine version type
+            IFS='.' read -r CURR_MAJOR CURR_MINOR CURR_PATCH <<< "$CURRENT_VERSION"
+            IFS='.' read -r PREV_MAJOR PREV_MINOR PREV_PATCH <<< "$PREVIOUS_VERSION"
+            
+            if [ "$CURR_MAJOR" != "$PREV_MAJOR" ]; then
+              echo "type=major" >> $GITHUB_OUTPUT
+              echo "Detected MAJOR version change"
+            elif [ "$CURR_MINOR" != "$PREV_MINOR" ]; then
+              echo "type=minor" >> $GITHUB_OUTPUT
+              echo "Detected MINOR version change"
+            else
+              echo "type=patch" >> $GITHUB_OUTPUT
+              echo "Detected PATCH version change"
+            fi
+          else
+            echo "Version unchanged: $CURRENT_VERSION"
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+  create-release:
+    needs: check-version
+    if: needs.check-version.outputs.version_changed == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          cache: maven
+
+      - name: Set version variables
+        id: vars
+        run: |
+          VERSION="${{ needs.check-version.outputs.new_version }}"
+          TYPE="${{ needs.check-version.outputs.version_type }}"
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+          echo "type=$TYPE" >> $GITHUB_OUTPUT
+          
+          # Check if this is a pre-release
+          if [[ "$VERSION" =~ -[a-zA-Z] ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git tag -a "${{ steps.vars.outputs.tag }}" -m "Release ${{ steps.vars.outputs.tag }}"
+          git push origin "${{ steps.vars.outputs.tag }}"
+
+      - name: Build and test with coverage
+        run: mvn -B -ntp verify
+
+      - name: Check test results
+        run: |
+          if [ -d target/surefire-reports ]; then
+            FAILURES=$(find target/surefire-reports -name "*.xml" -exec grep -l 'failures="[1-9]' {} \; | wc -l)
+            ERRORS=$(find target/surefire-reports -name "*.xml" -exec grep -l 'errors="[1-9]' {} \; | wc -l)
+            
+            if [ $FAILURES -gt 0 ] || [ $ERRORS -gt 0 ]; then
+              echo "❌ Tests failed - aborting release"
+              exit 1
+            fi
+            echo "✓ All tests passed"
+          fi
+
+      - name: Generate SBOM
+        run: mvn org.cyclonedx:cyclonedx-maven-plugin:2.8.2:makeAggregateBom
+
+      - name: Import GPG key
+        if: ${{ steps.vars.outputs.is_prerelease == 'false' }}
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          if [ -n "$GPG_PRIVATE_KEY" ]; then
+            echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+            echo "GPG_AVAILABLE=true" >> $GITHUB_ENV
+          else
+            echo "⚠️  GPG signing skipped: GPG_PRIVATE_KEY not configured"
+            echo "GPG_AVAILABLE=false" >> $GITHUB_ENV
+          fi
+
+      - name: Prepare release artifacts
+        run: |
+          TAG="${{ steps.vars.outputs.tag }}"
+          
+          # Rename main jar
+          mv target/SMPStats.jar "target/SMPStats-${TAG}.jar"
+          
+          # Generate checksums
+          cd target
+          sha256sum "SMPStats-${TAG}.jar" > "SMPStats-${TAG}.jar.sha256"
+          
+          # Copy SBOM
+          if [ -f "bom.json" ]; then
+            cp bom.json "SMPStats-${TAG}.sbom.json"
+            sha256sum "SMPStats-${TAG}.sbom.json" > "SMPStats-${TAG}.sbom.json.sha256"
+          fi
+          
+          # Sign artifacts with GPG if available
+          if [ "$GPG_AVAILABLE" = "true" ] && [ "${{ steps.vars.outputs.is_prerelease }}" = "false" ]; then
+            echo "${{ secrets.GPG_PASSPHRASE }}" | gpg --batch --yes --passphrase-fd 0 --armor --detach-sign "SMPStats-${TAG}.jar"
+            if [ -f "SMPStats-${TAG}.sbom.json" ]; then
+              echo "${{ secrets.GPG_PASSPHRASE }}" | gpg --batch --yes --passphrase-fd 0 --armor --detach-sign "SMPStats-${TAG}.sbom.json"
+            fi
+          fi
+          
+          cd ..
+
+      - name: Generate provenance attestation
+        if: ${{ steps.vars.outputs.is_prerelease == 'false' }}
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'target/SMPStats-${{ steps.vars.outputs.tag }}.jar'
+
+      - name: Generate release notes template
+        id: notes
+        run: |
+          TYPE="${{ steps.vars.outputs.type }}"
+          VERSION="${{ steps.vars.outputs.version }}"
+          
+          case "$TYPE" in
+            major)
+              EMOJI="🚀"
+              TITLE="Major Release"
+              DESCRIPTION="This is a major release with significant changes and potential breaking updates."
+              ;;
+            minor)
+              EMOJI="✨"
+              TITLE="Feature Release"
+              DESCRIPTION="This release includes new features and improvements."
+              ;;
+            patch)
+              EMOJI="🔧"
+              TITLE="Maintenance Release"
+              DESCRIPTION="This release includes bug fixes and minor improvements."
+              ;;
+          esac
+          
+          cat > /tmp/release_notes.md << EOF
+          # $EMOJI SMPStats $VERSION - $TITLE
+          
+          $DESCRIPTION
+          
+          EOF
+          
+          echo "notes_file=/tmp/release_notes.md" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release (Draft)
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: SMPStats ${{ steps.vars.outputs.tag }}
+          tag_name: ${{ steps.vars.outputs.tag }}
+          body_path: ${{ steps.notes.outputs.notes_file }}
+          files: |
+            target/SMPStats-${{ steps.vars.outputs.tag }}.jar
+            target/SMPStats-${{ steps.vars.outputs.tag }}.jar.sha256
+            target/SMPStats-${{ steps.vars.outputs.tag }}.jar.asc
+            target/SMPStats-${{ steps.vars.outputs.tag }}.sbom.json
+            target/SMPStats-${{ steps.vars.outputs.tag }}.sbom.json.sha256
+            target/SMPStats-${{ steps.vars.outputs.tag }}.sbom.json.asc
+          draft: true
+          prerelease: ${{ steps.vars.outputs.is_prerelease == 'true' }}
+          generate_release_notes: true
+
+      - name: Update changelog
+        run: |
+          VERSION="${{ steps.vars.outputs.version }}"
+          TAG="${{ steps.vars.outputs.tag }}"
+          
+          mkdir -p docs/changelog
+          CHANGELOG_FILE="docs/changelog/${VERSION}.md"
+          
+          echo "# ${VERSION}" > "$CHANGELOG_FILE"
+          echo "" >> "$CHANGELOG_FILE"
+          echo "Released: $(date +%Y-%m-%d)" >> "$CHANGELOG_FILE"
+          echo "" >> "$CHANGELOG_FILE"
+          echo "Release draft created. Release notes will be available after publishing." >> "$CHANGELOG_FILE"
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$CHANGELOG_FILE"
+          git diff --staged --quiet || git commit -m "docs: add changelog for $TAG"
+          git push origin HEAD:main || echo "⚠️  Could not push changelog"
+
+      - name: Summary
+        run: |
+          echo "## 🎉 Release Draft Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.vars.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Type:** ${{ steps.vars.outputs.type }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Pre-release:** ${{ steps.vars.outputs.is_prerelease }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📝 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to [Releases](${{ github.server_url }}/${{ github.repository }}/releases)" >> $GITHUB_STEP_SUMMARY
+          echo "2. Edit the draft release notes" >> $GITHUB_STEP_SUMMARY
+          echo "3. Publish the release" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The release is ready and waiting for your review! 🚀" >> $GITHUB_STEP_SUMMARY

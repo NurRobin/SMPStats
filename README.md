@@ -95,5 +95,39 @@ story:
 - `smpstats.reload` (default: op) – reload config/API
 - `smpstats.edit` (default: op) – reset/set player stats
 
+## 🔒 Security & Verification
+
+All releases include cryptographic verification:
+
+- **SHA256 Checksums**: Verify artifact integrity
+  ```bash
+  sha256sum -c SMPStats-vX.Y.Z.jar.sha256
+  ```
+
+- **GPG Signatures**: Verify artifact authenticity
+  ```bash
+  gpg --verify SMPStats-vX.Y.Z.jar.asc SMPStats-vX.Y.Z.jar
+  ```
+
+- **Build Provenance**: GitHub attestations prove build origin
+  ```bash
+  gh attestation verify SMPStats-vX.Y.Z.jar --repo NurRobin/SMPStats
+  ```
+
+- **SBOM**: Software Bill of Materials for dependency auditing (`*.sbom.json`)
+
+## 📦 Releases
+
+**Vollautomatisiertes Release-System:**
+1. Version setzen: `./scripts/set-version.sh X.Y.Z`
+2. Committen & pushen zu `main`
+3. Auto-Release erstellt Draft mit allen Artefakten
+4. Draft veröffentlichen - fertig! 🚀
+
+- **Stable releases**: `vX.Y.Z` (automatisch erkannt)
+- **Pre-releases**: `vX.Y.Z-beta.N` (automatisch erkannt)
+- Jedes Release enthält: JAR, Checksums, GPG-Signaturen, SBOM, Provenance
+- Siehe [Release Process](docs/RELEASE_PROCESS.md) für Details
+
 ## 📜 Roadmap
 See `Roadmap.md` for feature status and next steps.

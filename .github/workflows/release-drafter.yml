@@ -3,23 +3,22 @@ name: Release Drafter
 on:
   push:
     branches: [main]
+  pull_request:
+    types: [opened, reopened, synchronize]
   workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   update_release_draft:
     runs-on: ubuntu-latest
-    env:
-      RELEASE_DRAFTER_TOKEN: ${{ secrets.RELEASE_DRAFTER_TOKEN }}
     steps:
-      - name: Ensure release drafter token is available
-        if: ${{ env.RELEASE_DRAFTER_TOKEN == '' }}
-        run: |
-          echo "RELEASE_DRAFTER_TOKEN not set; skipping release draft update."
-          exit 0
-
       - name: Update draft release
         uses: release-drafter/release-drafter@v6
         with:
           config-name: release-drafter.yml
+          disable-autolabeler: false
         env:
-          GITHUB_TOKEN: ${{ env.RELEASE_DRAFTER_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
