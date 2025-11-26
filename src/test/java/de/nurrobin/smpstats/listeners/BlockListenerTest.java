@@ -3,6 +3,8 @@ package de.nurrobin.smpstats.listeners;
 import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.Settings;
 import de.nurrobin.smpstats.StatsService;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
 import org.bukkit.entity.Player;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
@@ -30,8 +32,13 @@ class BlockListenerTest {
         Player player = mock(Player.class);
         when(player.getUniqueId()).thenReturn(UUID.randomUUID());
 
+        Block block = mock(Block.class);
+        BlockState state = mock(BlockState.class);
+        when(block.getState()).thenReturn(state);
+
         BlockPlaceEvent place = mock(BlockPlaceEvent.class);
         when(place.getPlayer()).thenReturn(player);
+        when(place.getBlock()).thenReturn(block);
         listener.onBlockPlace(place);
         verify(stats).addBlocksPlaced(player.getUniqueId());
 
@@ -51,12 +58,17 @@ class BlockListenerTest {
         StatsService stats = mock(StatsService.class);
         BlockListener listener = new BlockListener(plugin, stats);
 
-        BlockPlaceEvent place = mock(BlockPlaceEvent.class);
-        BlockBreakEvent breakEvent = mock(BlockBreakEvent.class);
-        listener.onBlockPlace(place);
-        listener.onBlockBreak(breakEvent);
+        Player player = mock(Player.class);
+        when(player.getUniqueId()).thenReturn(UUID.randomUUID());
 
-        verify(stats, never()).addBlocksPlaced(org.mockito.ArgumentMatchers.any());
-        verify(stats, never()).addBlocksBroken(org.mockito.ArgumentMatchers.any());
+        Block block = mock(Block.class);
+        BlockState state = mock(BlockState.class);
+        when(block.getState()).thenReturn(state);
+
+        BlockPlaceEvent place = mock(BlockPlaceEvent.class);
+        when(place.getPlayer()).thenReturn(player);
+        when(place.getBlock()).thenReturn(block);
+        listener.onBlockPlace(place);
+        verify(stats, never()).addBlocksPlaced(player.getUniqueId());
     }
 }
