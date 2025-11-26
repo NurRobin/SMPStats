@@ -125,4 +125,77 @@ class PlayerStatsGuiTest {
         assertNotNull(inv.getItem(4));
         assertEquals(Material.PLAYER_HEAD, inv.getItem(4).getType());
     }
+
+    @Test
+    void showsPlaytimeAndDistance() {
+        StatsRecord record = new StatsRecord(player.getUniqueId(), player.getName());
+        record.setPlaytimeMillis(7200000); // 2 hours in millis
+        record.setDistanceOverworld(5000.0); // 5000 blocks
+        when(statsService.getStats(player.getUniqueId())).thenReturn(Optional.of(record));
+
+        PlayerStatsGui gui = new PlayerStatsGui(plugin, guiManager, statsService, player);
+        Inventory inv = gui.getInventory();
+
+        // Playtime at slot 10
+        assertNotNull(inv.getItem(10));
+        assertEquals(Material.CLOCK, inv.getItem(10).getType());
+
+        // Distance at slot 20
+        assertNotNull(inv.getItem(20));
+        assertEquals(Material.LEATHER_BOOTS, inv.getItem(20).getType());
+    }
+
+    @Test
+    void showsItemsCrafted() {
+        StatsRecord record = new StatsRecord(player.getUniqueId(), player.getName());
+        record.setItemsCrafted(100);
+        when(statsService.getStats(player.getUniqueId())).thenReturn(Optional.of(record));
+
+        PlayerStatsGui gui = new PlayerStatsGui(plugin, guiManager, statsService, player);
+        Inventory inv = gui.getInventory();
+
+        // Items crafted at slot 24
+        assertNotNull(inv.getItem(24));
+        assertEquals(Material.CRAFTING_TABLE, inv.getItem(24).getType());
+    }
+
+    @Test
+    void showsDamageStats() {
+        StatsRecord record = new StatsRecord(player.getUniqueId(), player.getName());
+        record.setDamageDealt(1000.0);
+        record.setDamageTaken(500.0);
+        when(statsService.getStats(player.getUniqueId())).thenReturn(Optional.of(record));
+
+        PlayerStatsGui gui = new PlayerStatsGui(plugin, guiManager, statsService, player);
+        Inventory inv = gui.getInventory();
+
+        // Combat at slot 22
+        assertNotNull(inv.getItem(22));
+        assertEquals(Material.IRON_SWORD, inv.getItem(22).getType());
+    }
+
+    @Test
+    void opensPlayerInventory() {
+        StatsRecord record = new StatsRecord(player.getUniqueId(), player.getName());
+        when(statsService.getStats(player.getUniqueId())).thenReturn(Optional.of(record));
+
+        PlayerStatsGui gui = new PlayerStatsGui(plugin, guiManager, statsService, player);
+        gui.open(player);
+
+        assertNotNull(player.getOpenInventory());
+    }
+
+    @Test
+    void clickOutsideIgnored() {
+        StatsRecord record = new StatsRecord(player.getUniqueId(), player.getName());
+        when(statsService.getStats(player.getUniqueId())).thenReturn(Optional.of(record));
+
+        PlayerStatsGui gui = new PlayerStatsGui(plugin, guiManager, statsService, player);
+
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(50); // Outside of inventory
+        when(event.getWhoClicked()).thenReturn(player);
+
+        gui.handleClick(event); // Should not throw
+    }
 }

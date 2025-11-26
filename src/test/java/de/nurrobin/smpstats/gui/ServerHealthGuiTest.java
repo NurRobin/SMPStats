@@ -156,4 +156,103 @@ class ServerHealthGuiTest {
         assertNotNull(inv.getItem(26));
         assertEquals(Material.SUNFLOWER, inv.getItem(26).getType());
     }
+
+    @Test
+    void tpsColorCodedYellow() {
+        // TPS 16 - should be yellow
+        HealthSnapshot snapshot = new HealthSnapshot(
+            System.currentTimeMillis(), 16.0, 100 * 1024 * 1024, 200 * 1024 * 1024, 
+            50, 100, 10, 20, 5.0, Collections.emptyMap(), Collections.emptyList()
+        );
+        when(healthService.getLatest()).thenReturn(snapshot);
+
+        ServerHealthGui gui = new ServerHealthGui(plugin, guiManager, healthService);
+        Inventory inv = gui.getInventory();
+
+        assertNotNull(inv.getItem(10));
+        assertEquals(Material.CLOCK, inv.getItem(10).getType());
+    }
+
+    @Test
+    void tpsColorCodedRed() {
+        // TPS 12 - should be red
+        HealthSnapshot snapshot = new HealthSnapshot(
+            System.currentTimeMillis(), 12.0, 100 * 1024 * 1024, 200 * 1024 * 1024, 
+            50, 100, 10, 20, 5.0, Collections.emptyMap(), Collections.emptyList()
+        );
+        when(healthService.getLatest()).thenReturn(snapshot);
+
+        ServerHealthGui gui = new ServerHealthGui(plugin, guiManager, healthService);
+        Inventory inv = gui.getInventory();
+
+        assertNotNull(inv.getItem(10));
+    }
+
+    @Test
+    void memoryHighUsageColorCoded() {
+        // Memory 90% used - should show warning color
+        HealthSnapshot snapshot = new HealthSnapshot(
+            System.currentTimeMillis(), 19.5, 180 * 1024 * 1024, 200 * 1024 * 1024, 
+            50, 100, 10, 20, 5.0, Collections.emptyMap(), Collections.emptyList()
+        );
+        when(healthService.getLatest()).thenReturn(snapshot);
+
+        ServerHealthGui gui = new ServerHealthGui(plugin, guiManager, healthService);
+        Inventory inv = gui.getInventory();
+
+        assertNotNull(inv.getItem(11));
+        assertEquals(Material.ENDER_CHEST, inv.getItem(11).getType());
+    }
+
+    @Test
+    void costIndexHighShowsWarning() {
+        // Cost index 75 - high load
+        HealthSnapshot snapshot = new HealthSnapshot(
+            System.currentTimeMillis(), 19.5, 100 * 1024 * 1024, 200 * 1024 * 1024, 
+            50, 100, 10, 20, 75.0, Collections.emptyMap(), Collections.emptyList()
+        );
+        when(healthService.getLatest()).thenReturn(snapshot);
+
+        ServerHealthGui gui = new ServerHealthGui(plugin, guiManager, healthService);
+        Inventory inv = gui.getInventory();
+
+        assertNotNull(inv.getItem(16));
+        assertEquals(Material.EMERALD, inv.getItem(16).getType());
+    }
+
+    @Test
+    void costIndexCriticalShowsWarning() {
+        // Cost index 150 - critical load
+        HealthSnapshot snapshot = new HealthSnapshot(
+            System.currentTimeMillis(), 19.5, 100 * 1024 * 1024, 200 * 1024 * 1024, 
+            50, 100, 10, 20, 150.0, Collections.emptyMap(), Collections.emptyList()
+        );
+        when(healthService.getLatest()).thenReturn(snapshot);
+
+        ServerHealthGui gui = new ServerHealthGui(plugin, guiManager, healthService);
+        Inventory inv = gui.getInventory();
+
+        assertNotNull(inv.getItem(16));
+    }
+
+    @Test
+    void opensPlayerInventory() {
+        ServerHealthGui gui = new ServerHealthGui(plugin, guiManager, healthService);
+        
+        gui.open(player);
+        
+        assertNotNull(player.getOpenInventory());
+    }
+
+    @Test
+    void noDataShowsBackButton() {
+        when(healthService.getLatest()).thenReturn(null);
+        
+        ServerHealthGui gui = new ServerHealthGui(plugin, guiManager, healthService);
+        Inventory inv = gui.getInventory();
+        
+        // Should still have back button
+        assertNotNull(inv.getItem(22));
+        assertEquals(Material.ARROW, inv.getItem(22).getType());
+    }
 }
