@@ -38,8 +38,9 @@ jobs:
           if-no-files-found: error
 
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: target/site/jacoco/jacoco.xml
           flags: backend
           fail_ci_if_error: false
