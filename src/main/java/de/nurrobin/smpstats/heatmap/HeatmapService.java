@@ -19,8 +19,8 @@ public class HeatmapService {
     private final StatsStorage storage;
     private Settings settings;
     private List<HotspotDefinition> hotspots;
-    private final Map<BinKey, Long> pending = new ConcurrentHashMap<>();
-    private final Map<HotspotKey, Long> hotspotCounts = new ConcurrentHashMap<>();
+    private final Map<BinKey, Double> pending = new ConcurrentHashMap<>();
+    private final Map<HotspotKey, Double> hotspotCounts = new ConcurrentHashMap<>();
     private int flushTaskId = -1;
 
     public HeatmapService(Plugin plugin, StatsStorage storage, Settings settings) {
@@ -59,10 +59,10 @@ public class HeatmapService {
             return;
         }
         BinKey key = BinKey.fromLocation(type, location);
-        pending.merge(key, 1L, Long::sum);
+        pending.merge(key, 1.0, Double::sum);
         for (HotspotDefinition hotspot : hotspots) {
             if (hotspot.contains(location)) {
-                hotspotCounts.merge(new HotspotKey(type, hotspot.getName(), hotspot.getWorld()), 1L, Long::sum);
+                hotspotCounts.merge(new HotspotKey(type, hotspot.getName(), hotspot.getWorld()), 1.0, Double::sum);
             }
         }
     }
@@ -76,7 +76,7 @@ public class HeatmapService {
         }
     }
 
-    public Map<String, Long> loadHotspots(String type) {
+    public Map<String, Double> loadHotspots(String type) {
         try {
             return storage.loadHotspotCounts(type);
         } catch (SQLException e) {
@@ -86,24 +86,25 @@ public class HeatmapService {
     }
 
     private void flush() {
-        if (pending.isEmpty()) {
-            // still flush hotspot counts
+        if (pending.isEmpty() && hotspotCounts.isEmpty()) {
+            return;
         }
-        List<Map.Entry<BinKey, Long>> batch = new ArrayList<>(pending.entrySet());
+        long halfLife = (long) (settings.getHeatmapDecayHalfLifeHours() * 3600 * 1000);
+        List<Map.Entry<BinKey, Double>> batch = new ArrayList<>(pending.entrySet());
         pending.clear();
-        for (Map.Entry<BinKey, Long> entry : batch) {
+        for (Map.Entry<BinKey, Double> entry : batch) {
             BinKey key = entry.getKey();
             try {
-                storage.incrementHeatmapBin(key.type, key.world, key.chunkX, key.chunkZ, entry.getValue());
+                storage.incrementHeatmapBin(key.type, key.world, key.chunkX, key.chunkZ, entry.getValue(), halfLife);
             } catch (SQLException e) {
                 plugin.getLogger().warning("Could not persist heatmap bin: " + e.getMessage());
             }
         }
-        List<Map.Entry<HotspotKey, Long>> hotspotBatch = new ArrayList<>(hotspotCounts.entrySet());
+        List<Map.Entry<HotspotKey, Double>> hotspotBatch = new ArrayList<>(hotspotCounts.entrySet());
         hotspotCounts.clear();
-        for (Map.Entry<HotspotKey, Long> entry : hotspotBatch) {
+        for (Map.Entry<HotspotKey, Double> entry : hotspotBatch) {
             try {
-                storage.incrementHotspot(entry.getKey().type, entry.getKey().hotspot, entry.getKey().world, entry.getValue());
+                storage.incrementHotspot(entry.getKey().type, entry.getKey().hotspot, entry.getKey().world, entry.getValue(), halfLife);
             } catch (SQLException e) {
                 plugin.getLogger().warning("Could not persist hotspot bin: " + e.getMessage());
             }

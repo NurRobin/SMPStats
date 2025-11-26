@@ -80,18 +80,18 @@ class StatsStorageTest {
     @Test
     void heatmapAndHotspotCountersAccumulate() throws Exception {
         StatsStorage storage = newStorage();
-        storage.incrementHeatmapBin("break", "world", 1, 2, 3);
-        storage.incrementHeatmapBin("break", "world", 1, 2, 2);
+        storage.incrementHeatmapBin("break", "world", 1, 2, 3.0, 0L);
+        storage.incrementHeatmapBin("break", "world", 1, 2, 2.0, 0L);
 
         List<de.nurrobin.smpstats.heatmap.HeatmapBin> bins = storage.loadHeatmapBins("break", 10);
         assertEquals(1, bins.size());
-        assertEquals(5, bins.get(0).getCount());
+        assertEquals(5.0, bins.get(0).getCount());
 
-        storage.incrementHotspot("break", "spawn", "world", 4);
-        storage.incrementHotspot("break", "spawn", "world", 1);
-        Map<String, Long> hotspots = storage.loadHotspotCounts("break");
+        storage.incrementHotspot("break", "spawn", "world", 4.0, 0L);
+        storage.incrementHotspot("break", "spawn", "world", 1.0, 0L);
+        Map<String, Double> hotspots = storage.loadHotspotCounts("break");
         assertEquals(1, hotspots.size());
-        assertEquals(5L, hotspots.get("spawn"));
+        assertEquals(5.0, hotspots.get("spawn"));
     }
 
     @Test
@@ -194,6 +194,26 @@ class StatsStorageTest {
         assertEquals("FALL", loaded.getFirst().cause());
         assertEquals(List.of("A", "B"), loaded.getFirst().nearbyPlayers());
         assertEquals(List.of("item1", "item2"), loaded.getFirst().inventory());
+    }
+
+    @Test
+    void heatmapDecayWorks() throws Exception {
+        StatsStorage storage = newStorage();
+        long halfLife = 1000L; // 1 second
+
+        // Initial insert
+        storage.incrementHeatmapBin("break", "world", 1, 2, 100.0, halfLife);
+
+        // Wait 1 second
+        Thread.sleep(1100);
+
+        // Update with 0 delta to trigger decay
+        storage.incrementHeatmapBin("break", "world", 1, 2, 0.0, halfLife);
+
+        List<de.nurrobin.smpstats.heatmap.HeatmapBin> bins = storage.loadHeatmapBins("break", 10);
+        assertEquals(1, bins.size());
+        double count = bins.get(0).getCount();
+        assertTrue(count < 60.0 && count > 40.0, "Count should be around 50, but was " + count);
     }
 
     private StatsStorage newStorage() throws IOException, java.sql.SQLException {

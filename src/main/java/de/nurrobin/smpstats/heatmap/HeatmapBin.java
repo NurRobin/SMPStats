@@ -5,9 +5,9 @@ public class HeatmapBin {
     private final String world;
     private final int chunkX;
     private final int chunkZ;
-    private final long count;
+    private final double count;
 
-    public HeatmapBin(String type, String world, int chunkX, int chunkZ, long count) {
+    public HeatmapBin(String type, String world, int chunkX, int chunkZ, double count) {
         this.type = type;
         this.world = world;
         this.chunkX = chunkX;
@@ -31,7 +31,7 @@ public class HeatmapBin {
         return chunkZ;
     }
 
-    public long getCount() {
+    public double getCount() {
         return count;
     }
 }
