@@ -107,8 +107,7 @@ public class ServerHealthService {
         // Process Hot Chunks
         chunkSnapshots.sort(Comparator.comparingInt(ChunkSnapshot::load).reversed());
         List<HealthSnapshot.HotChunk> hotChunks = new ArrayList<>();
-        NamespacedKey ownerKey = NamespacedKey.fromString("smpstats:owner");
-        if (ownerKey == null) ownerKey = new NamespacedKey(plugin, "owner");
+        NamespacedKey ownerKey = new NamespacedKey(plugin, "owner");
         
         for (int i = 0; i < Math.min(10, chunkSnapshots.size()); i++) {
             ChunkSnapshot cs = chunkSnapshots.get(i);
@@ -140,7 +139,7 @@ public class ServerHealthService {
             if (!ownerCounts.isEmpty()) {
                 UUID topUuid = Collections.max(ownerCounts.entrySet(), Map.Entry.comparingByValue()).getKey();
                 topOwner = Bukkit.getOfflinePlayer(topUuid).getName();
-                if (topOwner == null) topOwner = topUuid.toString().substring(0, 8);
+                if (topOwner == null) topOwner = "Unknown (" + topUuid.toString().substring(0, 8) + ")";
             }
             
             hotChunks.add(new HealthSnapshot.HotChunk(c.getWorld().getName(), c.getX(), c.getZ(), cs.entities, cs.tileEntities, topOwner));
