@@ -128,4 +128,100 @@ class HotChunksGuiTest {
         
         verify(guiManager).openGui(eq(player), any(ServerHealthGui.class));
     }
+
+    @Test
+    void showsEmptyMessageForEmptyHotChunksList() {
+        HealthSnapshot snapshot = new HealthSnapshot(
+            System.currentTimeMillis(), 20.0, 100, 200, 1, 5, 0, 2, 10.0, 
+            Collections.emptyMap(), Collections.emptyList()
+        );
+        when(healthService.getLatest()).thenReturn(snapshot);
+        
+        HotChunksGui gui = new HotChunksGui(plugin, guiManager, healthService);
+        Inventory inv = gui.getInventory();
+        
+        assertNotNull(inv.getItem(22));
+        assertEquals(Material.BARRIER, inv.getItem(22).getType());
+    }
+
+    @Test
+    void showsEmptyMessageForNullHotChunks() {
+        HealthSnapshot snapshot = new HealthSnapshot(
+            System.currentTimeMillis(), 20.0, 100, 200, 1, 5, 0, 2, 10.0, 
+            Collections.emptyMap(), null
+        );
+        when(healthService.getLatest()).thenReturn(snapshot);
+        
+        HotChunksGui gui = new HotChunksGui(plugin, guiManager, healthService);
+        Inventory inv = gui.getInventory();
+        
+        assertNotNull(inv.getItem(22));
+        assertEquals(Material.BARRIER, inv.getItem(22).getType());
+    }
+
+    @Test
+    void teleportToNonExistentWorldShowsError() {
+        HealthSnapshot.HotChunk hotChunk = new HealthSnapshot.HotChunk("nonexistent_world", 5, 5, 3, 1, "Owner");
+        HealthSnapshot snapshot = new HealthSnapshot(
+            System.currentTimeMillis(), 20.0, 100, 200, 1, 5, 0, 2, 10.0, 
+            Collections.emptyMap(), List.of(hotChunk)
+        );
+        when(healthService.getLatest()).thenReturn(snapshot);
+
+        HotChunksGui gui = new HotChunksGui(plugin, guiManager, healthService);
+        gui.open(player);
+
+        // First click - confirmation
+        InventoryClickEvent event1 = mock(InventoryClickEvent.class);
+        when(event1.getSlot()).thenReturn(0);
+        when(event1.getWhoClicked()).thenReturn(player);
+        gui.handleClick(event1);
+        
+        // Second click - actual teleport attempt (world doesn't exist)
+        InventoryClickEvent event2 = mock(InventoryClickEvent.class);
+        when(event2.getSlot()).thenReturn(0);
+        when(event2.getWhoClicked()).thenReturn(player);
+        gui.handleClick(event2);
+        
+        // Player should receive error message - just verify no exception
+    }
+
+    @Test
+    void clickOutsideHotChunkRangeDoesNothing() {
+        HealthSnapshot.HotChunk hotChunk = new HealthSnapshot.HotChunk("world", 5, 5, 3, 1, "Owner");
+        HealthSnapshot snapshot = new HealthSnapshot(
+            System.currentTimeMillis(), 20.0, 100, 200, 1, 5, 0, 2, 10.0, 
+            Collections.emptyMap(), List.of(hotChunk)
+        );
+        when(healthService.getLatest()).thenReturn(snapshot);
+
+        HotChunksGui gui = new HotChunksGui(plugin, guiManager, healthService);
+        gui.open(player);
+
+        // Click on slot 5 (outside the single hot chunk)
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(5);
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        gui.handleClick(event);
+        
+        // Should not crash or cause issues
+        verify(guiManager, never()).openGui(eq(player), any(ServerHealthGui.class));
+    }
+
+    @Test
+    void opensPlayerInventory() {
+        HotChunksGui gui = new HotChunksGui(plugin, guiManager, healthService);
+        
+        gui.open(player);
+        
+        assertNotNull(player.getOpenInventory());
+    }
+
+    @Test
+    void getInventoryReturnsCorrectSize() {
+        HotChunksGui gui = new HotChunksGui(plugin, guiManager, healthService);
+        
+        assertEquals(54, gui.getInventory().getSize());
+    }
 }

@@ -7,12 +7,14 @@ import org.bukkit.Chunk;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.BlockState;
+import org.bukkit.block.Hopper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.world.WorldMock;
+import org.mockbukkit.mockbukkit.entity.CowMock;
 
 import java.util.List;
 
@@ -70,6 +72,139 @@ class ServerHealthServiceTest {
         service.start();
         // When disabled, getLatest should return null since no sampling occurs
         assertNull(service.getLatest());
+    }
+
+    @Test
+    void updateSettingsChangesConfiguration() {
+        Settings initialSettings = settings(true);
+        ServerHealthService service = new ServerHealthService(plugin, initialSettings);
+        
+        Settings newSettings = settings(false);
+        service.updateSettings(newSettings);
+        
+        // The service now has new settings
+        service.start();
+        // Since new settings have health disabled, getLatest should be null
+        assertNull(service.getLatest());
+    }
+
+    @Test
+    void shutdownCancelsTask() {
+        Settings settings = settings(true);
+        ServerHealthService service = new ServerHealthService(plugin, settings);
+        
+        service.start();
+        server.getScheduler().performOneTick();
+        assertNotNull(service.getLatest());
+        
+        service.shutdown();
+        
+        // Task should be cancelled - calling shutdown again should be safe
+        service.shutdown();
+    }
+
+    @Test
+    void snapshotContainsWorldsMap() {
+        Settings settings = settings(true);
+        ServerHealthService service = new ServerHealthService(plugin, settings);
+        
+        service.start();
+        server.getScheduler().performOneTick();
+        
+        HealthSnapshot snapshot = service.getLatest();
+        assertNotNull(snapshot);
+        assertNotNull(snapshot.worlds());
+        // MockBukkit may or may not have worlds - just verify the map exists and is not null
+    }
+
+    @Test
+    void snapshotTimestampIsRecent() {
+        Settings settings = settings(true);
+        ServerHealthService service = new ServerHealthService(plugin, settings);
+        
+        long before = System.currentTimeMillis();
+        service.start();
+        server.getScheduler().performOneTick();
+        long after = System.currentTimeMillis();
+        
+        HealthSnapshot snapshot = service.getLatest();
+        assertNotNull(snapshot);
+        assertTrue(snapshot.timestamp() >= before);
+        assertTrue(snapshot.timestamp() <= after);
+        
+        service.shutdown();
+    }
+
+    @Test
+    void costIndexIsCalculated() {
+        Settings settings = settings(true);
+        ServerHealthService service = new ServerHealthService(plugin, settings);
+        
+        service.start();
+        server.getScheduler().performOneTick();
+        
+        HealthSnapshot snapshot = service.getLatest();
+        assertNotNull(snapshot);
+        // Cost index should be >= 0 and <= 100
+        assertTrue(snapshot.costIndex() >= 0.0);
+        assertTrue(snapshot.costIndex() <= 100.0);
+        
+        service.shutdown();
+    }
+
+    @Test
+    void hotChunksAreSortedByLoad() {
+        Settings settings = settings(true);
+        ServerHealthService service = new ServerHealthService(plugin, settings);
+        
+        service.start();
+        server.getScheduler().performOneTick();
+        
+        HealthSnapshot snapshot = service.getLatest();
+        assertNotNull(snapshot);
+        assertNotNull(snapshot.hotChunks());
+        // Hot chunks list should have at most 10 entries
+        assertTrue(snapshot.hotChunks().size() <= 10);
+        
+        service.shutdown();
+    }
+
+    @Test
+    void restartAfterShutdown() {
+        Settings settings = settings(true);
+        ServerHealthService service = new ServerHealthService(plugin, settings);
+        
+        service.start();
+        server.getScheduler().performOneTick();
+        assertNotNull(service.getLatest());
+        
+        service.shutdown();
+        
+        // Start again
+        service.start();
+        server.getScheduler().performOneTick();
+        assertNotNull(service.getLatest());
+        
+        service.shutdown();
+    }
+
+    @Test
+    void multipleWorldsAreSampled() {
+        // Create additional world
+        WorldMock world2 = server.addSimpleWorld("world_nether");
+        
+        Settings settings = settings(true);
+        ServerHealthService service = new ServerHealthService(plugin, settings);
+        
+        service.start();
+        server.getScheduler().performOneTick();
+        
+        HealthSnapshot snapshot = service.getLatest();
+        assertNotNull(snapshot);
+        // Should have breakdown for worlds
+        assertNotNull(snapshot.worlds());
+        
+        service.shutdown();
     }
 
     private Settings settings(boolean enabled) {

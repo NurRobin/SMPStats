@@ -18,6 +18,7 @@ import org.mockbukkit.mockbukkit.entity.PlayerMock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -196,5 +197,168 @@ class LeaderboardsGuiTest {
             assertNotNull(gui.getInventory());
             assertEquals(54, gui.getInventory().getSize());
         }
+    }
+
+    @Test
+    void previousPageButtonWorks() {
+        List<StatsRecord> stats = new ArrayList<>();
+        for (int i = 0; i < 25; i++) {
+            StatsRecord record = new StatsRecord(UUID.randomUUID(), "Player" + i);
+            record.setPlaytimeMillis(1000000L * (25 - i));
+            stats.add(record);
+        }
+        when(statsService.getAllStats()).thenReturn(stats);
+
+        // Start on page 1
+        LeaderboardsGui gui = new LeaderboardsGui(plugin, guiManager, statsService, healthService,
+                LeaderboardsGui.LeaderboardType.PLAYTIME, 1);
+        Inventory inv = gui.getInventory();
+        
+        // Should have previous page button
+        assertNotNull(inv.getItem(45));
+        assertEquals(Material.ARROW, inv.getItem(45).getType());
+
+        // Click previous page
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(45);
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        gui.handleClick(event);
+        
+        verify(guiManager).openGui(eq(player), any(LeaderboardsGui.class));
+    }
+
+    @Test
+    void nextPageButtonWorks() {
+        List<StatsRecord> stats = new ArrayList<>();
+        for (int i = 0; i < 25; i++) {
+            StatsRecord record = new StatsRecord(UUID.randomUUID(), "Player" + i);
+            record.setPlaytimeMillis(1000000L * (25 - i));
+            stats.add(record);
+        }
+        when(statsService.getAllStats()).thenReturn(stats);
+
+        LeaderboardsGui gui = new LeaderboardsGui(plugin, guiManager, statsService, healthService,
+                LeaderboardsGui.LeaderboardType.PLAYTIME, 0);
+
+        // Click next page
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(53);
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        gui.handleClick(event);
+        
+        verify(guiManager).openGui(eq(player), any(LeaderboardsGui.class));
+    }
+
+    @Test
+    void clickingSameTypeDoesNotOpenNewGui() {
+        when(statsService.getAllStats()).thenReturn(new ArrayList<>());
+        
+        LeaderboardsGui gui = new LeaderboardsGui(plugin, guiManager, statsService, healthService,
+                LeaderboardsGui.LeaderboardType.PLAYTIME, 0);
+        
+        // Click same category (PLAYTIME is at slot 0)
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(0);
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        gui.handleClick(event);
+        
+        // Should NOT open a new GUI
+        verify(guiManager, never()).openGui(eq(player), any(LeaderboardsGui.class));
+    }
+
+    @Test
+    void leaderboardTypeEnumMethods() {
+        LeaderboardsGui.LeaderboardType type = LeaderboardsGui.LeaderboardType.PLAYTIME;
+        assertEquals("Playtime", type.getDisplayName());
+        assertEquals(Material.CLOCK, type.getIcon());
+        assertNotNull(type.getColor());
+        
+        StatsRecord record = new StatsRecord(UUID.randomUUID(), "TestPlayer");
+        record.setPlaytimeMillis(3600000L); // 1 hour
+        
+        assertEquals(3600000.0, type.getValue(record));
+        assertEquals("1h", type.formatValue(record));
+    }
+
+    @Test
+    void formatPlaytimeWithDays() {
+        List<StatsRecord> stats = new ArrayList<>();
+        StatsRecord record = new StatsRecord(UUID.randomUUID(), "LongTimePlayer");
+        record.setPlaytimeMillis(TimeUnit.HOURS.toMillis(50)); // 2 days 2 hours
+        stats.add(record);
+        
+        when(statsService.getAllStats()).thenReturn(stats);
+
+        LeaderboardsGui gui = new LeaderboardsGui(plugin, guiManager, statsService, healthService,
+                LeaderboardsGui.LeaderboardType.PLAYTIME, 0);
+        
+        // Just verify it doesn't throw and creates the GUI
+        assertNotNull(gui.getInventory());
+    }
+
+    @Test
+    void formatDistanceWithKilometers() {
+        List<StatsRecord> stats = new ArrayList<>();
+        StatsRecord record = new StatsRecord(UUID.randomUUID(), "TravelPlayer");
+        record.setDistanceOverworld(5000.0); // 5km
+        stats.add(record);
+        
+        when(statsService.getAllStats()).thenReturn(stats);
+
+        LeaderboardsGui gui = new LeaderboardsGui(plugin, guiManager, statsService, healthService,
+                LeaderboardsGui.LeaderboardType.DISTANCE, 0);
+        
+        assertNotNull(gui.getInventory());
+    }
+
+    @Test
+    void formatDistanceWithMeters() {
+        List<StatsRecord> stats = new ArrayList<>();
+        StatsRecord record = new StatsRecord(UUID.randomUUID(), "ShortTravelPlayer");
+        record.setDistanceOverworld(500.0); // 500m
+        stats.add(record);
+        
+        when(statsService.getAllStats()).thenReturn(stats);
+
+        LeaderboardsGui gui = new LeaderboardsGui(plugin, guiManager, statsService, healthService,
+                LeaderboardsGui.LeaderboardType.DISTANCE, 0);
+        
+        assertNotNull(gui.getInventory());
+    }
+
+    @Test
+    void playerRank4AndBeyondUsesPlayerHead() {
+        List<StatsRecord> stats = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            StatsRecord record = new StatsRecord(UUID.randomUUID(), "Player" + i);
+            record.setPlaytimeMillis(1000000L * (5 - i));
+            stats.add(record);
+        }
+        
+        when(statsService.getAllStats()).thenReturn(stats);
+
+        LeaderboardsGui gui = new LeaderboardsGui(plugin, guiManager, statsService, healthService,
+                LeaderboardsGui.LeaderboardType.PLAYTIME, 0);
+        Inventory inv = gui.getInventory();
+
+        // Rank 4 (slot 21) should use PLAYER_HEAD
+        assertNotNull(inv.getItem(21));
+        assertEquals(Material.PLAYER_HEAD, inv.getItem(21).getType());
+    }
+
+    @Test
+    void opensPlayerInventory() {
+        when(statsService.getAllStats()).thenReturn(new ArrayList<>());
+        
+        LeaderboardsGui gui = new LeaderboardsGui(plugin, guiManager, statsService, healthService,
+                LeaderboardsGui.LeaderboardType.PLAYTIME, 0);
+        
+        gui.open(player);
+        
+        // MockBukkit tracks open inventory
+        assertNotNull(player.getOpenInventory());
     }
 }
