@@ -169,6 +169,23 @@ class ApiServerTest {
     }
 
     @Test
+    void heatmapEndpointsGridSize() throws Exception {
+        var handler = server.heatmapHandler();
+        
+        // Test grid size
+        FakeExchange grid = new FakeExchange("/heatmap/break?grid=32", API_KEY);
+        handler.handle(grid);
+        assertEquals(200, grid.status);
+        verify(heatmap).generateHeatmap(eq("BREAK"), anyString(), anyLong(), anyLong(), anyDouble(), eq(32));
+
+        // Test invalid grid size (should default to 16)
+        FakeExchange invalidGrid = new FakeExchange("/heatmap/break?grid=-5", API_KEY);
+        handler.handle(invalidGrid);
+        assertEquals(200, invalidGrid.status);
+        verify(heatmap).generateHeatmap(eq("BREAK"), anyString(), anyLong(), anyLong(), anyDouble(), eq(16));
+    }
+
+    @Test
     void timelineEndpointsHandleRangesAndLeaderboard() throws Exception {
         when(storage.loadTimelineLeaderboard(7, 20)).thenReturn(List.of(Map.of("uuid", UUID.randomUUID().toString(), "playtime_ms", 1)));
         var handler = server.timelineHandler();
