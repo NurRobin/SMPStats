@@ -43,7 +43,8 @@ public class ServerHealthGui implements InventoryGui, InventoryHolder {
         NamedTextColor tpsColor = tps >= 18.0 ? NamedTextColor.GREEN : (tps >= 15.0 ? NamedTextColor.YELLOW : NamedTextColor.RED);
         inventory.setItem(10, createGuiItem(Material.CLOCK, Component.text("TPS", NamedTextColor.GOLD),
                 Component.text(String.valueOf(tps), tpsColor),
-                Component.text(getTpsStatus(tps), tpsColor)));
+                Component.text(getTpsStatus(tps), tpsColor),
+                Component.text("Click for history", NamedTextColor.DARK_GRAY)));
 
         // Memory
         long usedMb = snapshot.memoryUsed() / 1024 / 1024;
@@ -53,25 +54,31 @@ public class ServerHealthGui implements InventoryGui, InventoryHolder {
         NamedTextColor memColor = memoryPercent < 70 ? NamedTextColor.GREEN : (memoryPercent < 85 ? NamedTextColor.YELLOW : NamedTextColor.RED);
         inventory.setItem(11, createGuiItem(Material.ENDER_CHEST, Component.text("Memory", NamedTextColor.AQUA),
                 Component.text(usedMb + "MB / " + maxMb + "MB", memColor),
-                Component.text(memoryPercent + "% used", NamedTextColor.GRAY)));
+                Component.text(memoryPercent + "% used", NamedTextColor.GRAY),
+                Component.text("Click for history", NamedTextColor.DARK_GRAY)));
 
         inventory.setItem(12, createGuiItem(Material.GRASS_BLOCK, Component.text("Chunks", NamedTextColor.GREEN),
-                Component.text(String.valueOf(snapshot.chunks()), NamedTextColor.WHITE)));
+                Component.text(String.valueOf(snapshot.chunks()), NamedTextColor.WHITE),
+                Component.text("Click for history", NamedTextColor.DARK_GRAY)));
 
         inventory.setItem(13, createGuiItem(Material.CREEPER_HEAD, Component.text("Entities", NamedTextColor.RED),
-                Component.text(String.valueOf(snapshot.entities()), NamedTextColor.WHITE)));
+                Component.text(String.valueOf(snapshot.entities()), NamedTextColor.WHITE),
+                Component.text("Click for history", NamedTextColor.DARK_GRAY)));
 
         inventory.setItem(14, createGuiItem(Material.HOPPER, Component.text("Hoppers", NamedTextColor.GRAY),
-                Component.text(String.valueOf(snapshot.hoppers()), NamedTextColor.WHITE)));
+                Component.text(String.valueOf(snapshot.hoppers()), NamedTextColor.WHITE),
+                Component.text("Click for history", NamedTextColor.DARK_GRAY)));
 
         inventory.setItem(15, createGuiItem(Material.REDSTONE, Component.text("Redstone", NamedTextColor.DARK_RED),
-                Component.text(String.valueOf(snapshot.redstone()), NamedTextColor.WHITE)));
+                Component.text(String.valueOf(snapshot.redstone()), NamedTextColor.WHITE),
+                Component.text("Click for history", NamedTextColor.DARK_GRAY)));
         
         double costIndex = snapshot.costIndex();
         NamedTextColor costColor = costIndex < 50 ? NamedTextColor.GREEN : (costIndex < 100 ? NamedTextColor.YELLOW : NamedTextColor.RED);
         inventory.setItem(16, createGuiItem(Material.EMERALD, Component.text("Cost Index", NamedTextColor.DARK_GREEN),
                 Component.text(String.format("%.1f", costIndex), costColor),
-                Component.text(getCostStatus(costIndex), NamedTextColor.GRAY)));
+                Component.text(getCostStatus(costIndex), NamedTextColor.GRAY),
+                Component.text("Click for history", NamedTextColor.DARK_GRAY)));
 
         addNavigationButtons();
     }
@@ -118,22 +125,42 @@ public class ServerHealthGui implements InventoryGui, InventoryHolder {
 
     @Override
     public void open(Player player) {
+        // Refresh data when opening to ensure we show current values
+        initializeItems();
         player.openInventory(inventory);
     }
 
     @Override
     public void handleClick(InventoryClickEvent event) {
         Player player = (Player) event.getWhoClicked();
+        int slot = event.getSlot();
         playClickSound(player);
         
-        if (event.getSlot() == 18) {
-            guiManager.openGui(player, new HotChunksGui(plugin, guiManager, healthService));
-        } else if (event.getSlot() == 22) {
-            guiManager.openGui(player, new MainMenuGui(plugin, guiManager, plugin.getStatsService(), healthService));
-        } else if (event.getSlot() == 26) {
-            playSuccessSound(player);
-            initializeItems();
-            player.sendMessage(Component.text("Server health refreshed!", NamedTextColor.GREEN));
+        // Stat item clicks - open chart view
+        switch (slot) {
+            case 10 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
+                    HealthChartGui.MetricType.TPS, HealthChartGui.TimeScale.FIVE_MINUTES));
+            case 11 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
+                    HealthChartGui.MetricType.MEMORY, HealthChartGui.TimeScale.FIVE_MINUTES));
+            case 12 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
+                    HealthChartGui.MetricType.CHUNKS, HealthChartGui.TimeScale.FIVE_MINUTES));
+            case 13 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
+                    HealthChartGui.MetricType.ENTITIES, HealthChartGui.TimeScale.FIVE_MINUTES));
+            case 14 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
+                    HealthChartGui.MetricType.HOPPERS, HealthChartGui.TimeScale.FIVE_MINUTES));
+            case 15 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
+                    HealthChartGui.MetricType.REDSTONE, HealthChartGui.TimeScale.FIVE_MINUTES));
+            case 16 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
+                    HealthChartGui.MetricType.COST_INDEX, HealthChartGui.TimeScale.FIVE_MINUTES));
+            case 18 -> guiManager.openGui(player, new HotChunksGui(plugin, guiManager, healthService));
+            case 22 -> guiManager.openGui(player, new MainMenuGui(plugin, guiManager, plugin.getStatsService(), healthService));
+            case 26 -> {
+                // Refresh - trigger immediate sample and refresh display
+                healthService.sampleNow();
+                playSuccessSound(player);
+                initializeItems();
+                player.sendMessage(Component.text("Server health refreshed!", NamedTextColor.GREEN));
+            }
         }
     }
 }

@@ -16,8 +16,10 @@ import org.bukkit.plugin.Plugin;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -25,9 +27,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 public class ServerHealthService {
+    private static final int MAX_HISTORY_SIZE = 720; // 1 hour at 5 second intervals, or 60 hours at 5 min intervals
+    
     private final Plugin plugin;
     private Settings settings;
     private final AtomicReference<HealthSnapshot> latest = new AtomicReference<>();
+    private final Deque<HealthSnapshot> history = new LinkedList<>();
     private int taskId = -1;
 
     public ServerHealthService(Plugin plugin, Settings settings) {
@@ -60,6 +65,27 @@ public class ServerHealthService {
 
     public HealthSnapshot getLatest() {
         return latest.get();
+    }
+    
+    /**
+     * Returns historical snapshots within the specified time range.
+     * @param minutes Number of minutes of history to retrieve
+     * @return List of snapshots, oldest first
+     */
+    public List<HealthSnapshot> getHistory(int minutes) {
+        long cutoffTime = System.currentTimeMillis() - (minutes * 60L * 1000L);
+        synchronized (history) {
+            return history.stream()
+                    .filter(s -> s.timestamp() >= cutoffTime)
+                    .collect(Collectors.toList());
+        }
+    }
+    
+    /**
+     * Triggers an immediate sample. Called by refresh button in GUI.
+     */
+    public void sampleNow() {
+        sample();
     }
 
     private void sample() {
@@ -161,7 +187,16 @@ public class ServerHealthService {
         long memMax = Runtime.getRuntime().maxMemory();
         long memUsed = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
 
-        latest.set(new HealthSnapshot(System.currentTimeMillis(), tps, memUsed, memMax, totalChunks, totalEntities, totalHoppers, totalRedstone, costIndex, worlds, hotChunks));
+        HealthSnapshot snapshot = new HealthSnapshot(System.currentTimeMillis(), tps, memUsed, memMax, totalChunks, totalEntities, totalHoppers, totalRedstone, costIndex, worlds, hotChunks);
+        latest.set(snapshot);
+        
+        // Add to history
+        synchronized (history) {
+            history.addLast(snapshot);
+            while (history.size() > MAX_HISTORY_SIZE) {
+                history.removeFirst();
+            }
+        }
     }
 
     /** Stores extracted chunk data to avoid holding Chunk references which could prevent garbage collection */

@@ -39,10 +39,19 @@ public class HotChunksGui implements InventoryGui, InventoryHolder {
     }
 
     private void initializeItems() {
+        inventory.clear();
+        
         HealthSnapshot snapshot = healthService.getLatest();
         if (snapshot == null || snapshot.hotChunks() == null || snapshot.hotChunks().isEmpty()) {
             inventory.setItem(22, createGuiItem(Material.BARRIER, Component.text("No hot chunks found", NamedTextColor.RED)));
             inventory.setItem(49, createGuiItem(Material.ARROW, Component.text("Back", NamedTextColor.RED)));
+            // Fill background
+            ItemStack filler = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, Component.text(" "));
+            for (int i = 0; i < inventory.getSize(); i++) {
+                if (inventory.getItem(i) == null) {
+                    inventory.setItem(i, filler);
+                }
+            }
             return;
         }
 
@@ -78,6 +87,8 @@ public class HotChunksGui implements InventoryGui, InventoryHolder {
 
     @Override
     public void open(Player player) {
+        // Refresh data when opening to ensure we show current values
+        initializeItems();
         // Clear any pending teleport confirmation when opening
         pendingTeleports.remove(player.getUniqueId());
         player.openInventory(inventory);
