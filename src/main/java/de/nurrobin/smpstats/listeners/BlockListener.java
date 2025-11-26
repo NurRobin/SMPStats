@@ -19,7 +19,7 @@ public class BlockListener implements Listener {
     public BlockListener(SMPStats plugin, StatsService statsService) {
         this.plugin = plugin;
         this.statsService = statsService;
-        this.ownerKey = NamespacedKey.fromString("smpstats:owner");
+        this.ownerKey = new NamespacedKey(plugin, "owner");
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
