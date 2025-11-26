@@ -103,10 +103,11 @@ public class ServerHealthGui implements InventoryGui, InventoryHolder {
 
     @Override
     public void handleClick(InventoryClickEvent event) {
+        Player player = (Player) event.getWhoClicked();
         if (event.getSlot() == 18) {
-            guiManager.openGui((Player) event.getWhoClicked(), new HotChunksGui(plugin, guiManager, healthService));
+            guiManager.openGui(player, new HotChunksGui(plugin, guiManager, healthService));
         } else if (event.getSlot() == 22) {
-            event.getWhoClicked().closeInventory();
+            guiManager.openGui(player, new MainMenuGui(plugin, guiManager, plugin.getStatsService(), healthService));
         }
     }
 }
