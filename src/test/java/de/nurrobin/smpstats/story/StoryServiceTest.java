@@ -106,6 +106,61 @@ class StoryServiceTest {
         }
     }
 
+    @Test
+    void generateSummarySendsWebhookAndHandlesMissingDir() throws Exception {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        when(plugin.getDataFolder()).thenReturn(tempDir.toFile());
+
+        StatsStorage storage = mock(StatsStorage.class);
+        when(storage.loadTimelineLeaderboard(anyInt(), anyInt())).thenReturn(List.of(Map.of("uuid", UUID.randomUUID().toString(), "score", 1)));
+        when(storage.loadTopSocial(anyInt())).thenReturn(List.of());
+        StatsService stats = mock(StatsService.class);
+        when(stats.getStats(any(UUID.class))).thenReturn(Optional.empty());
+        MomentService moments = mock(MomentService.class);
+        when(moments.getRecentMoments(anyInt())).thenReturn(List.of());
+
+        Settings settings = mock(Settings.class);
+        when(settings.isStoryEnabled()).thenReturn(true);
+        when(settings.getStoryIntervalDays()).thenReturn(1);
+        when(settings.getStoryTopLimit()).thenReturn(5);
+        when(settings.getStoryRecentMoments()).thenReturn(1);
+        when(settings.getStoryWebhookUrl()).thenReturn("http://localhost:1"); // force quick failure path
+        when(settings.getStorySummaryHour()).thenReturn(0);
+
+        StoryService service = new StoryService(plugin, stats, storage, moments, settings);
+
+        var generate = StoryService.class.getDeclaredMethod("generateSummary", LocalDate.class);
+        generate.setAccessible(true);
+        LocalDate today = LocalDate.now(ZoneId.systemDefault());
+        generate.invoke(service, today);
+
+        Path generated = tempDir.resolve("story").resolve("summary-" + today + ".json");
+        assertTrue(Files.exists(generated));
+    }
+
+    @Test
+    void maybeGenerateHonorsIntervalAndHour() throws Exception {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        when(plugin.getDataFolder()).thenReturn(tempDir.toFile());
+
+        Settings settings = mock(Settings.class);
+        when(settings.isStoryEnabled()).thenReturn(true);
+        when(settings.getStoryIntervalDays()).thenReturn(1);
+        when(settings.getStorySummaryHour()).thenReturn(23); // future hour
+
+        StoryService service = new StoryService(plugin, mock(StatsService.class), mock(StatsStorage.class), mock(MomentService.class), settings);
+
+        var field = StoryService.class.getDeclaredField("lastGeneratedDay");
+        field.setAccessible(true);
+        field.set(service, LocalDate.now(ZoneId.systemDefault()));
+
+        var method = StoryService.class.getDeclaredMethod("maybeGenerate");
+        method.setAccessible(true);
+        method.invoke(service); // should return early without exceptions
+    }
+
     private Settings storySettings(boolean enabled) {
         SkillWeights weights = new SkillWeights(
                 new SkillWeights.MiningWeights(0),

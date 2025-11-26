@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.logging.Logger;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
@@ -113,5 +114,40 @@ class SocialStatsServiceTest {
             verify(scheduler).cancelTask(42);
         }
 
+    }
+
+    @Test
+    void doesNothingWhenDisabledOrPlayersFarApart() throws Exception {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        StatsStorage storage = mock(StatsStorage.class);
+        Settings disabled = mock(Settings.class);
+        when(disabled.isSocialEnabled()).thenReturn(false);
+
+        SocialStatsService service = new SocialStatsService(plugin, storage, disabled);
+        service.start();
+        service.recordSharedKill(mock(Player.class), true);
+        verify(storage, never()).incrementSocialPair(any(), any(), anyLong(), anyLong(), anyLong(), anyLong());
+
+        Settings enabled = mock(Settings.class);
+        when(enabled.isSocialEnabled()).thenReturn(true);
+        when(enabled.getSocialNearbyRadius()).thenReturn(1);
+        SocialStatsService farService = new SocialStatsService(plugin, storage, enabled);
+
+        World world = mock(World.class);
+        Location aLoc = new Location(world, 0, 64, 0);
+        Location bLoc = new Location(world, 10, 64, 10); // far beyond radius
+        Player killer = mock(Player.class);
+        Player other = mock(Player.class);
+        when(killer.getUniqueId()).thenReturn(UUID.randomUUID());
+        when(other.getUniqueId()).thenReturn(UUID.randomUUID());
+        when(killer.getWorld()).thenReturn(world);
+        when(other.getWorld()).thenReturn(world);
+        when(killer.getLocation()).thenReturn(aLoc);
+        when(other.getLocation()).thenReturn(bLoc);
+        when(world.getPlayers()).thenReturn(List.of(killer, other));
+
+        farService.recordSharedKill(killer, false);
+        verify(storage, never()).incrementSocialPair(any(), any(), anyLong(), anyLong(), anyLong(), anyLong());
     }
 }

@@ -98,6 +98,11 @@ class ApiServerTest {
         assertEquals(200, found.status);
         assertTrue(found.body().contains("Alex"));
 
+        when(stats.getStats(uuid)).thenReturn(Optional.empty());
+        FakeExchange missingRecord = new FakeExchange("/stats/" + uuid, API_KEY);
+        handler.handle(missingRecord);
+        assertEquals(404, missingRecord.status);
+
         when(stats.getAllStats()).thenReturn(List.of(record));
         FakeExchange all = new FakeExchange("/stats/all", API_KEY);
         handler.handle(all);
@@ -132,6 +137,10 @@ class ApiServerTest {
         stream.handle(streamReq);
         assertEquals(200, streamReq.status);
         assertTrue(streamReq.body().contains("data:"));
+
+        FakeExchange queryPlayerParam = new FakeExchange("/moments/query?player=not-a-uuid", API_KEY);
+        query.handle(queryPlayerParam);
+        assertEquals(200, queryPlayerParam.status);
     }
 
     @Test
@@ -185,6 +194,16 @@ class ApiServerTest {
         FakeExchange timelineReq = new FakeExchange("/timeline/" + uuid + "?limit=30", API_KEY);
         handler.handle(timelineReq);
         assertEquals(200, timelineReq.status);
+
+        when(storage.loadTimeline(uuid, 30)).thenThrow(new RuntimeException("fail"));
+        FakeExchange timelineError = new FakeExchange("/timeline/" + uuid, API_KEY);
+        handler.handle(timelineError);
+        assertEquals(200, timelineError.status); // returns empty list on error
+
+        ApiServer noTimeline = new ApiServer(plugin, stats, settings, moments, heatmap, null, health);
+        FakeExchange timelineNoService = new FakeExchange("/timeline/" + uuid, API_KEY);
+        noTimeline.timelineHandler().handle(timelineNoService);
+        assertEquals(200, timelineNoService.status);
     }
 
     @Test
@@ -212,6 +231,26 @@ class ApiServerTest {
         FakeExchange healthReq = new FakeExchange("/health", API_KEY);
         healthHandler.handle(healthReq);
         assertEquals(200, healthReq.status);
+
+        when(stats.getStorage().loadTopSocial(anyInt())).thenThrow(new RuntimeException("fail"));
+        FakeExchange socialError = new FakeExchange("/social/top", API_KEY);
+        social.handle(socialError);
+        assertEquals(200, socialError.status);
+
+        when(health.getLatest()).thenReturn(null);
+        FakeExchange noSnapshot = new FakeExchange("/health", API_KEY);
+        healthHandler.handle(noSnapshot);
+        assertEquals(404, noSnapshot.status);
+
+        ApiServer noHealth = new ApiServer(plugin, stats, settings, moments, heatmap, timeline, null);
+        FakeExchange noHealthReq = new FakeExchange("/health", API_KEY);
+        noHealth.healthHandler().handle(noHealthReq);
+        assertEquals(200, noHealthReq.status);
+
+        when(stats.getStorage().loadDeathReplays(anyInt())).thenThrow(new RuntimeException("fail"));
+        FakeExchange deathErr = new FakeExchange("/death/replay", API_KEY);
+        server.deathReplayHandler().handle(deathErr);
+        assertEquals(500, deathErr.status);
     }
 
     private static class FakeExchange extends com.sun.net.httpserver.HttpExchange {

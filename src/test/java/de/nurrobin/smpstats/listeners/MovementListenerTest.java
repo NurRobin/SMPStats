@@ -139,6 +139,35 @@ class MovementListenerTest {
     }
 
     @Test
+    void skipsBiomeWhenSameBlock() {
+        SMPStats plugin = mock(SMPStats.class);
+        Settings settings = mock(Settings.class);
+        when(settings.isTrackMovement()).thenReturn(false);
+        when(settings.isTrackBiomes()).thenReturn(true);
+        when(plugin.getSettings()).thenReturn(settings);
+
+        StatsService stats = mock(StatsService.class);
+        MovementListener listener = new MovementListener(plugin, stats);
+
+        World world = mock(World.class);
+        Location from = new Location(world, 1.2, 64, 1.7);
+        Location to = new Location(world, 1.3, 64, 1.1); // same block coords
+
+        Player player = mock(Player.class);
+        when(player.getUniqueId()).thenReturn(UUID.randomUUID());
+
+        PlayerMoveEvent event = mock(PlayerMoveEvent.class);
+        when(event.getFrom()).thenReturn(from);
+        when(event.getTo()).thenReturn(to);
+        when(event.getPlayer()).thenReturn(player);
+
+        listener.onMove(event);
+
+        verify(stats, never()).addBiome(any(), any());
+        verify(stats, never()).addDistance(any(), any(), anyDouble());
+    }
+
+    @Test
     void ignoresWhenNoMovementAndDisabledFlags() {
         SMPStats plugin = mock(SMPStats.class);
         Settings settings = mock(Settings.class);

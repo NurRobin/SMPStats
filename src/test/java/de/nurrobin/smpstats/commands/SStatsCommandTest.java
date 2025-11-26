@@ -150,4 +150,22 @@ class SStatsCommandTest {
         List<String> statKeys = command.onTabComplete(mock(CommandSender.class), mock(Command.class), "sstats", new String[]{"user", "Alex", "set", ""});
         assertTrue(statKeys.contains("playtime_ms"));
     }
+
+    @Test
+    void handlesConsoleAndInvalidNumbers() {
+        SMPStats plugin = pluginWithSettings();
+        StatsService stats = mock(StatsService.class);
+        SStatsCommand command = new SStatsCommand(plugin, stats);
+
+        CommandSender console = mock(CommandSender.class);
+        command.onCommand(console, mock(Command.class), "sstats", new String[]{});
+        verify(console).sendMessage(ChatColor.RED + "Konsole: /sstats user <player>");
+
+        StatsRecord record = new StatsRecord(UUID.randomUUID(), "Alex");
+        when(stats.getStatsByName("Alex")).thenReturn(Optional.of(record));
+        CommandSender editor = mock(CommandSender.class);
+        when(editor.hasPermission("smpstats.edit")).thenReturn(true);
+        command.onCommand(editor, mock(Command.class), "sstats", new String[]{"user", "Alex", "set", "deaths", "abc"});
+        verify(editor).sendMessage(ChatColor.RED + "Wert muss eine Zahl sein.");
+    }
 }

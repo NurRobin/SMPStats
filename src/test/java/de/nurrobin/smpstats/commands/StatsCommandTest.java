@@ -91,6 +91,40 @@ class StatsCommandTest {
     }
 
     @Test
+    void handlesJsonWhenMissingOrConsole() {
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService stats = mock(StatsService.class);
+        StatsCommand command = new StatsCommand(plugin, stats);
+
+        CommandSender console = mock(CommandSender.class);
+        command.onCommand(console, mock(Command.class), "stats", new String[]{"json"});
+        verify(console).sendMessage(ChatColor.RED + "Nur Spieler können /stats json nutzen.");
+
+        Player player = mock(Player.class);
+        when(player.getUniqueId()).thenReturn(UUID.randomUUID());
+        when(stats.getStats(any())).thenReturn(Optional.empty());
+        command.onCommand(player, mock(Command.class), "stats", new String[]{"json"});
+        verify(player).sendMessage(ChatColor.RED + "Keine Stats gefunden.");
+    }
+
+    @Test
+    void showsSelfStatsForPlayer() {
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService stats = mock(StatsService.class);
+        StatsCommand command = new StatsCommand(plugin, stats);
+
+        Player player = mock(Player.class);
+        UUID uuid = UUID.randomUUID();
+        when(player.getUniqueId()).thenReturn(uuid);
+        when(player.getName()).thenReturn("Alex");
+
+        try (MockedStatic<StatsFormatter> formatter = mockStatic(StatsFormatter.class)) {
+            command.onCommand(player, mock(Command.class), "stats", new String[]{});
+            formatter.verify(() -> StatsFormatter.render(player, plugin, stats, uuid, "Alex"));
+        }
+    }
+
+    @Test
     void tabCompleteAddsKeywordsAndNames() {
         SMPStats plugin = mock(SMPStats.class);
         StatsService stats = mock(StatsService.class);

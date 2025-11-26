@@ -8,6 +8,7 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TNTPrimed;
+import org.bukkit.entity.Zombie;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.Mockito.*;
 
 class MomentListenerTest {
@@ -129,5 +131,44 @@ class MomentListenerTest {
         listener.onBossDeath(event);
 
         verify(momentService).onBossKill(killer, "WITHER", loc);
+    }
+
+    @Test
+    void ignoresNonPlayerEventsAndStaleMlg() throws Exception {
+        MomentService momentService = mock(MomentService.class);
+        MomentListener listener = new MomentListener(momentService, null);
+
+        EntityDamageEvent nonPlayerDamage = mock(EntityDamageEvent.class);
+        when(nonPlayerDamage.getEntity()).thenReturn(mock(Zombie.class));
+        listener.onDamage(nonPlayerDamage);
+        verify(momentService, never()).onDamage(any(), anyDouble(), any());
+
+        EntityPickupItemEvent pickup = mock(EntityPickupItemEvent.class);
+        when(pickup.getEntity()).thenReturn(mock(Zombie.class));
+        listener.onItemPickup(pickup);
+        verify(momentService, never()).onItemGain(any(), any(), any());
+
+        Player player = mock(Player.class);
+        UUID uuid = UUID.randomUUID();
+        when(player.getUniqueId()).thenReturn(uuid);
+        Location loc = mock(Location.class);
+        when(player.getLocation()).thenReturn(loc);
+
+        java.lang.reflect.Field mapField = MomentListener.class.getDeclaredField("lastWaterPlace");
+        mapField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.Map<UUID, Long> map = (java.util.Map<UUID, Long>) mapField.get(listener);
+        map.put(uuid, System.currentTimeMillis() - 5000); // stale
+
+        EntityDamageEvent fall = mock(EntityDamageEvent.class);
+        when(fall.getEntity()).thenReturn(player);
+        when(fall.getCause()).thenReturn(EntityDamageEvent.DamageCause.FALL);
+        when(fall.getFinalDamage()).thenReturn(0.0);
+        listener.onDamage(fall);
+        verify(momentService, never()).onBossKill(any(), any(), any());
+
+        PlayerBucketEmptyEvent lava = mock(PlayerBucketEmptyEvent.class);
+        when(lava.getBucket()).thenReturn(Material.LAVA_BUCKET);
+        listener.onBucketPlace(lava);
     }
 }
