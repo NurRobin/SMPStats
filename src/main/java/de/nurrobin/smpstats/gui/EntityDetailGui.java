@@ -196,9 +196,9 @@ public class EntityDetailGui implements InventoryGui, InventoryHolder {
             return;
         } else if (slot == 46 && event.getClick() == ClickType.SHIFT_RIGHT) {
             // Kill all of this type
-            if (!player.hasPermission("smpstats.admin")) {
+            if (!player.hasPermission("smpstats.gui.health.manage") && !player.hasPermission("smpstats.admin")) {
                 playErrorSound(player);
-                player.sendMessage(Component.text("You need smpstats.admin permission to kill entities.", NamedTextColor.RED));
+                player.sendMessage(Component.text("You need smpstats.gui.health.manage permission to kill entities.", NamedTextColor.RED));
                 return;
             }
             
@@ -217,9 +217,9 @@ public class EntityDetailGui implements InventoryGui, InventoryHolder {
                 
                 if (event.getClick() == ClickType.SHIFT_RIGHT) {
                     // Kill this entity
-                    if (!player.hasPermission("smpstats.admin")) {
+                    if (!player.hasPermission("smpstats.gui.health.manage") && !player.hasPermission("smpstats.admin")) {
                         playErrorSound(player);
-                        player.sendMessage(Component.text("You need smpstats.admin permission to kill entities.", NamedTextColor.RED));
+                        player.sendMessage(Component.text("You need smpstats.gui.health.manage permission to kill entities.", NamedTextColor.RED));
                         return;
                     }
                     
@@ -255,9 +255,9 @@ public class EntityDetailGui implements InventoryGui, InventoryHolder {
                     }
                 } else if (event.getClick().isLeftClick()) {
                     // Teleport to entity
-                    if (!player.hasPermission("smpstats.admin")) {
+                    if (!player.hasPermission("smpstats.gui.health.manage") && !player.hasPermission("smpstats.admin")) {
                         playErrorSound(player);
-                        player.sendMessage(Component.text("You need smpstats.admin permission to teleport.", NamedTextColor.RED));
+                        player.sendMessage(Component.text("You need smpstats.gui.health.manage permission to teleport.", NamedTextColor.RED));
                         return;
                     }
                     

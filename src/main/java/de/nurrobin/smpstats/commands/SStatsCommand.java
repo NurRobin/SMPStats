@@ -51,6 +51,10 @@ public class SStatsCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(ChatColor.RED + "Only players can use the GUI.");
                     return true;
                 }
+                if (!player.hasPermission("smpstats.gui")) {
+                    player.sendMessage(ChatColor.RED + "Dir fehlt die Berechtigung smpstats.gui");
+                    return true;
+                }
                 guiManager.openGui(player, new MainMenuGui(plugin, guiManager, statsService, healthService));
                 return true;
             }
