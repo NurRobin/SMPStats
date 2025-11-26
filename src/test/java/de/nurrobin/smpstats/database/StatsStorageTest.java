@@ -267,6 +267,26 @@ class StatsStorageTest {
         verify(user, never()).sendMessage(anyString());
     }
 
+    @Test
+    void insertHeatmapEntriesRollsBackOnError() throws Exception {
+        StatsStorage storage = newStorage();
+        
+        // Create a valid entry
+        HeatmapEntry valid = new HeatmapEntry("valid", "world", 1, 2, 3, 1.0, System.currentTimeMillis());
+        // Create an invalid entry (null type should fail NOT NULL constraint)
+        HeatmapEntry invalid = new HeatmapEntry(null, "world", 1, 2, 3, 1.0, System.currentTimeMillis());
+        
+        try {
+            storage.insertHeatmapEntries(List.of(valid, invalid));
+        } catch (java.sql.SQLException expected) {
+            // Expected
+        }
+        
+        // Verify nothing was inserted
+        List<HeatmapEvent> events = storage.getHeatmapEvents("valid", "world", 0, System.currentTimeMillis() + 1000);
+        assertTrue(events.isEmpty(), "Should have rolled back valid entry");
+    }
+
     private StatsStorage newStorage() throws IOException, java.sql.SQLException {
         Path dataDir = Files.createDirectory(tempDir.resolve("plugin-data-" + UUID.randomUUID()));
         Plugin plugin = mock(Plugin.class);

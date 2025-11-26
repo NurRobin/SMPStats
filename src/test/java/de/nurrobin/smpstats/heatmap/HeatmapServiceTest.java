@@ -62,7 +62,7 @@ class HeatmapServiceTest {
         Plugin plugin = mock(Plugin.class);
         when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
         StatsStorage storage = mock(StatsStorage.class);
-        when(storage.loadHeatmapBins(anyString(), anyInt())).thenThrow(new java.sql.SQLException("fail"));
+        when(storage.getHeatmapEvents(anyString(), anyString(), anyLong(), anyLong())).thenThrow(new java.sql.SQLException("fail"));
         when(storage.loadHotspotCounts(anyString())).thenThrow(new java.sql.SQLException("fail"));
         Settings settings = settings(true, List.of());
 

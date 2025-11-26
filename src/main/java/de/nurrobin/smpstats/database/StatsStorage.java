@@ -465,61 +465,6 @@ public class StatsStorage implements Closeable {
         );
     }
 
-    public synchronized void incrementHeatmapBin(String type, String world, int chunkX, int chunkZ, double delta, long halfLife) throws SQLException {
-        long now = System.currentTimeMillis();
-        String sql;
-        if (halfLife > 0) {
-            sql = """
-                INSERT INTO heatmap_bins (type, world, chunk_x, chunk_z, count, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(type, world, chunk_x, chunk_z) DO UPDATE SET
-                    count = (count * pow(0.5, (excluded.last_updated - last_updated) / ?)) + excluded.count,
-                    last_updated = excluded.last_updated;
-                """;
-        } else {
-            sql = """
-                INSERT INTO heatmap_bins (type, world, chunk_x, chunk_z, count, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(type, world, chunk_x, chunk_z) DO UPDATE SET
-                    count = count + excluded.count,
-                    last_updated = excluded.last_updated;
-                """;
-        }
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, type);
-            statement.setString(2, world);
-            statement.setInt(3, chunkX);
-            statement.setInt(4, chunkZ);
-            statement.setDouble(5, delta);
-            statement.setLong(6, now);
-            if (halfLife > 0) {
-                statement.setDouble(7, (double) halfLife);
-            }
-            statement.executeUpdate();
-        }
-    }
-
-    public synchronized List<HeatmapBin> loadHeatmapBins(String type, int limit) throws SQLException {
-        String sql = "SELECT * FROM heatmap_bins WHERE type = ? ORDER BY count DESC LIMIT ?";
-        List<HeatmapBin> bins = new ArrayList<>();
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, type);
-            statement.setInt(2, limit);
-            try (ResultSet rs = statement.executeQuery()) {
-                while (rs.next()) {
-                    bins.add(new HeatmapBin(
-                            rs.getString("type"),
-                            rs.getString("world"),
-                            rs.getInt("chunk_x"),
-                            rs.getInt("chunk_z"),
-                            rs.getDouble("count")
-                    ));
-                }
-            }
-        }
-        return bins;
-    }
-
     public synchronized void incrementHotspot(String type, String hotspot, String world, double delta, long halfLife) throws SQLException {
         long now = System.currentTimeMillis();
         String sql;
