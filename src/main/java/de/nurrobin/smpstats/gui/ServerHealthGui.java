@@ -48,6 +48,7 @@ public class ServerHealthGui implements InventoryGui, InventoryHolder {
         // Memory
         long usedMb = snapshot.memoryUsed() / 1024 / 1024;
         long maxMb = snapshot.memoryMax() / 1024 / 1024;
+        if (maxMb == 0) maxMb = 1; // Prevent division by zero
         int memoryPercent = (int) ((usedMb * 100) / maxMb);
         NamedTextColor memColor = memoryPercent < 70 ? NamedTextColor.GREEN : (memoryPercent < 85 ? NamedTextColor.YELLOW : NamedTextColor.RED);
         inventory.setItem(11, createGuiItem(Material.ENDER_CHEST, Component.text("Memory", NamedTextColor.AQUA),

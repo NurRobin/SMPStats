@@ -8,7 +8,6 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
@@ -117,8 +116,6 @@ public class LeaderboardsGui implements InventoryGui, InventoryHolder {
         for (int i = startIndex; i < endIndex && displaySlot < 28; i++) {
             StatsRecord record = allStats.get(i);
             int rank = i + 1;
-            
-            OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(record.getUuid());
             Material headMaterial = getRankMaterial(rank);
             
             inventory.setItem(displaySlot, createGuiItem(headMaterial,

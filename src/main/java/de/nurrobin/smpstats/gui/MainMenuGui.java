@@ -21,7 +21,6 @@ public class MainMenuGui implements InventoryGui, InventoryHolder {
     private final Inventory inventory;
     private final StatsService statsService;
     private final ServerHealthService healthService;
-    private Player viewer;
 
     public MainMenuGui(SMPStats plugin, GuiManager guiManager, StatsService statsService, ServerHealthService healthService) {
         this.plugin = plugin;
@@ -32,8 +31,6 @@ public class MainMenuGui implements InventoryGui, InventoryHolder {
     }
 
     private void initializeItems(Player player) {
-        this.viewer = player;
-        
         // My Stats - use player's head
         inventory.setItem(11, createPlayerHead(player, Component.text("My Stats", NamedTextColor.GOLD), 
                 Component.text("View your personal statistics", NamedTextColor.GRAY)));
