@@ -193,9 +193,9 @@ public class EntityBreakdownGui implements InventoryGui, InventoryHolder {
                 
                 if (event.getClick() == ClickType.SHIFT_RIGHT) {
                     // Kill all - check for confirmation
-                    if (!player.hasPermission("smpstats.admin")) {
+                    if (!player.hasPermission("smpstats.gui.health.manage") && !player.hasPermission("smpstats.admin")) {
                         playErrorSound(player);
-                        player.sendMessage(Component.text("You need smpstats.admin permission to kill entities.", NamedTextColor.RED));
+                        player.sendMessage(Component.text("You need smpstats.gui.health.manage permission to kill entities.", NamedTextColor.RED));
                         return;
                     }
                     
