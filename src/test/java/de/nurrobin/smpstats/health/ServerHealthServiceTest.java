@@ -220,7 +220,7 @@ class ServerHealthServiceTest {
                 true, 0L, 1L, true, 1, 1.0, List.of(), List.of(),
                 false, 1, 1, false,
                 true, true, 1, 1,
-                enabled, 1, 0.2, 0.02, 0.2, 0.1,
+                enabled, 1, 0.2, 0.02, 0.2, 0.1, de.nurrobin.smpstats.health.HealthThresholds.defaults(),
                 false, 1, 0, "", 1, 1);
     }
 }

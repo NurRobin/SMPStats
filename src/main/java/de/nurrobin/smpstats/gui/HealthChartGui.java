@@ -1,7 +1,9 @@
 package de.nurrobin.smpstats.gui;
 
 import de.nurrobin.smpstats.SMPStats;
+import de.nurrobin.smpstats.Settings;
 import de.nurrobin.smpstats.health.HealthSnapshot;
+import de.nurrobin.smpstats.health.HealthThresholds;
 import de.nurrobin.smpstats.health.ServerHealthService;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -13,6 +15,8 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 import java.util.function.Function;
 
@@ -21,6 +25,7 @@ import static de.nurrobin.smpstats.gui.GuiUtils.*;
 /**
  * Displays a primitive chart of health metrics over time using inventory slots.
  * The chart uses 9 columns (width) and 4 rows (height) for the graph area.
+ * Each column shows a timestamp in the lore indicating when that data point was recorded.
  */
 public class HealthChartGui implements InventoryGui, InventoryHolder {
     
@@ -50,6 +55,21 @@ public class HealthChartGui implements InventoryGui, InventoryHolder {
             this.minValue = minValue;
             this.maxValue = maxValue;
         }
+        
+        /**
+         * Gets the appropriate threshold for this metric type.
+         */
+        public HealthThresholds.MetricThreshold getThreshold(HealthThresholds thresholds) {
+            return switch (this) {
+                case TPS -> thresholds.getTps();
+                case MEMORY -> thresholds.getMemory();
+                case CHUNKS -> thresholds.getChunks();
+                case ENTITIES -> thresholds.getEntities();
+                case HOPPERS -> thresholds.getHoppers();
+                case REDSTONE -> thresholds.getRedstone();
+                case COST_INDEX -> thresholds.getCostIndex();
+            };
+        }
     }
     
     public enum TimeScale {
@@ -65,16 +85,22 @@ public class HealthChartGui implements InventoryGui, InventoryHolder {
             this.minutes = minutes;
             this.label = label;
         }
+        
+        public int getMinutes() {
+            return minutes;
+        }
     }
     
     private static final int CHART_START_ROW = 0;
     private static final int CHART_HEIGHT = 4; // 4 rows for the chart
     private static final int CHART_WIDTH = 9;  // Full width
+    private static final SimpleDateFormat TIME_FORMAT = new SimpleDateFormat("HH:mm:ss");
     
     private final SMPStats plugin;
     private final GuiManager guiManager;
     private final ServerHealthService healthService;
     private final MetricType metricType;
+    private final HealthThresholds thresholds;
     private TimeScale timeScale;
     private final Inventory inventory;
 
@@ -85,6 +111,7 @@ public class HealthChartGui implements InventoryGui, InventoryHolder {
         this.healthService = healthService;
         this.metricType = metricType;
         this.timeScale = timeScale;
+        this.thresholds = plugin.getSettings().getHealthThresholds();
         this.inventory = Bukkit.createInventory(this, 54, 
                 Component.text(metricType.displayName + " History", metricType.color));
         initializeItems();
@@ -107,10 +134,12 @@ public class HealthChartGui implements InventoryGui, InventoryHolder {
     }
     
     private void drawChart(List<HealthSnapshot> history) {
-        // Extract values
+        // Extract values and timestamps
         double[] values = new double[history.size()];
+        long[] timestamps = new long[history.size()];
         for (int i = 0; i < history.size(); i++) {
             values[i] = metricType.extractor.apply(history.get(i));
+            timestamps[i] = history.get(i).timestamp();
         }
         
         // Determine scale
@@ -127,8 +156,12 @@ public class HealthChartGui implements InventoryGui, InventoryHolder {
             maxVal = maxVal * 1.1; // Add 10% headroom
         }
         
-        // Sample values to fit 9 columns
+        // Sample values and timestamps to fit 9 columns
         double[] sampledValues = sampleToWidth(values, CHART_WIDTH);
+        long[] sampledTimestamps = sampleTimestampsToWidth(timestamps, CHART_WIDTH);
+        
+        // Get threshold for color coding
+        HealthThresholds.MetricThreshold threshold = metricType.getThreshold(thresholds);
         
         // Draw the chart using colored glass panes
         // Row 0 (top) = highest values, Row 3 (bottom of chart) = lowest values
@@ -138,20 +171,27 @@ public class HealthChartGui implements InventoryGui, InventoryHolder {
             int filledRows = (int) Math.round(normalizedValue * CHART_HEIGHT);
             filledRows = Math.max(0, Math.min(CHART_HEIGHT, filledRows));
             
+            // Format timestamp for this column
+            String timeStr = formatTimestamp(sampledTimestamps[col]);
+            String status = threshold.getStatus(value);
+            
             for (int row = 0; row < CHART_HEIGHT; row++) {
                 int slot = (CHART_START_ROW + row) * 9 + col;
                 int rowFromBottom = CHART_HEIGHT - 1 - row;
                 
                 if (rowFromBottom < filledRows) {
-                    // This row is filled
-                    Material barMaterial = getBarMaterial(normalizedValue);
+                    // This row is filled - use threshold-based coloring
+                    Material barMaterial = getBarMaterialFromThreshold(value, threshold);
                     String valueStr = formatValue(value);
                     inventory.setItem(slot, createGuiItem(barMaterial, 
-                            Component.text(metricType.displayName + ": " + valueStr, metricType.color)));
+                            Component.text(metricType.displayName + ": " + valueStr, metricType.color),
+                            Component.text("Status: " + status, getStatusColor(status)),
+                            Component.text("Time: " + timeStr, NamedTextColor.GRAY)));
                 } else {
-                    // Empty row
+                    // Empty row - still show timestamp on hover
                     inventory.setItem(slot, createGuiItem(Material.BLACK_STAINED_GLASS_PANE, 
-                            Component.text(" ")));
+                            Component.text(" "),
+                            Component.text("Time: " + timeStr, NamedTextColor.DARK_GRAY)));
                 }
             }
         }
@@ -160,11 +200,65 @@ public class HealthChartGui implements InventoryGui, InventoryHolder {
         HealthSnapshot latest = healthService.getLatest();
         if (latest != null) {
             double currentValue = metricType.extractor.apply(latest);
+            String status = threshold.getStatus(currentValue);
             inventory.setItem(40, createGuiItem(metricType.icon,
                     Component.text("Current: " + formatValue(currentValue), metricType.color),
-                    Component.text("Min: " + formatValue(minVal) + " | Max: " + formatValue(maxVal), NamedTextColor.GRAY),
-                    Component.text("Samples: " + history.size(), NamedTextColor.DARK_GRAY)));
+                    Component.text("Status: " + status, getStatusColor(status)),
+                    Component.text("Scale: " + timeScale.label + " | Samples: " + history.size(), NamedTextColor.GRAY),
+                    Component.text("Thresholds - Good: " + formatValue(threshold.good()) 
+                            + " | Warn: " + formatValue(threshold.warning()), NamedTextColor.DARK_GRAY)));
         }
+    }
+    
+    private long[] sampleTimestampsToWidth(long[] timestamps, int width) {
+        long[] result = new long[width];
+        if (timestamps.length == 0) {
+            long now = System.currentTimeMillis();
+            for (int i = 0; i < width; i++) {
+                result[i] = now;
+            }
+            return result;
+        }
+        
+        if (timestamps.length <= width) {
+            for (int col = 0; col < width; col++) {
+                int idx = (int) ((col * (timestamps.length - 1)) / (double) Math.max(1, width - 1));
+                idx = Math.min(idx, timestamps.length - 1);
+                result[col] = timestamps[idx];
+            }
+        } else {
+            double bucketSize = (double) timestamps.length / width;
+            for (int col = 0; col < width; col++) {
+                int idx = (int) ((col + 0.5) * bucketSize);
+                idx = Math.min(idx, timestamps.length - 1);
+                result[col] = timestamps[idx];
+            }
+        }
+        return result;
+    }
+    
+    private String formatTimestamp(long timestamp) {
+        if (timestamp == 0) return "N/A";
+        return TIME_FORMAT.format(new Date(timestamp));
+    }
+    
+    private NamedTextColor getStatusColor(String status) {
+        return switch (status) {
+            case "Good" -> NamedTextColor.GREEN;
+            case "Acceptable" -> NamedTextColor.DARK_GREEN;
+            case "Warning" -> NamedTextColor.YELLOW;
+            case "Bad" -> NamedTextColor.GOLD;
+            default -> NamedTextColor.RED; // Critical
+        };
+    }
+    
+    private Material getBarMaterialFromThreshold(double value, HealthThresholds.MetricThreshold threshold) {
+        double quality = threshold.getQuality(value);
+        if (quality >= 1.0) return Material.LIME_STAINED_GLASS_PANE;     // Good
+        if (quality >= 0.75) return Material.GREEN_STAINED_GLASS_PANE;   // Acceptable
+        if (quality >= 0.5) return Material.YELLOW_STAINED_GLASS_PANE;   // Warning
+        if (quality >= 0.25) return Material.ORANGE_STAINED_GLASS_PANE;  // Bad
+        return Material.RED_STAINED_GLASS_PANE;                          // Critical
     }
     
     private double[] sampleToWidth(double[] values, int width) {
@@ -198,24 +292,6 @@ public class HealthChartGui implements InventoryGui, InventoryHolder {
             }
         }
         return result;
-    }
-    
-    private Material getBarMaterial(double normalizedValue) {
-        if (metricType == MetricType.TPS) {
-            // For TPS, higher is better
-            if (normalizedValue >= 0.9) return Material.LIME_STAINED_GLASS_PANE;
-            if (normalizedValue >= 0.75) return Material.GREEN_STAINED_GLASS_PANE;
-            if (normalizedValue >= 0.5) return Material.YELLOW_STAINED_GLASS_PANE;
-            if (normalizedValue >= 0.25) return Material.ORANGE_STAINED_GLASS_PANE;
-            return Material.RED_STAINED_GLASS_PANE;
-        } else {
-            // For other metrics, lower is often better (memory, entities, etc.)
-            if (normalizedValue <= 0.25) return Material.LIME_STAINED_GLASS_PANE;
-            if (normalizedValue <= 0.5) return Material.GREEN_STAINED_GLASS_PANE;
-            if (normalizedValue <= 0.7) return Material.YELLOW_STAINED_GLASS_PANE;
-            if (normalizedValue <= 0.85) return Material.ORANGE_STAINED_GLASS_PANE;
-            return Material.RED_STAINED_GLASS_PANE;
-        }
     }
     
     private String formatValue(double value) {

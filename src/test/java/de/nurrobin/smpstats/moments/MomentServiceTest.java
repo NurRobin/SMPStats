@@ -185,7 +185,7 @@ class MomentServiceTest {
                 true, 0L, 1L, true, 1, 1.0, defs, List.of(),
                 false, 1, 1, false,
                 true, true, 1, 1,
-                false, 1, 0, 0, 0, 0,
+                false, 1, 0, 0, 0, 0, de.nurrobin.smpstats.health.HealthThresholds.defaults(),
                 false, 1, 1, "", 1, 1);
     }
 }

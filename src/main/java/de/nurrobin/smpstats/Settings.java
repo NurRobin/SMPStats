@@ -1,5 +1,6 @@
 package de.nurrobin.smpstats;
 
+import de.nurrobin.smpstats.health.HealthThresholds;
 import de.nurrobin.smpstats.skills.SkillWeights;
 
 public class Settings {
@@ -37,6 +38,7 @@ public class Settings {
     private final double healthEntityWeight;
     private final double healthHopperWeight;
     private final double healthRedstoneWeight;
+    private final HealthThresholds healthThresholds;
     private final boolean storyEnabled;
     private final int storyIntervalDays;
     private final int storySummaryHour;
@@ -78,6 +80,7 @@ public class Settings {
                     double healthEntityWeight,
                     double healthHopperWeight,
                     double healthRedstoneWeight,
+                    HealthThresholds healthThresholds,
                     boolean storyEnabled,
                     int storyIntervalDays,
                     int storySummaryHour,
@@ -118,6 +121,7 @@ public class Settings {
         this.healthEntityWeight = healthEntityWeight;
         this.healthHopperWeight = healthHopperWeight;
         this.healthRedstoneWeight = healthRedstoneWeight;
+        this.healthThresholds = healthThresholds;
         this.storyEnabled = storyEnabled;
         this.storyIntervalDays = storyIntervalDays;
         this.storySummaryHour = storySummaryHour;
@@ -260,6 +264,10 @@ public class Settings {
 
     public double getHealthRedstoneWeight() {
         return healthRedstoneWeight;
+    }
+
+    public HealthThresholds getHealthThresholds() {
+        return healthThresholds;
     }
 
     public boolean isStoryEnabled() {
