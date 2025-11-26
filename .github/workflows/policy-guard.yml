@@ -34,11 +34,11 @@ jobs:
           git fetch origin "$BASE" --depth=1
 
           SKIP=$(python - <<'PY'
-import json, os
-labels=[l["name"] for l in json.load(open(os.environ["GITHUB_EVENT_PATH"]))["pull_request"].get("labels", [])]
-print("yes" if "skip-changelog" in labels else "")
-PY
-)
+          import json, os
+          labels=[l["name"] for l in json.load(open(os.environ["GITHUB_EVENT_PATH"]))["pull_request"].get("labels", [])]
+          print("yes" if "skip-changelog" in labels else "")
+          PY
+          )
           if [[ "$SKIP" == "yes" ]]; then
             echo "skip-changelog label present; skipping changelog check."
             exit 0
