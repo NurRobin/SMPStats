@@ -91,4 +91,45 @@ class GuiManagerTest {
         verify(event, never()).setCancelled(true);
         verify(mockGui, never()).handleClick(event);
     }
+
+    @Test
+    void testInventoryDrag() {
+        InventoryGui mockGui = mock(InventoryGui.class);
+        Inventory mockInventory = server.createInventory(null, 9);
+        when(mockGui.getInventory()).thenReturn(mockInventory);
+
+        guiManager.openGui(player, mockGui);
+
+        org.bukkit.event.inventory.InventoryDragEvent event = mock(org.bukkit.event.inventory.InventoryDragEvent.class);
+        when(event.getWhoClicked()).thenReturn(player);
+        when(event.getInventory()).thenReturn(mockInventory);
+
+        guiManager.onInventoryDrag(event);
+
+        verify(event).setCancelled(true);
+    }
+
+    @Test
+    void testInventoryClose() {
+        InventoryGui mockGui = mock(InventoryGui.class);
+        Inventory mockInventory = server.createInventory(null, 9);
+        when(mockGui.getInventory()).thenReturn(mockInventory);
+
+        guiManager.openGui(player, mockGui);
+
+        org.bukkit.event.inventory.InventoryCloseEvent event = mock(org.bukkit.event.inventory.InventoryCloseEvent.class);
+        when(event.getPlayer()).thenReturn(player);
+        when(event.getInventory()).thenReturn(mockInventory);
+
+        guiManager.onInventoryClose(event);
+
+        // Verify it's removed by checking if click no longer works
+        InventoryClickEvent clickEvent = mock(InventoryClickEvent.class);
+        when(clickEvent.getWhoClicked()).thenReturn(player);
+        when(clickEvent.getInventory()).thenReturn(mockInventory);
+
+        guiManager.onInventoryClick(clickEvent);
+
+        verify(mockGui, never()).handleClick(clickEvent);
+    }
 }
