@@ -2,6 +2,7 @@ package de.nurrobin.smpstats.listeners;
 
 import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.StatsService;
+import de.nurrobin.smpstats.social.SocialStatsService;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
@@ -16,10 +17,12 @@ import org.bukkit.projectiles.ProjectileSource;
 public class CombatListener implements Listener {
     private final SMPStats plugin;
     private final StatsService statsService;
+    private final SocialStatsService socialStatsService;
 
-    public CombatListener(SMPStats plugin, StatsService statsService) {
+    public CombatListener(SMPStats plugin, StatsService statsService, SocialStatsService socialStatsService) {
         this.plugin = plugin;
         this.statsService = statsService;
+        this.socialStatsService = socialStatsService;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -33,6 +36,9 @@ public class CombatListener implements Listener {
         Player killer = victim.getKiller();
         if (killer != null) {
             statsService.addPlayerKill(killer.getUniqueId());
+            if (socialStatsService != null) {
+                socialStatsService.recordSharedKill(killer, true);
+            }
         }
     }
 
@@ -44,6 +50,9 @@ public class CombatListener implements Listener {
         Player killer = event.getEntity().getKiller();
         if (killer != null) {
             statsService.addMobKill(killer.getUniqueId());
+            if (socialStatsService != null) {
+                socialStatsService.recordSharedKill(killer, false);
+            }
         }
     }
 

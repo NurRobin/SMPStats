@@ -8,8 +8,10 @@ It automatically tracks player activity, exposes data via in-game commands and a
 - Skill profiles (mining/combat/exploration/builder/farmer) with configurable weights and display in `/stats`.
 - Moments engine: configurable triggers (block_break/death/death_fall/first_death/damage_low_hp/death_explosion/item_gain/boss_kill) with merge windows (e.g., diamond runs), SSE/REST feed.
 - Heatmaps: chunk bins for mining/deaths + hotspot counters (configurable regions).
-- Social stats: time spent nearby (pair counters).
-- Timeline snapshots: daily aggregates per player.
+- Social stats: time spent nearby (pair counters) + shared kills near each other.
+- Timeline snapshots: daily aggregates per player, range deltas + leaderboards.
+- Server health index: counts chunks/entities/hoppers/redstone with cost score + HTTP endpoint.
+- Story generator: weekly JSON summary (top players/social + recent moments) with optional webhook.
 - Death Replay Lite: store death snapshots (cause, position, health, nearby entities, inventory contents).
 - Optional HTTP API with API key.
 
@@ -37,8 +39,11 @@ Auth: `X-API-Key: <key>`
 - `GET /heatmap/<type>` – heatmap bins (e.g., MINING/DEATH)
 - `GET /heatmap/hotspots/<type>` – hotspot counters
 - `GET /timeline/<uuid>?limit=` – daily timeline entries
+- `GET /timeline/range/<uuid>?days=` – delta stats for a period (weekly/monthly)
+- `GET /timeline/leaderboard?days=&limit=` – per-period leaderboard (playtime-first)
 - `GET /social/top?limit=` – top nearby pairs
 - `GET /death/replay?limit=` – death replay entries
+- `GET /health` – latest server health snapshot (chunks/entities/hoppers/redstone + costIndex)
 
 ## 💾 Storage
 Uses local **SQLite**. Schema auto-migrates and blocks downgrades.
@@ -70,9 +75,14 @@ heatmap:
   enabled: true
 social:
   enabled: true
+  nearby_radius: 16
 timeline:
   enabled: true
 death_replay:
+  enabled: true
+health:
+  enabled: true
+story:
   enabled: true
 ```
 

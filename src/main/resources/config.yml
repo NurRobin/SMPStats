@@ -1,24 +1,24 @@
-config_version: 2
+config_version: 3
 
 api:
-  enabled: true            # HTTP API aktivieren
-  bind_address: "0.0.0.0"  # Bind-Adresse, i.d.R. 0.0.0.0
-  port: 8765               # API Port
-  api_key: "YouShouldChangeThisKey" # Setze einen geheimen Key
+  enabled: true            # Enable HTTP API
+  bind_address: "0.0.0.0"  # Bind address, usually 0.0.0.0
+  port: 8765               # API port
+  api_key: "YouShouldChangeThisKey" # Set a secret key
 
 tracking:
-  movement: true      # Distanz-Tracking (Dimensionen)
-  blocks: true        # Blöcke platziert/abgebaut
-  kills: true         # Player/Mob-Kills
-  biomes: true        # Besuchte Biome
-  crafting: true      # Crafting-Anzahl
-  damage: true        # Schaden ausgeteilt/erhalten
-  consumption: true   # Konsumierte Items
+  movement: true      # Distance tracking (dimensions)
+  blocks: true        # Blocks placed/broken
+  kills: true         # Player/mob kills
+  biomes: true        # Visited biomes
+  crafting: true      # Crafted item count
+  damage: true        # Damage dealt/taken
+  consumption: true   # Items consumed
 
-autosave_minutes: 5   # Autosave-Intervall (Minuten)
+autosave_minutes: 5   # Autosave interval (minutes)
 
 skills:
-  # Gewichte bestimmen die "Skill-Score"-Berechnung. Nur Anzeige, kein Gameplay-Eingriff.
+  # Weights drive the "skill score" calculation. Display only, no gameplay impact.
   mining:
     blocks_broken_weight: 0.05
   combat:
@@ -36,7 +36,7 @@ skills:
 
 moments:
   enabled: true
-  flush_seconds: 10    # Prüft offene Merge-Fenster
+  flush_seconds: 10    # Checks open merge windows
   definitions:
     diamond_run:
       type: block_break
@@ -73,7 +73,7 @@ moments:
 
 heatmap:
   enabled: true
-  flush_minutes: 5     # Schreibintervall für Heatmap-Bins (Chunk-basiert)
+  flush_minutes: 5     # Write interval for heatmap bins (chunk-based)
   hotspots:
     spawn:
       name: "Spawn"
@@ -83,7 +83,8 @@ heatmap:
 
 social:
   enabled: true
-  sample_seconds: 5    # Abstand für Nähe-Samples (Sekunden)
+  sample_seconds: 5    # Interval for proximity samples (seconds)
+  nearby_radius: 16    # Radius for shared actions (blocks)
 
 timeline:
   enabled: true
@@ -91,5 +92,21 @@ timeline:
 death_replay:
   enabled: true
   include_inventory_items: true
-  nearby_radius: 16   # Blöcke
-  limit: 50           # Anzahl gespeicherter Death Reports
+  nearby_radius: 16   # Radius to include nearby entities (blocks)
+  limit: 50           # Number of stored death reports
+health:
+  enabled: true
+  sample_minutes: 5
+  weights:
+    chunk: 0.02
+    entity: 0.005
+    hopper: 0.2
+    redstone: 0.1
+
+story:
+  enabled: true
+  interval_days: 7
+  summary_hour: 6           # Server time (hour 0-23) to emit weekly summary
+  webhook_url: ""           # Optional HTTP endpoint for JSON export
+  top_limit: 5              # Top players included in summary
+  recent_moments: 10        # Moments included with the summary

@@ -70,12 +70,28 @@ Returned by `/timeline/*`. Each entry is a map with keys:
 ### Social pair row
 Returned by `/social/top`.
 
-`{ "a": "<uuidA>", "b": "<uuidB>", "seconds": <long> }` — `seconds` is time both players were within 16 blocks of each other.
+`{ "a": "<uuidA>", "b": "<uuidB>", "name_a": "<nameA>", "name_b": "<nameB>", "seconds": <long>, "shared_kills": <long>, "shared_player_kills": <long>, "shared_mob_kills": <long> }` — `seconds` is time both players were within 16 blocks of each other; shared kill counters are kills made while the other player was within the configured radius.
 
 ### Death replay entry
 Returned by `/death/replay`.
 
 `timestamp`, `uuid`, `name`, `cause`, `health`, `world`, `x`, `y`, `z`, `fallDistance`, `nearbyPlayers` (string[]), `nearbyMobs` (string[]), `inventory` (string[]; only populated if `death_replay.include_inventory_items` is true).
+
+### Health snapshot
+Returned by `/health`.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `timestamp` | long | Capture time (ms since epoch) |
+| `chunks` | int | Loaded chunks (all worlds) |
+| `entities` | int | Loaded entities (all worlds) |
+| `hoppers` | int | Loaded hoppers (all worlds) |
+| `redstone` | int | Count of redstone-ish block entities (droppers/dispensers/observers/pistons/etc., excluding hoppers) |
+| `costIndex` | double | Weighted cost score (0-100) based on counts and config weights |
+| `worlds` | object | Per-world breakdown `{ "<world>": { chunks, entities, hoppers, redstone } }` |
+
+### Timeline range delta
+Returned by `/timeline/range/*`. Same numeric keys as timeline entries but represent deltas over the requested range, plus `from`/`to` day strings.
 
 ## Endpoints
 
@@ -122,6 +138,16 @@ Returned by `/death/replay`.
 - Response: list of timeline day maps ordered by `day` desc. If the timeline feature is disabled, an empty list is returned.
 - Note: values are cumulative totals captured at autosave times, not per-day diffs.
 
+### GET `/timeline/range/{uuid}?days=`
+- Purpose: aggregated deltas over a rolling range (weekly/monthly).
+- Query: `days` (int, default 7).
+- Response: map of deltas between the latest snapshot and the baseline before the window plus `from`/`to` day strings.
+
+### GET `/timeline/leaderboard?days=&limit=`
+- Purpose: leaderboard across players for a range.
+- Query: `days` (int, default 7), `limit` (int, default 20).
+- Response: list of rows ordered by `playtime_ms` delta (includes `uuid` + `name` and deltas for the tracked fields).
+
 ### GET `/social/top?limit=`
 - Purpose: pairs of players who spent the most time near each other.
 - Query: `limit` (int, default 50).
@@ -132,6 +158,10 @@ Returned by `/death/replay`.
 - Query: `limit` (int, default 20).
 - Response: list of `DeathReplayEntry` ordered by timestamp desc.
 - Errors: returns `500 Error` on storage failures (logged server-side).
+
+### GET `/health`
+- Purpose: latest server health snapshot.
+- Response: `HealthSnapshot` with global + per-world counts and cost index. If no sample exists yet, returns `404 No samples yet`.
 
 ## Quick usage example
 

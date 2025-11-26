@@ -24,11 +24,24 @@ public class Settings {
     private final java.util.List<de.nurrobin.smpstats.heatmap.HotspotDefinition> heatmapHotspots;
     private final boolean socialEnabled;
     private final int socialSampleSeconds;
+    private final int socialNearbyRadius;
     private final boolean timelineEnabled;
     private final boolean deathReplayEnabled;
     private final boolean deathReplayInventoryItems;
     private final int deathReplayNearbyRadius;
     private final int deathReplayLimit;
+    private final boolean healthEnabled;
+    private final int healthSampleMinutes;
+    private final double healthChunkWeight;
+    private final double healthEntityWeight;
+    private final double healthHopperWeight;
+    private final double healthRedstoneWeight;
+    private final boolean storyEnabled;
+    private final int storyIntervalDays;
+    private final int storySummaryHour;
+    private final String storyWebhookUrl;
+    private final int storyTopLimit;
+    private final int storyRecentMoments;
 
     public Settings(boolean trackMovement,
                     boolean trackBlocks,
@@ -51,11 +64,24 @@ public class Settings {
                     java.util.List<de.nurrobin.smpstats.heatmap.HotspotDefinition> heatmapHotspots,
                     boolean socialEnabled,
                     int socialSampleSeconds,
+                    int socialNearbyRadius,
                     boolean timelineEnabled,
                     boolean deathReplayEnabled,
                     boolean deathReplayInventoryItems,
                     int deathReplayNearbyRadius,
-                    int deathReplayLimit) {
+                    int deathReplayLimit,
+                    boolean healthEnabled,
+                    int healthSampleMinutes,
+                    double healthChunkWeight,
+                    double healthEntityWeight,
+                    double healthHopperWeight,
+                    double healthRedstoneWeight,
+                    boolean storyEnabled,
+                    int storyIntervalDays,
+                    int storySummaryHour,
+                    String storyWebhookUrl,
+                    int storyTopLimit,
+                    int storyRecentMoments) {
         this.trackMovement = trackMovement;
         this.trackBlocks = trackBlocks;
         this.trackKills = trackKills;
@@ -77,11 +103,24 @@ public class Settings {
         this.heatmapHotspots = heatmapHotspots;
         this.socialEnabled = socialEnabled;
         this.socialSampleSeconds = socialSampleSeconds;
+        this.socialNearbyRadius = socialNearbyRadius;
         this.timelineEnabled = timelineEnabled;
         this.deathReplayEnabled = deathReplayEnabled;
         this.deathReplayInventoryItems = deathReplayInventoryItems;
         this.deathReplayNearbyRadius = deathReplayNearbyRadius;
         this.deathReplayLimit = deathReplayLimit;
+        this.healthEnabled = healthEnabled;
+        this.healthSampleMinutes = healthSampleMinutes;
+        this.healthChunkWeight = healthChunkWeight;
+        this.healthEntityWeight = healthEntityWeight;
+        this.healthHopperWeight = healthHopperWeight;
+        this.healthRedstoneWeight = healthRedstoneWeight;
+        this.storyEnabled = storyEnabled;
+        this.storyIntervalDays = storyIntervalDays;
+        this.storySummaryHour = storySummaryHour;
+        this.storyWebhookUrl = storyWebhookUrl;
+        this.storyTopLimit = storyTopLimit;
+        this.storyRecentMoments = storyRecentMoments;
     }
 
     public boolean isTrackMovement() {
@@ -168,6 +207,10 @@ public class Settings {
         return socialSampleSeconds;
     }
 
+    public int getSocialNearbyRadius() {
+        return socialNearbyRadius;
+    }
+
     public boolean isTimelineEnabled() {
         return timelineEnabled;
     }
@@ -186,5 +229,53 @@ public class Settings {
 
     public int getDeathReplayLimit() {
         return deathReplayLimit;
+    }
+
+    public boolean isHealthEnabled() {
+        return healthEnabled;
+    }
+
+    public int getHealthSampleMinutes() {
+        return healthSampleMinutes;
+    }
+
+    public double getHealthChunkWeight() {
+        return healthChunkWeight;
+    }
+
+    public double getHealthEntityWeight() {
+        return healthEntityWeight;
+    }
+
+    public double getHealthHopperWeight() {
+        return healthHopperWeight;
+    }
+
+    public double getHealthRedstoneWeight() {
+        return healthRedstoneWeight;
+    }
+
+    public boolean isStoryEnabled() {
+        return storyEnabled;
+    }
+
+    public int getStoryIntervalDays() {
+        return storyIntervalDays;
+    }
+
+    public int getStorySummaryHour() {
+        return storySummaryHour;
+    }
+
+    public String getStoryWebhookUrl() {
+        return storyWebhookUrl;
+    }
+
+    public int getStoryTopLimit() {
+        return storyTopLimit;
+    }
+
+    public int getStoryRecentMoments() {
+        return storyRecentMoments;
     }
 }

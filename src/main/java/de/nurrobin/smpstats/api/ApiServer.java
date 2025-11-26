@@ -7,6 +7,8 @@ import de.nurrobin.smpstats.StatsRecord;
 import de.nurrobin.smpstats.StatsService;
 import de.nurrobin.smpstats.moments.MomentService;
 import de.nurrobin.smpstats.heatmap.HeatmapService;
+import de.nurrobin.smpstats.health.ServerHealthService;
+import de.nurrobin.smpstats.social.SocialPairRow;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -19,6 +21,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -31,17 +34,19 @@ public class ApiServer {
     private final MomentService momentService;
     private final HeatmapService heatmapService;
     private final de.nurrobin.smpstats.timeline.TimelineService timelineService;
+    private final ServerHealthService serverHealthService;
     private final Gson gson = new Gson();
 
     private HttpServer server;
 
-    public ApiServer(SMPStats plugin, StatsService statsService, Settings settings, MomentService momentService, HeatmapService heatmapService, de.nurrobin.smpstats.timeline.TimelineService timelineService) {
+    public ApiServer(SMPStats plugin, StatsService statsService, Settings settings, MomentService momentService, HeatmapService heatmapService, de.nurrobin.smpstats.timeline.TimelineService timelineService, ServerHealthService serverHealthService) {
         this.plugin = plugin;
         this.statsService = statsService;
         this.settings = settings;
         this.momentService = momentService;
         this.heatmapService = heatmapService;
         this.timelineService = timelineService;
+        this.serverHealthService = serverHealthService;
     }
 
     public void start() {
@@ -62,6 +67,7 @@ public class ApiServer {
         server.createContext("/timeline", new TimelineHandler());
         server.createContext("/social/top", new SocialTopHandler());
         server.createContext("/death/replay", new DeathReplayHandler());
+        server.createContext("/health", new HealthHandler());
         server.setExecutor(Executors.newCachedThreadPool());
         server.start();
 
@@ -261,7 +267,29 @@ public class ApiServer {
             if (!authorize(exchange)) {
                 return;
             }
-            String path = exchange.getRequestURI().getPath().substring("/timeline".length()); // /timeline/<uuid>
+            String path = exchange.getRequestURI().getPath().substring("/timeline".length());
+            if (path.startsWith("/leaderboard")) {
+                int days = queryParam(exchange.getRequestURI(), "days").map(Integer::parseInt).orElse(7);
+                int limit = queryParam(exchange.getRequestURI(), "limit").map(Integer::parseInt).orElse(20);
+                sendJson(exchange, 200, timelineLeaderboard(days, limit));
+                return;
+            }
+            if (path.startsWith("/range")) {
+                String[] parts = path.split("/");
+                if (parts.length < 3) {
+                    sendText(exchange, 400, "Missing player id");
+                    return;
+                }
+                String id = parts[2];
+                try {
+                    UUID uuid = UUID.fromString(id);
+                    int days = queryParam(exchange.getRequestURI(), "days").map(Integer::parseInt).orElse(7);
+                    sendJson(exchange, 200, statsService.getStorage().loadTimelineRange(uuid, days));
+                } catch (Exception e) {
+                    sendText(exchange, 400, "Invalid UUID");
+                }
+                return;
+            }
             if (path.isEmpty() || "/".equals(path)) {
                 sendText(exchange, 400, "Missing player id");
                 return;
@@ -284,6 +312,24 @@ public class ApiServer {
                 return List.of();
             }
         }
+
+        private List<Map<String, Object>> timelineLeaderboard(int days, int limit) {
+            List<Map<String, Object>> out = new ArrayList<>();
+            try {
+                for (Map<String, Object> row : statsService.getStorage().loadTimelineLeaderboard(days, limit)) {
+                    Map<String, Object> copy = new LinkedHashMap<>(row);
+                    try {
+                        UUID uuid = UUID.fromString(row.get("uuid").toString());
+                        copy.put("name", resolveName(uuid));
+                    } catch (IllegalArgumentException ignored) {
+                    }
+                    out.add(copy);
+                }
+            } catch (Exception e) {
+                plugin.getLogger().warning("Timeline leaderboard failed: " + e.getMessage());
+            }
+            return out;
+        }
     }
 
     private class SocialTopHandler implements HttpHandler {
@@ -295,13 +341,17 @@ public class ApiServer {
             int limit = queryParam(exchange.getRequestURI(), "limit").map(Integer::parseInt).orElse(50);
             List<Map<String, Object>> out = new ArrayList<>();
             try {
-                for (var entry : statsService.getStorage().loadTopSocial(limit)) {
-                    String[] parts = entry.getKey().split(",");
-                    Map<String, Object> row = new HashMap<>();
-                    row.put("a", parts[0]);
-                    row.put("b", parts.length > 1 ? parts[1] : "");
-                    row.put("seconds", entry.getValue());
-                    out.add(row);
+                for (SocialPairRow row : statsService.getStorage().loadTopSocial(limit)) {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("a", row.uuidA().toString());
+                    map.put("b", row.uuidB().toString());
+                    map.put("name_a", resolveName(row.uuidA()));
+                    map.put("name_b", resolveName(row.uuidB()));
+                    map.put("seconds", row.seconds());
+                    map.put("shared_kills", row.sharedKills());
+                    map.put("shared_player_kills", row.sharedPlayerKills());
+                    map.put("shared_mob_kills", row.sharedMobKills());
+                    out.add(map);
                 }
             } catch (Exception e) {
                 plugin.getLogger().warning("Could not load social top: " + e.getMessage());
@@ -324,5 +374,30 @@ public class ApiServer {
                 sendText(exchange, 500, "Error");
             }
         }
+    }
+
+    private class HealthHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!authorize(exchange)) {
+                return;
+            }
+            if (serverHealthService == null) {
+                sendJson(exchange, 200, Map.of());
+                return;
+            }
+            var snapshot = serverHealthService.getLatest();
+            if (snapshot == null) {
+                sendText(exchange, 404, "No samples yet");
+                return;
+            }
+            sendJson(exchange, 200, snapshot);
+        }
+    }
+
+    private String resolveName(UUID uuid) {
+        return statsService.getStats(uuid)
+                .map(StatsRecord::getName)
+                .orElse(uuid.toString());
     }
 }

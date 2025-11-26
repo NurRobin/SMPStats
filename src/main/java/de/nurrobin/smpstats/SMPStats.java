@@ -19,6 +19,8 @@ import de.nurrobin.smpstats.heatmap.HotspotDefinition;
 import de.nurrobin.smpstats.social.SocialStatsService;
 import de.nurrobin.smpstats.timeline.TimelineService;
 import de.nurrobin.smpstats.timeline.DeathReplayService;
+import de.nurrobin.smpstats.health.ServerHealthService;
+import de.nurrobin.smpstats.story.StoryService;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -33,7 +35,7 @@ import java.sql.SQLException;
 import java.util.Objects;
 
 public class SMPStats extends JavaPlugin {
-    private static final int CONFIG_VERSION = 2;
+    private static final int CONFIG_VERSION = 3;
     private StatsStorage storage;
     private StatsService statsService;
     private Settings settings;
@@ -43,6 +45,8 @@ public class SMPStats extends JavaPlugin {
     private SocialStatsService socialStatsService;
     private TimelineService timelineService;
     private DeathReplayService deathReplayService;
+    private ServerHealthService serverHealthService;
+    private StoryService storyService;
     private int autosaveTaskId = -1;
 
     @Override
@@ -66,6 +70,8 @@ public class SMPStats extends JavaPlugin {
         this.socialStatsService = new SocialStatsService(this, storage, settings);
         this.timelineService = new TimelineService(this, storage, settings);
         this.deathReplayService = new DeathReplayService(this, storage, settings);
+        this.serverHealthService = new ServerHealthService(this, settings);
+        this.storyService = new StoryService(this, statsService, storage, momentService, settings);
 
         registerListeners();
         registerCommands();
@@ -78,6 +84,12 @@ public class SMPStats extends JavaPlugin {
         socialStatsService.start();
         if (deathReplayService != null) {
             deathReplayService.start();
+        }
+        if (serverHealthService != null) {
+            serverHealthService.start();
+        }
+        if (storyService != null) {
+            storyService.start();
         }
         startApiServer();
         logStartupBanner("Aktiv");
@@ -101,6 +113,12 @@ public class SMPStats extends JavaPlugin {
         if (deathReplayService != null) {
             deathReplayService.shutdown();
         }
+        if (serverHealthService != null) {
+            serverHealthService.shutdown();
+        }
+        if (storyService != null) {
+            storyService.shutdown();
+        }
         if (apiServer != null) {
             apiServer.stop();
         }
@@ -123,6 +141,14 @@ public class SMPStats extends JavaPlugin {
 
     public java.util.Optional<DeathReplayService> getDeathReplayService() {
         return java.util.Optional.ofNullable(deathReplayService);
+    }
+
+    public java.util.Optional<ServerHealthService> getServerHealthService() {
+        return java.util.Optional.ofNullable(serverHealthService);
+    }
+
+    public java.util.Optional<StoryService> getStoryService() {
+        return java.util.Optional.ofNullable(storyService);
     }
 
     public void reloadPluginConfig(CommandSender sender) {
@@ -152,6 +178,16 @@ public class SMPStats extends JavaPlugin {
             deathReplayService.shutdown();
             deathReplayService.updateSettings(settings);
             deathReplayService.start();
+        }
+        if (serverHealthService != null) {
+            serverHealthService.shutdown();
+            serverHealthService.updateSettings(settings);
+            serverHealthService.start();
+        }
+        if (storyService != null) {
+            storyService.shutdown();
+            storyService.updateSettings(settings);
+            storyService.start();
         }
         startAutosave();
         restartApiServer();
@@ -207,6 +243,7 @@ public class SMPStats extends JavaPlugin {
 
         boolean socialEnabled = config.getBoolean("social.enabled", true);
         int socialSampleSeconds = Math.max(1, config.getInt("social.sample_seconds", 5));
+        int socialNearbyRadius = Math.max(1, config.getInt("social.nearby_radius", 16));
 
         boolean timelineEnabled = config.getBoolean("timeline.enabled", true);
 
@@ -215,11 +252,27 @@ public class SMPStats extends JavaPlugin {
         int deathReplayNearbyRadius = Math.max(1, config.getInt("death_replay.nearby_radius", 16));
         int deathReplayLimit = Math.max(1, config.getInt("death_replay.limit", 20));
 
+        boolean healthEnabled = config.getBoolean("health.enabled", true);
+        int healthSampleMinutes = Math.max(1, config.getInt("health.sample_minutes", 5));
+        double healthChunkWeight = config.getDouble("health.weights.chunk", 0.02);
+        double healthEntityWeight = config.getDouble("health.weights.entity", 0.005);
+        double healthHopperWeight = config.getDouble("health.weights.hopper", 0.2);
+        double healthRedstoneWeight = config.getDouble("health.weights.redstone", 0.1);
+
+        boolean storyEnabled = config.getBoolean("story.enabled", true);
+        int storyIntervalDays = Math.max(1, config.getInt("story.interval_days", 7));
+        int storySummaryHour = Math.min(23, Math.max(0, config.getInt("story.summary_hour", 6)));
+        String storyWebhookUrl = config.getString("story.webhook_url", "");
+        int storyTopLimit = Math.max(1, config.getInt("story.top_limit", 5));
+        int storyRecentMoments = Math.max(0, config.getInt("story.recent_moments", 10));
+
         return new Settings(movement, blocks, kills, biomes, crafting, damage, consumption,
                 apiEnabled, apiPort, apiKey, autosaveMinutes, skillWeights,
                 momentsEnabled, diamondWindowSeconds, momentsFlushSeconds, heatmapEnabled, heatmapFlushMinutes, momentDefinitions, hotspots,
-                socialEnabled, socialSampleSeconds, timelineEnabled,
-                deathReplayEnabled, deathReplayInventoryItems, deathReplayNearbyRadius, deathReplayLimit);
+                socialEnabled, socialSampleSeconds, socialNearbyRadius, timelineEnabled,
+                deathReplayEnabled, deathReplayInventoryItems, deathReplayNearbyRadius, deathReplayLimit,
+                healthEnabled, healthSampleMinutes, healthChunkWeight, healthEntityWeight, healthHopperWeight, healthRedstoneWeight,
+                storyEnabled, storyIntervalDays, storySummaryHour, storyWebhookUrl, storyTopLimit, storyRecentMoments);
     }
 
     private void ensureConfigVersion() {
@@ -274,7 +327,7 @@ public class SMPStats extends JavaPlugin {
         PluginManager pm = getServer().getPluginManager();
         pm.registerEvents(new JoinQuitListener(statsService), this);
         pm.registerEvents(new BlockListener(this, statsService), this);
-        pm.registerEvents(new CombatListener(this, statsService), this);
+        pm.registerEvents(new CombatListener(this, statsService, socialStatsService), this);
         pm.registerEvents(new MovementListener(this, statsService), this);
         pm.registerEvents(new CraftingListener(this, statsService), this);
         pm.registerEvents(new MomentListener(momentService, deathReplayService), this);
@@ -320,7 +373,7 @@ public class SMPStats extends JavaPlugin {
             apiServer = null;
             return;
         }
-        apiServer = new ApiServer(this, statsService, settings, momentService, heatmapService, timelineService);
+        apiServer = new ApiServer(this, statsService, settings, momentService, heatmapService, timelineService, serverHealthService);
         apiServer.start();
     }
 

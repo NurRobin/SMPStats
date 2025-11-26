@@ -130,6 +130,11 @@ public class SStatsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(infoLine("Autosave", plugin.getSettings().getAutosaveMinutes() + " min"));
         sender.sendMessage(infoLine("Moments", plugin.getSettings().isMomentsEnabled() ? "On" : "Off"));
         sender.sendMessage(infoLine("Heatmap", plugin.getSettings().isHeatmapEnabled() ? "On" : "Off"));
+        sender.sendMessage(infoLine("Social", plugin.getSettings().isSocialEnabled()
+                ? "On (r=" + plugin.getSettings().getSocialNearbyRadius() + ")"
+                : "Off"));
+        sender.sendMessage(infoLine("Health", plugin.getSettings().isHealthEnabled() ? "On" : "Off"));
+        sender.sendMessage(infoLine("Story", plugin.getSettings().isStoryEnabled() ? "On" : "Off"));
         sender.sendMessage(infoLine("Tracking", trackingSummary()));
         sender.sendMessage(ChatColor.DARK_AQUA + "╚═══════════════════════════════");
     }
