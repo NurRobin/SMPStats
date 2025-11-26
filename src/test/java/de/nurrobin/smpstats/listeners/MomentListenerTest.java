@@ -4,14 +4,20 @@ import de.nurrobin.smpstats.moments.MomentService;
 import de.nurrobin.smpstats.timeline.DeathReplayService;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.TNTPrimed;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.junit.jupiter.api.Test;
+
+import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -75,5 +81,53 @@ class MomentListenerTest {
         when(pickup.getItem()).thenReturn(item);
         listener.onItemPickup(pickup);
         verify(momentService).onItemGain(player, Material.NETHERITE_INGOT, loc);
+    }
+
+    @Test
+    void detectsSelfInflictedExplosionOnDeath() {
+        MomentService momentService = mock(MomentService.class);
+        MomentListener listener = new MomentListener(momentService, null);
+
+        Player player = mock(Player.class);
+        when(player.getUniqueId()).thenReturn(UUID.randomUUID());
+        Location loc = mock(Location.class);
+        when(player.getLocation()).thenReturn(loc);
+        when(player.getFallDistance()).thenReturn(0f);
+
+        TNTPrimed tnt = mock(TNTPrimed.class);
+        when(tnt.getSource()).thenReturn(player);
+
+        EntityDamageByEntityEvent damage = mock(EntityDamageByEntityEvent.class);
+        when(damage.getDamager()).thenReturn(tnt);
+        when(damage.getCause()).thenReturn(EntityDamageEvent.DamageCause.ENTITY_EXPLOSION);
+
+        PlayerDeathEvent death = mock(PlayerDeathEvent.class);
+        when(death.getEntity()).thenReturn(player);
+        when(death.getEntity().getLastDamageCause()).thenReturn(damage);
+
+        listener.onDeath(death);
+
+        verify(momentService).onDeath(player, loc, 0f, "ENTITY_EXPLOSION", true);
+    }
+
+    @Test
+    void handlesBossDeathEvent() {
+        MomentService momentService = mock(MomentService.class);
+        MomentListener listener = new MomentListener(momentService, null);
+
+        Player killer = mock(Player.class);
+        Location loc = mock(Location.class);
+
+        LivingEntity wither = mock(LivingEntity.class);
+        when(wither.getKiller()).thenReturn(killer);
+        when(wither.getLocation()).thenReturn(loc);
+
+        EntityDeathEvent event = mock(EntityDeathEvent.class);
+        when(event.getEntityType()).thenReturn(EntityType.WITHER);
+        when(event.getEntity()).thenReturn(wither);
+
+        listener.onBossDeath(event);
+
+        verify(momentService).onBossKill(killer, "WITHER", loc);
     }
 }
