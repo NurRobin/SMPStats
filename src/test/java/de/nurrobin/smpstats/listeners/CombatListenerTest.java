@@ -15,6 +15,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -105,5 +108,61 @@ class CombatListenerTest {
         when(suicide.getCause()).thenReturn(EntityDamageEvent.DamageCause.SUICIDE);
         listener.onDamageTaken(suicide);
         verify(stats, times(1)).addDamageTaken(victimId, 2.0);
+    }
+
+    @Test
+    void handlesPlayerDeathWithoutKillerOrCause() {
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService stats = mock(StatsService.class);
+        CombatListener listener = new CombatListener(plugin, stats, null);
+
+        Player victim = mock(Player.class);
+        UUID victimId = UUID.randomUUID();
+        when(victim.getUniqueId()).thenReturn(victimId);
+        when(victim.getKiller()).thenReturn(null);
+        when(victim.getLastDamageCause()).thenReturn(null);
+
+        PlayerDeathEvent event = mock(PlayerDeathEvent.class);
+        when(event.getEntity()).thenReturn(victim);
+
+        listener.onPlayerDeath(event);
+
+        verify(stats).addDeath(victimId, "UNKNOWN");
+        verify(stats, never()).addPlayerKill(any());
+    }
+
+    @Test
+    void ignoresMobKillWhenEntityIsPlayer() {
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService stats = mock(StatsService.class);
+        SocialStatsService social = mock(SocialStatsService.class);
+        CombatListener listener = new CombatListener(plugin, stats, social);
+
+        EntityDeathEvent playerDeath = mock(EntityDeathEvent.class);
+        when(playerDeath.getEntity()).thenReturn(mock(Player.class));
+
+        listener.onEntityDeath(playerDeath);
+
+        verify(stats, never()).addMobKill(any());
+        verify(social, never()).recordSharedKill(any(), anyBoolean());
+    }
+
+    @Test
+    void ignoresDamageWhenNoPlayerInvolved() {
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService stats = mock(StatsService.class);
+        CombatListener listener = new CombatListener(plugin, stats, null);
+
+        // Damager is neither player nor projectile with player shooter
+        EntityDamageByEntityEvent event = mock(EntityDamageByEntityEvent.class);
+        when(event.getDamager()).thenReturn(mock(org.bukkit.entity.Zombie.class));
+        listener.onDamageByEntity(event);
+        verify(stats, never()).addDamageDealt(any(), anyDouble());
+
+        // Damage taken event for non-player entity is ignored
+        EntityDamageEvent damage = mock(EntityDamageEvent.class);
+        when(damage.getEntity()).thenReturn(mock(org.bukkit.entity.Zombie.class));
+        listener.onDamageTaken(damage);
+        verify(stats, never()).addDamageTaken(any(), anyDouble());
     }
 }

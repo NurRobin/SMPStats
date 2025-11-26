@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -72,7 +73,7 @@ class CraftingListenerTest {
 
         CraftItemEvent craft = mock(CraftItemEvent.class);
         listener.onCraft(craft);
-        verify(stats, never()).addCrafted(any(), any(Long.class));
+        verify(stats, never()).addCrafted(any(), anyLong());
 
         PlayerItemConsumeEvent consume = mock(PlayerItemConsumeEvent.class);
         listener.onConsume(consume);
@@ -98,5 +99,63 @@ class CraftingListenerTest {
 
         listener.onConsume(consume);
         verify(stats).addConsumed(uuid);
+    }
+
+    @Test
+    void ignoresCraftWhenNoResultOrNoInputs() {
+        SMPStats plugin = mock(SMPStats.class);
+        Settings settings = mock(Settings.class);
+        when(settings.isTrackCrafting()).thenReturn(true);
+        when(plugin.getSettings()).thenReturn(settings);
+        StatsService stats = mock(StatsService.class);
+        CraftingListener listener = new CraftingListener(plugin, stats);
+
+        // Missing result -> ignore
+        CraftItemEvent noResult = mock(CraftItemEvent.class);
+        Recipe recipe = mock(Recipe.class);
+        when(recipe.getResult()).thenReturn(null);
+        when(noResult.getRecipe()).thenReturn(recipe);
+        listener.onCraft(noResult);
+        verify(stats, never()).addCrafted(any(), anyLong());
+
+        // Shift-click with empty matrix -> calculated crafts = 0 -> ignore
+        CraftItemEvent emptyMatrix = mock(CraftItemEvent.class);
+        Recipe recipe2 = mock(Recipe.class);
+        ItemStack result = mock(ItemStack.class);
+        when(result.getAmount()).thenReturn(1);
+        when(recipe2.getResult()).thenReturn(result);
+        when(emptyMatrix.getRecipe()).thenReturn(recipe2);
+        when(emptyMatrix.isShiftClick()).thenReturn(true);
+        CraftingInventory inventory = mock(CraftingInventory.class);
+        when(inventory.getMatrix()).thenReturn(new ItemStack[]{null, null});
+        when(emptyMatrix.getInventory()).thenReturn(inventory);
+        listener.onCraft(emptyMatrix);
+        verify(stats, never()).addCrafted(any(), anyLong());
+    }
+
+    @Test
+    void countsRegularCraftWithoutShift() {
+        SMPStats plugin = mock(SMPStats.class);
+        Settings settings = mock(Settings.class);
+        when(settings.isTrackCrafting()).thenReturn(true);
+        when(plugin.getSettings()).thenReturn(settings);
+        StatsService stats = mock(StatsService.class);
+        CraftingListener listener = new CraftingListener(plugin, stats);
+
+        CraftItemEvent event = mock(CraftItemEvent.class);
+        Recipe recipe = mock(Recipe.class);
+        ItemStack result = mock(ItemStack.class);
+        when(result.getAmount()).thenReturn(4);
+        when(recipe.getResult()).thenReturn(result);
+        when(event.getRecipe()).thenReturn(recipe);
+        when(event.isShiftClick()).thenReturn(false);
+
+        HumanEntity crafter = mock(HumanEntity.class);
+        UUID uuid = UUID.randomUUID();
+        when(crafter.getUniqueId()).thenReturn(uuid);
+        when(event.getWhoClicked()).thenReturn(crafter);
+
+        listener.onCraft(event);
+        verify(stats).addCrafted(uuid, 4);
     }
 }

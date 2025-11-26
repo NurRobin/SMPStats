@@ -16,6 +16,7 @@ import java.util.UUID;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -191,6 +192,105 @@ class StatsServiceTest {
         when(storage.load(missing)).thenReturn(Optional.empty());
         assertFalse(service.setStat(missing, StatField.DEATHS, 1));
         assertFalse(service.resetStats(missing));
+    }
+
+    @Test
+    void fallsBackWhenStorageFailsToLoadOnJoin() throws Exception {
+        UUID uuid = UUID.randomUUID();
+        StatsStorage storage = mock(StatsStorage.class);
+        when(storage.loadOrCreate(uuid, "Alex")).thenThrow(new java.sql.SQLException("fail"));
+
+        StatsService service = new StatsService(pluginWith(Optional.empty()), storage, settings(true, true, true, true, true, true));
+
+        service.handleJoin(mockPlayer(uuid, "Alex"));
+
+        StatsRecord record = service.getStats(uuid).orElseThrow();
+        assertEquals("Alex", record.getName());
+        assertTrue(record.getFirstJoin() > 0);
+        assertTrue(record.getLastJoin() > 0);
+    }
+
+    @Test
+    void getStatsHandlesLoadErrorGracefully() throws Exception {
+        UUID uuid = UUID.randomUUID();
+        StatsStorage storage = mock(StatsStorage.class);
+        when(storage.load(uuid)).thenThrow(new java.sql.SQLException("fail"));
+
+        StatsService service = new StatsService(pluginWith(Optional.empty()), storage, settings(true, true, true, true, true, true));
+
+        assertTrue(service.getStats(uuid).isEmpty());
+    }
+
+    @Test
+    void getStatsByNamePrefersOnlineSession() throws Exception {
+        UUID uuid = UUID.randomUUID();
+        StatsRecord dbRecord = new StatsRecord(uuid, "Alex");
+        StatsStorage storage = mock(StatsStorage.class);
+        when(storage.loadOrCreate(uuid, "Alex")).thenReturn(dbRecord);
+        when(storage.loadByName(any())).thenReturn(Optional.empty());
+
+        StatsService service = new StatsService(pluginWith(Optional.empty()), storage, settings(true, true, true, true, true, true));
+        service.handleJoin(mockPlayer(uuid, "Alex"));
+
+        StatsRecord online = service.getStatsByName("alex").orElseThrow();
+        assertEquals("Alex", online.getName()); // session overrides case and name
+    }
+
+    @Test
+    void getAllStatsMergesOnlineSnapshots() throws Exception {
+        UUID onlineId = UUID.randomUUID();
+        UUID offlineId = UUID.randomUUID();
+        StatsRecord stale = new StatsRecord(onlineId, "OldName");
+        StatsRecord offline = new StatsRecord(offlineId, "Bea");
+
+        StatsStorage storage = mock(StatsStorage.class);
+        when(storage.loadAll()).thenReturn(List.of(stale, offline));
+        when(storage.loadOrCreate(onlineId, "Alex")).thenReturn(new StatsRecord(onlineId, "Alex"));
+
+        StatsService service = new StatsService(pluginWith(Optional.empty()), storage, settings(true, true, true, true, true, true));
+        service.handleJoin(mockPlayer(onlineId, "Alex"));
+
+        List<StatsRecord> all = service.getAllStats();
+        assertEquals(2, all.size());
+        assertTrue(all.stream().anyMatch(r -> r.getUuid().equals(onlineId) && r.getName().equals("Alex")));
+        assertTrue(all.stream().anyMatch(r -> r.getUuid().equals(offlineId) && r.getName().equals("Bea")));
+    }
+
+    @Test
+    void incrementsBlocksAndDeathsWhenSessionPresent() throws Exception {
+        UUID uuid = UUID.randomUUID();
+        StatsRecord record = new StatsRecord(uuid, "Alex");
+        StatsStorage storage = mock(StatsStorage.class);
+        when(storage.loadOrCreate(uuid, "Alex")).thenReturn(record);
+
+        StatsService service = new StatsService(pluginWith(Optional.empty()), storage, settings(true, true, true, true, true, true));
+        service.handleJoin(mockPlayer(uuid, "Alex"));
+
+        service.addBlocksPlaced(uuid);
+        service.addBlocksBroken(uuid);
+        service.addDeath(uuid, "FIRE");
+
+        StatsRecord snapshot = service.getStats(uuid).orElseThrow();
+        assertEquals(1, snapshot.getBlocksPlaced());
+        assertEquals(1, snapshot.getBlocksBroken());
+        assertEquals(1, snapshot.getDeaths());
+        assertEquals("FIRE", snapshot.getLastDeathCause());
+    }
+
+    @Test
+    void snapshotsIncludeRecentPlaytime() throws Exception {
+        UUID uuid = UUID.randomUUID();
+        StatsRecord record = new StatsRecord(uuid, "Alex");
+        StatsStorage storage = mock(StatsStorage.class);
+        when(storage.loadOrCreate(uuid, "Alex")).thenReturn(record);
+
+        StatsService service = new StatsService(pluginWith(Optional.empty()), storage, settings(true, true, true, true, true, true));
+        service.handleJoin(mockPlayer(uuid, "Alex"));
+        Thread.sleep(3); // ensure delta > 0
+
+        long before = record.getPlaytimeMillis();
+        StatsRecord snapshot = service.getStats(uuid).orElseThrow();
+        assertNotEquals(before, snapshot.getPlaytimeMillis());
     }
 
     private SMPStats pluginWith(Optional<TimelineService> timeline) {
