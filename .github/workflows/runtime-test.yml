@@ -57,8 +57,9 @@ jobs:
     
     steps:        
       - name: Runtime Test on Paper ${{ matrix.mcVersion }}
-        uses: FN-FAL113/minecraft-plugin-runtime-test@v1.1.2
+        uses: FN-FAL113/minecraft-plugin-runtime-test@v1.1.7
         with:
           server-version: ${{ matrix.mcVersion }}
           java-version: ${{ matrix.javaVersion }}
           artifact-name: plugin-${{ github.run_id }}
+
