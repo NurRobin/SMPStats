@@ -20,7 +20,9 @@ import de.nurrobin.smpstats.social.SocialStatsService;
 import de.nurrobin.smpstats.timeline.TimelineService;
 import de.nurrobin.smpstats.timeline.DeathReplayService;
 import de.nurrobin.smpstats.health.ServerHealthService;
+import de.nurrobin.smpstats.health.HealthThresholds;
 import de.nurrobin.smpstats.story.StoryService;
+import de.nurrobin.smpstats.gui.GuiManager;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -35,7 +37,7 @@ import java.sql.SQLException;
 import java.util.Objects;
 
 public class SMPStats extends JavaPlugin {
-    private static final int CONFIG_VERSION = 4;
+    private static final int CONFIG_VERSION = 5;
     private StatsStorage storage;
     private StatsService statsService;
     private Settings settings;
@@ -47,6 +49,7 @@ public class SMPStats extends JavaPlugin {
     private DeathReplayService deathReplayService;
     private ServerHealthService serverHealthService;
     private StoryService storyService;
+    private GuiManager guiManager;
     private int autosaveTaskId = -1;
 
     @Override
@@ -72,6 +75,7 @@ public class SMPStats extends JavaPlugin {
         this.deathReplayService = new DeathReplayService(this, storage, settings);
         this.serverHealthService = new ServerHealthService(this, settings);
         this.storyService = new StoryService(this, statsService, storage, momentService, settings);
+        this.guiManager = new GuiManager(this);
 
         registerListeners();
         registerCommands();
@@ -149,6 +153,14 @@ public class SMPStats extends JavaPlugin {
 
     public java.util.Optional<StoryService> getStoryService() {
         return java.util.Optional.ofNullable(storyService);
+    }
+
+    public StatsService getStatsService() {
+        return statsService;
+    }
+
+    public GuiManager getGuiManager() {
+        return guiManager;
     }
 
     public void reloadPluginConfig(CommandSender sender) {
@@ -259,8 +271,11 @@ public class SMPStats extends JavaPlugin {
         double healthEntityWeight = config.getDouble("health.weights.entity", 0.005);
         double healthHopperWeight = config.getDouble("health.weights.hopper", 0.2);
         double healthRedstoneWeight = config.getDouble("health.weights.redstone", 0.1);
+        
+        // Parse health thresholds
+        HealthThresholds healthThresholds = parseHealthThresholds(config);
 
-        boolean storyEnabled = config.getBoolean("story.enabled", true);
+        boolean storyEnabled = config.getBoolean("story.enabled", true);;
         int storyIntervalDays = Math.max(1, config.getInt("story.interval_days", 7));
         int storySummaryHour = Math.min(23, Math.max(0, config.getInt("story.summary_hour", 6)));
         String storyWebhookUrl = config.getString("story.webhook_url", "");
@@ -272,8 +287,63 @@ public class SMPStats extends JavaPlugin {
                 momentsEnabled, diamondWindowSeconds, momentsFlushSeconds, heatmapEnabled, heatmapFlushMinutes, heatmapDecayHalfLifeHours, momentDefinitions, hotspots,
                 socialEnabled, socialSampleSeconds, socialNearbyRadius, timelineEnabled,
                 deathReplayEnabled, deathReplayInventoryItems, deathReplayNearbyRadius, deathReplayLimit,
-                healthEnabled, healthSampleMinutes, healthChunkWeight, healthEntityWeight, healthHopperWeight, healthRedstoneWeight,
+                healthEnabled, healthSampleMinutes, healthChunkWeight, healthEntityWeight, healthHopperWeight, healthRedstoneWeight, healthThresholds,
                 storyEnabled, storyIntervalDays, storySummaryHour, storyWebhookUrl, storyTopLimit, storyRecentMoments);
+    }
+    
+    private HealthThresholds parseHealthThresholds(FileConfiguration config) {
+        HealthThresholds defaults = HealthThresholds.defaults();
+        
+        HealthThresholds.MetricThreshold tps = new HealthThresholds.MetricThreshold(
+                config.getDouble("health.thresholds.tps.good", 19.0),
+                config.getDouble("health.thresholds.tps.acceptable", 18.0),
+                config.getDouble("health.thresholds.tps.warning", 15.0),
+                config.getDouble("health.thresholds.tps.critical", 10.0),
+                true);
+        
+        HealthThresholds.MetricThreshold memory = new HealthThresholds.MetricThreshold(
+                config.getDouble("health.thresholds.memory_percent.good", 50),
+                config.getDouble("health.thresholds.memory_percent.acceptable", 70),
+                config.getDouble("health.thresholds.memory_percent.warning", 85),
+                config.getDouble("health.thresholds.memory_percent.critical", 95),
+                false);
+        
+        HealthThresholds.MetricThreshold chunks = new HealthThresholds.MetricThreshold(
+                config.getDouble("health.thresholds.chunks.good", 500),
+                config.getDouble("health.thresholds.chunks.acceptable", 1000),
+                config.getDouble("health.thresholds.chunks.warning", 2000),
+                config.getDouble("health.thresholds.chunks.critical", 4000),
+                false);
+        
+        HealthThresholds.MetricThreshold entities = new HealthThresholds.MetricThreshold(
+                config.getDouble("health.thresholds.entities.good", 500),
+                config.getDouble("health.thresholds.entities.acceptable", 1500),
+                config.getDouble("health.thresholds.entities.warning", 3000),
+                config.getDouble("health.thresholds.entities.critical", 5000),
+                false);
+        
+        HealthThresholds.MetricThreshold hoppers = new HealthThresholds.MetricThreshold(
+                config.getDouble("health.thresholds.hoppers.good", 200),
+                config.getDouble("health.thresholds.hoppers.acceptable", 500),
+                config.getDouble("health.thresholds.hoppers.warning", 1000),
+                config.getDouble("health.thresholds.hoppers.critical", 2000),
+                false);
+        
+        HealthThresholds.MetricThreshold redstone = new HealthThresholds.MetricThreshold(
+                config.getDouble("health.thresholds.redstone.good", 500),
+                config.getDouble("health.thresholds.redstone.acceptable", 1000),
+                config.getDouble("health.thresholds.redstone.warning", 2000),
+                config.getDouble("health.thresholds.redstone.critical", 5000),
+                false);
+        
+        HealthThresholds.MetricThreshold costIndex = new HealthThresholds.MetricThreshold(
+                config.getDouble("health.thresholds.cost_index.good", 25),
+                config.getDouble("health.thresholds.cost_index.acceptable", 50),
+                config.getDouble("health.thresholds.cost_index.warning", 75),
+                config.getDouble("health.thresholds.cost_index.critical", 90),
+                false);
+        
+        return new HealthThresholds(tps, memory, chunks, entities, hoppers, redstone, costIndex);
     }
 
     private void ensureConfigVersion() {
@@ -328,30 +398,23 @@ public class SMPStats extends JavaPlugin {
         PluginManager pm = getServer().getPluginManager();
         pm.registerEvents(new JoinQuitListener(statsService), this);
         pm.registerEvents(new BlockListener(this, statsService), this);
-        pm.registerEvents(new CombatListener(this, statsService, socialStatsService), this);
         pm.registerEvents(new MovementListener(this, statsService), this);
+        pm.registerEvents(new CombatListener(this, statsService, socialStatsService), this);
         pm.registerEvents(new CraftingListener(this, statsService), this);
         pm.registerEvents(new MomentListener(momentService, deathReplayService), this);
         pm.registerEvents(new HeatmapListener(heatmapService), this);
+        pm.registerEvents(guiManager, this);
     }
 
     private void registerCommands() {
         StatsCommand statsCommand = new StatsCommand(this, statsService);
-        if (getCommand("stats") != null) {
-            getCommand("stats").setExecutor(statsCommand);
-            getCommand("stats").setTabCompleter(statsCommand);
-        } else {
-            getLogger().warning("Command /stats is missing from plugin.yml");
-        }
-        SStatsCommand adminCommand = new SStatsCommand(this, statsService);
-        if (getCommand("smpstats") != null) {
-            getCommand("smpstats").setExecutor(adminCommand);
-            getCommand("smpstats").setTabCompleter(adminCommand);
-        }
-        if (getCommand("sstats") != null) {
-            getCommand("sstats").setExecutor(adminCommand);
-            getCommand("sstats").setTabCompleter(adminCommand);
-        }
+        Objects.requireNonNull(getCommand("stats")).setExecutor(statsCommand);
+        Objects.requireNonNull(getCommand("stats")).setTabCompleter(statsCommand);
+        SStatsCommand adminCommand = new SStatsCommand(this, statsService, guiManager, serverHealthService);
+        Objects.requireNonNull(getCommand("sstats")).setExecutor(adminCommand);
+        Objects.requireNonNull(getCommand("sstats")).setTabCompleter(adminCommand);
+        Objects.requireNonNull(getCommand("smpstats")).setExecutor(adminCommand);
+        Objects.requireNonNull(getCommand("smpstats")).setTabCompleter(adminCommand);
     }
 
     private void startAutosave() {

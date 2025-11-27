@@ -52,7 +52,7 @@
 | Resource-Specific Heatmaps | Medium | M | ✅ Done | Diamond, iron, gold mining patterns |
 | Biome-Filtered Views | Low | S | Todo | Filter any heatmap by biome type |
 | Time-Range Filters | Medium | M | Todo | `from=3d`, `from=1w`, arbitrary ranges |
-| In-Game GUI (Chest Menu) | High | L | Todo | Rich chest-menu style interface with visual insights |
+| In-Game GUI (Chest Menu) | High | L | ✅ Done | Rich chest-menu style interface with visual insights |
 | Live Activity Dashboard | Medium | M | Todo | "Who's farming what right now" real-time view |
 | Player Comparison Views | Medium | M | Todo | Side-by-side stat comparisons in GUI |
 
