@@ -32,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.AdditionalMatchers.and;
 
 class ApiServerTest {
     private static final String API_KEY = "secret";
@@ -183,6 +184,101 @@ class ApiServerTest {
         handler.handle(invalidGrid);
         assertEquals(200, invalidGrid.status);
         verify(heatmap).generateHeatmap(eq("BREAK"), anyString(), anyLong(), anyLong(), anyDouble(), eq(16));
+    }
+
+    @Test
+    void heatmapEndpointsAcceptTimeRangeFromParameter() throws Exception {
+        var handler = server.heatmapHandler();
+        
+        // Test 'from' parameter with human-readable time range (e.g., "6h")
+        long beforeMs = System.currentTimeMillis();
+        FakeExchange fromReq = new FakeExchange("/heatmap/break?from=6h", API_KEY);
+        handler.handle(fromReq);
+        assertEquals(200, fromReq.status);
+        
+        // Verify the heatmap was called with a 'since' value approximately 6 hours ago
+        verify(heatmap, atLeastOnce()).generateHeatmap(
+                eq("BREAK"), 
+                anyString(), 
+                longThat(since -> since >= beforeMs - 6L * 3600 * 1000 - 1000 && since <= beforeMs - 6L * 3600 * 1000 + 1000),
+                anyLong(), 
+                anyDouble(), 
+                anyInt()
+        );
+    }
+
+    @Test
+    void heatmapEndpointsAcceptTimeRangeToParameter() throws Exception {
+        var handler = server.heatmapHandler();
+        
+        // Test 'from' and 'to' parameters together
+        FakeExchange fromToReq = new FakeExchange("/heatmap/break?from=today&to=today", API_KEY);
+        handler.handle(fromToReq);
+        assertEquals(200, fromToReq.status);
+    }
+
+    @Test
+    void heatmapEndpointsFallbackToSinceUntilParameters() throws Exception {
+        var handler = server.heatmapHandler();
+        
+        // Test that 'since' and 'until' still work for backwards compatibility
+        long since = System.currentTimeMillis() - 3600000L;
+        long until = System.currentTimeMillis();
+        FakeExchange legacyReq = new FakeExchange("/heatmap/break?since=" + since + "&until=" + until, API_KEY);
+        handler.handle(legacyReq);
+        assertEquals(200, legacyReq.status);
+        
+        verify(heatmap, atLeastOnce()).generateHeatmap(
+                eq("BREAK"), 
+                anyString(), 
+                eq(since),
+                eq(until), 
+                anyDouble(), 
+                anyInt()
+        );
+    }
+
+    @Test
+    void momentsEndpointsAcceptFromParameter() throws Exception {
+        when(moments.queryMoments(any(), any(), anyLong(), anyInt())).thenReturn(List.of());
+        when(moments.getRecentMoments(anyInt())).thenReturn(List.of());
+        
+        // Test query moments with 'from' parameter
+        var queryHandler = server.queryMomentsHandler();
+        FakeExchange queryReq = new FakeExchange("/moments/query?from=6h", API_KEY);
+        queryHandler.handle(queryReq);
+        assertEquals(200, queryReq.status);
+        
+        // Test recent moments with 'from' parameter
+        when(moments.getMomentsSince(anyLong(), anyInt())).thenReturn(List.of());
+        var recentHandler = server.recentMomentsHandler();
+        FakeExchange recentReq = new FakeExchange("/moments/recent?from=today", API_KEY);
+        recentHandler.handle(recentReq);
+        assertEquals(200, recentReq.status);
+        
+        // Test stream moments with 'from' parameter
+        var streamHandler = server.momentsStreamHandler();
+        FakeExchange streamReq = new FakeExchange("/moments/stream?from=this_week", API_KEY);
+        streamHandler.handle(streamReq);
+        assertEquals(200, streamReq.status);
+    }
+
+    @Test
+    void timelineEndpointsAcceptFromParameter() throws Exception {
+        when(storage.loadTimelineLeaderboard(anyInt(), anyInt())).thenReturn(List.of());
+        
+        // Test leaderboard with 'from' parameter (should convert to days)
+        var handler = server.timelineHandler();
+        FakeExchange leaderboardReq = new FakeExchange("/timeline/leaderboard?from=this_week", API_KEY);
+        handler.handle(leaderboardReq);
+        assertEquals(200, leaderboardReq.status);
+        
+        // Test range with 'from' parameter
+        UUID uuid = UUID.randomUUID();
+        when(storage.loadTimelineRange(eq(uuid), anyInt())).thenReturn(Map.of("from", "2024-01-01"));
+        FakeExchange rangeReq = new FakeExchange("/timeline/range/" + uuid + "?from=3d", API_KEY);
+        handler.handle(rangeReq);
+        assertEquals(200, rangeReq.status);
     }
 
     @Test

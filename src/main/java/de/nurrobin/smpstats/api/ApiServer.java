@@ -36,6 +36,7 @@ public class ApiServer {
     private final de.nurrobin.smpstats.timeline.TimelineService timelineService;
     private final ServerHealthService serverHealthService;
     private final Gson gson = new Gson();
+    private final TimeRangeParser timeRangeParser = new TimeRangeParser();
 
     private HttpServer server;
 
@@ -171,8 +172,15 @@ public class ApiServer {
             if (!authorize(exchange)) {
                 return;
             }
-            int limit = queryParam(exchange.getRequestURI(), "limit").map(Integer::parseInt).orElse(50);
-            long since = queryParam(exchange.getRequestURI(), "since").map(Long::parseLong).orElse(-1L);
+            URI uri = exchange.getRequestURI();
+            int limit = queryParam(uri, "limit").map(Integer::parseInt).orElse(50);
+            
+            // Parse 'from' parameter (human-readable) with fallback to 'since' (epoch)
+            long since = queryParam(uri, "from")
+                    .flatMap(timeRangeParser::parse)
+                    .map(TimeRangeParser.TimeRange::since)
+                    .orElseGet(() -> queryParam(uri, "since").map(Long::parseLong).orElse(-1L));
+            
             List<?> recent = since > 0 ? momentService.getMomentsSince(since, limit) : momentService.getRecentMoments(limit);
             sendJson(exchange, 200, recent);
         }
@@ -192,8 +200,22 @@ public class ApiServer {
             }
             String typeRaw = path.startsWith("/") ? path.substring(1) : path;
 
-            long since = queryParam(uri, "since").map(Long::parseLong).orElse(System.currentTimeMillis() - 7L * 24 * 3600 * 1000);
-            long until = queryParam(uri, "until").map(Long::parseLong).orElse(System.currentTimeMillis());
+            // Support both epoch timestamps (since/until) and human-readable time ranges (from/to)
+            long defaultSince = System.currentTimeMillis() - 7L * 24 * 3600 * 1000;
+            long defaultUntil = System.currentTimeMillis();
+            
+            // Parse 'from' parameter (human-readable) with fallback to 'since' (epoch)
+            long since = queryParam(uri, "from")
+                    .flatMap(timeRangeParser::parse)
+                    .map(TimeRangeParser.TimeRange::since)
+                    .orElseGet(() -> queryParam(uri, "since").map(Long::parseLong).orElse(defaultSince));
+            
+            // Parse 'to' parameter (human-readable) with fallback to 'until' (epoch)
+            long until = queryParam(uri, "to")
+                    .flatMap(timeRangeParser::parse)
+                    .map(TimeRangeParser.TimeRange::until)
+                    .orElseGet(() -> queryParam(uri, "until").map(Long::parseLong).orElse(defaultUntil));
+            
             double decay = queryParam(uri, "decay").map(Double::parseDouble).orElse(settings.getHeatmapDecayHalfLifeHours());
             String world = queryParam(uri, "world").orElse("world");
             int gridSize = queryParam(uri, "grid").map(Integer::parseInt).orElse(16);
@@ -230,10 +252,17 @@ public class ApiServer {
             if (!authorize(exchange)) {
                 return;
             }
-            int limit = queryParam(exchange.getRequestURI(), "limit").map(Integer::parseInt).orElse(100);
-            long since = queryParam(exchange.getRequestURI(), "since").map(Long::parseLong).orElse(-1L);
-            String type = queryParam(exchange.getRequestURI(), "type").orElse(null);
-            java.util.Optional<String> playerParam = queryParam(exchange.getRequestURI(), "player");
+            URI uri = exchange.getRequestURI();
+            int limit = queryParam(uri, "limit").map(Integer::parseInt).orElse(100);
+            
+            // Parse 'from' parameter (human-readable) with fallback to 'since' (epoch)
+            long since = queryParam(uri, "from")
+                    .flatMap(timeRangeParser::parse)
+                    .map(TimeRangeParser.TimeRange::since)
+                    .orElseGet(() -> queryParam(uri, "since").map(Long::parseLong).orElse(-1L));
+            
+            String type = queryParam(uri, "type").orElse(null);
+            java.util.Optional<String> playerParam = queryParam(uri, "player");
             java.util.UUID playerId = null;
             if (playerParam.isPresent()) {
                 try {
@@ -252,8 +281,15 @@ public class ApiServer {
             if (!authorize(exchange)) {
                 return;
             }
-            int limit = queryParam(exchange.getRequestURI(), "limit").map(Integer::parseInt).orElse(50);
-            long since = queryParam(exchange.getRequestURI(), "since").map(Long::parseLong).orElse(-1L);
+            URI uri = exchange.getRequestURI();
+            int limit = queryParam(uri, "limit").map(Integer::parseInt).orElse(50);
+            
+            // Parse 'from' parameter (human-readable) with fallback to 'since' (epoch)
+            long since = queryParam(uri, "from")
+                    .flatMap(timeRangeParser::parse)
+                    .map(TimeRangeParser.TimeRange::since)
+                    .orElseGet(() -> queryParam(uri, "since").map(Long::parseLong).orElse(-1L));
+            
             List<?> moments = since > 0 ? momentService.getMomentsSince(since, limit) : momentService.getRecentMoments(limit);
             StringBuilder sb = new StringBuilder();
             for (Object m : moments) {
@@ -275,10 +311,16 @@ public class ApiServer {
             if (!authorize(exchange)) {
                 return;
             }
-            String path = exchange.getRequestURI().getPath().substring("/timeline".length());
+            URI uri = exchange.getRequestURI();
+            String path = uri.getPath().substring("/timeline".length());
             if (path.startsWith("/leaderboard")) {
-                int days = queryParam(exchange.getRequestURI(), "days").map(Integer::parseInt).orElse(7);
-                int limit = queryParam(exchange.getRequestURI(), "limit").map(Integer::parseInt).orElse(20);
+                // Support 'from' parameter (human-readable) with fallback to 'days' (integer)
+                int days = queryParam(uri, "from")
+                        .flatMap(timeRangeParser::parse)
+                        .map(range -> (int) Math.ceil((System.currentTimeMillis() - range.since()) / (24.0 * 3600 * 1000)))
+                        .orElseGet(() -> queryParam(uri, "days").map(Integer::parseInt).orElse(7));
+                
+                int limit = queryParam(uri, "limit").map(Integer::parseInt).orElse(20);
                 sendJson(exchange, 200, timelineLeaderboard(days, limit));
                 return;
             }
@@ -291,7 +333,12 @@ public class ApiServer {
                 String id = parts[2];
                 try {
                     UUID uuid = UUID.fromString(id);
-                    int days = queryParam(exchange.getRequestURI(), "days").map(Integer::parseInt).orElse(7);
+                    // Support 'from' parameter (human-readable) with fallback to 'days' (integer)
+                    int days = queryParam(uri, "from")
+                            .flatMap(timeRangeParser::parse)
+                            .map(range -> (int) Math.ceil((System.currentTimeMillis() - range.since()) / (24.0 * 3600 * 1000)))
+                            .orElseGet(() -> queryParam(uri, "days").map(Integer::parseInt).orElse(7));
+                    
                     sendJson(exchange, 200, statsService.getStorage().loadTimelineRange(uuid, days));
                 } catch (Exception e) {
                     sendText(exchange, 400, "Invalid UUID");
@@ -305,7 +352,7 @@ public class ApiServer {
             String id = path.startsWith("/") ? path.substring(1) : path;
             try {
                 UUID uuid = UUID.fromString(id);
-                int limit = queryParam(exchange.getRequestURI(), "limit").map(Integer::parseInt).orElse(30);
+                int limit = queryParam(uri, "limit").map(Integer::parseInt).orElse(30);
                 sendJson(exchange, 200, timelineService != null ? timelineServiceQuery(uuid, limit) : List.of());
             } catch (IllegalArgumentException e) {
                 sendText(exchange, 400, "Invalid UUID");
