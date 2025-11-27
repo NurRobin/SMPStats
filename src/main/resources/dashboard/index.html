@@ -81,9 +81,15 @@
                                 <span>Distance Traveled</span>
                                 <span id="distance-traveled">-</span>
                             </div>
-                            <div class="stat-row">
+                            <div class="stat-row biomes-row">
                                 <span>Biomes Discovered</span>
-                                <span id="biomes-discovered">-</span>
+                                <span class="biomes-count-container">
+                                    <span id="biomes-discovered">-</span>
+                                    <button id="biomes-toggle" class="biomes-toggle" title="Show biomes list">▼</button>
+                                </span>
+                            </div>
+                            <div id="biomes-list" class="biomes-list hidden">
+                                <p class="placeholder">Loading...</p>
                             </div>
                         </div>
                     </div>
