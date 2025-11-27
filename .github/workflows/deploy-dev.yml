@@ -84,8 +84,8 @@ jobs:
           port: ${{ secrets.DEV_SERVER_SSH_PORT }}
           envs: RUN_ID,SHORT_SHA,VERSION,MC_VERSION
           script: |
-            MANAGER="/home/main/Minecraft-Servers/SMPStats-Dev/manage-test-server.sh"
-            PLUGIN_DIR="/home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging"
+            MANAGER="/opt/smpstats-ci/manage-test-server.sh"
+            PLUGIN_DIR="/opt/smpstats-ci/plugins-staging"
             
             echo "=== SMPStats Docker Deployment ==="
             echo "Version: ${VERSION}"
@@ -107,7 +107,7 @@ jobs:
           key: ${{ secrets.DEV_SERVER_SSH_KEY }}
           port: ${{ secrets.DEV_SERVER_SSH_PORT }}
           source: "target/SMPStats.jar"
-          target: "/home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging/${{ steps.info.outputs.run_id }}/"
+          target: "/opt/smpstats-ci/plugins-staging/${{ steps.info.outputs.run_id }}/"
           strip_components: 1
 
       - name: Start Docker container and get connection info
@@ -123,8 +123,8 @@ jobs:
           port: ${{ secrets.DEV_SERVER_SSH_PORT }}
           envs: RUN_ID,MC_VERSION
           script: |
-            MANAGER="/home/main/Minecraft-Servers/SMPStats-Dev/manage-test-server.sh"
-            PLUGIN_JAR="/home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging/${RUN_ID}/SMPStats.jar"
+            MANAGER="/opt/smpstats-ci/manage-test-server.sh"
+            PLUGIN_JAR="/opt/smpstats-ci/plugins-staging/${RUN_ID}/SMPStats.jar"
             
             # Start the container with the plugin
             ${MANAGER} start "${RUN_ID}" "${PLUGIN_JAR}" "${MC_VERSION}"
@@ -214,6 +214,6 @@ jobs:
             done
             
             # Cleanup staging files older than 1 day
-            find /home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging -mindepth 1 -maxdepth 1 -mtime +1 -exec rm -rf {} \; 2>/dev/null || true
+            find /opt/smpstats-ci/plugins-staging -mindepth 1 -maxdepth 1 -mtime +1 -exec rm -rf {} \; 2>/dev/null || true
             
             echo "Cleanup complete"

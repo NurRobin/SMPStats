@@ -83,7 +83,7 @@ jobs:
           key: ${{ secrets.DEV_SERVER_SSH_KEY }}
           port: ${{ secrets.DEV_SERVER_SSH_PORT }}
           source: "target/SMPStats.jar"
-          target: "/home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging/${{ steps.info.outputs.run_id }}/"
+          target: "/opt/smpstats-ci/plugins-staging/${{ steps.info.outputs.run_id }}/"
           strip_components: 1
 
       - name: Start Docker container
@@ -99,8 +99,8 @@ jobs:
           port: ${{ secrets.DEV_SERVER_SSH_PORT }}
           envs: RUN_ID,MC_VERSION
           script: |
-            MANAGER="/home/main/Minecraft-Servers/SMPStats-Dev/manage-test-server.sh"
-            PLUGIN_JAR="/home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging/${RUN_ID}/SMPStats.jar"
+            MANAGER="/opt/smpstats-ci/manage-test-server.sh"
+            PLUGIN_JAR="/opt/smpstats-ci/plugins-staging/${RUN_ID}/SMPStats.jar"
             
             # Start container and capture connection info
             ${MANAGER} start "${RUN_ID}" "${PLUGIN_JAR}" "${MC_VERSION}" > /tmp/container-${RUN_ID}.json 2>&1
@@ -150,7 +150,7 @@ jobs:
           key: ${{ secrets.DEV_SERVER_SSH_KEY }}
           port: ${{ secrets.DEV_SERVER_SSH_PORT }}
           source: ".github/test-fixtures/run-e2e-tests.sh"
-          target: "/home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging/${{ steps.info.outputs.run_id }}/"
+          target: "/opt/smpstats-ci/plugins-staging/${{ steps.info.outputs.run_id }}/"
           strip_components: 2
 
       - name: Run comprehensive E2E tests
@@ -175,7 +175,7 @@ jobs:
             DASHBOARD_PORT="${API_PORT}"  # Dashboard runs on same port for now
             
             # Setup test script
-            TEST_SCRIPT="/home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging/${RUN_ID}/run-e2e-tests.sh"
+            TEST_SCRIPT="/opt/smpstats-ci/plugins-staging/${RUN_ID}/run-e2e-tests.sh"
             chmod +x "${TEST_SCRIPT}"
             
             echo "=== Running Comprehensive E2E Tests ==="
@@ -231,7 +231,7 @@ jobs:
           port: ${{ secrets.DEV_SERVER_SSH_PORT }}
           envs: RUN_ID
           script: |
-            MANAGER="/home/main/Minecraft-Servers/SMPStats-Dev/manage-test-server.sh"
+            MANAGER="/opt/smpstats-ci/manage-test-server.sh"
             CONTAINER="smpstats-test-${RUN_ID}"
             
             echo "=== Stopping and removing container ==="
@@ -251,7 +251,7 @@ jobs:
             fi
             
             # Cleanup all staging and temp files
-            rm -rf "/home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging/${RUN_ID}"
+            rm -rf "/opt/smpstats-ci/plugins-staging/${RUN_ID}"
             rm -f "/tmp/container-${RUN_ID}.json" "/tmp/conn-${RUN_ID}.json"
             rm -rf "/tmp/e2e-logs-${RUN_ID}"
             
