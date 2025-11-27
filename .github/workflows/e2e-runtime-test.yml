@@ -102,12 +102,23 @@ jobs:
             MANAGER="/opt/smpstats-ci/manage-test-server.sh"
             PLUGIN_JAR="/opt/smpstats-ci/plugins-staging/${RUN_ID}/SMPStats.jar"
             
-            # Start container and capture connection info
-            ${MANAGER} start "${RUN_ID}" "${PLUGIN_JAR}" "${MC_VERSION}" > /tmp/container-${RUN_ID}.json 2>&1
+            # Start container - logs go to stderr, JSON to stdout
+            ${MANAGER} start "${RUN_ID}" "${PLUGIN_JAR}" "${MC_VERSION}" 2>/tmp/container-${RUN_ID}.log | tee /tmp/conn-${RUN_ID}.json
             
-            # Extract last JSON block (the connection info)
-            tail -10 /tmp/container-${RUN_ID}.json | grep -A 10 "^{" > /tmp/conn-${RUN_ID}.json || true
+            # Verify JSON was captured
+            echo "=== Connection Info ==="
             cat /tmp/conn-${RUN_ID}.json
+            
+            # Validate JSON
+            if jq -e . /tmp/conn-${RUN_ID}.json >/dev/null 2>&1; then
+              echo "✅ Valid JSON captured"
+            else
+              echo "⚠️ JSON extraction failed, attempting recovery..."
+              # Try to extract JSON from the output
+              grep -A 20 '^{' /tmp/conn-${RUN_ID}.json | head -15 > /tmp/conn-${RUN_ID}.json.tmp
+              mv /tmp/conn-${RUN_ID}.json.tmp /tmp/conn-${RUN_ID}.json
+              cat /tmp/conn-${RUN_ID}.json
+            fi
 
       - name: Get container connection info
         uses: appleboy/ssh-action@v1.0.3
@@ -166,13 +177,38 @@ jobs:
           port: ${{ secrets.DEV_SERVER_SSH_PORT }}
           envs: RUN_ID,RUN_RCON,RUN_API
           script: |
-            # Load connection info
+            # Load connection info with debug output
             CONN_FILE="/tmp/conn-${RUN_ID}.json"
-            RCON_PORT=$(cat "${CONN_FILE}" | jq -r '.rcon_port')
-            RCON_PASS=$(cat "${CONN_FILE}" | jq -r '.rcon_password')
-            API_PORT=$(cat "${CONN_FILE}" | jq -r '.api_port')
-            API_KEY=$(cat "${CONN_FILE}" | jq -r '.api_key')
-            DASHBOARD_PORT="${API_PORT}"  # Dashboard runs on same port for now
+            
+            echo "=== Debug: Connection file contents ==="
+            cat "${CONN_FILE}" || echo "File not found!"
+            echo "=== End of connection file ==="
+            
+            # Parse JSON - handle both clean JSON and mixed output
+            if jq -e . "${CONN_FILE}" >/dev/null 2>&1; then
+              RCON_PORT=$(jq -r '.rcon_port' "${CONN_FILE}")
+              RCON_PASS=$(jq -r '.rcon_password' "${CONN_FILE}")
+              API_PORT=$(jq -r '.api_port' "${CONN_FILE}")
+              API_KEY=$(jq -r '.api_key' "${CONN_FILE}")
+              DASHBOARD_PORT=$(jq -r '.dashboard_port' "${CONN_FILE}")
+              ADMIN_PASS=$(jq -r '.admin_password' "${CONN_FILE}")
+            else
+              echo "WARNING: JSON parsing failed, trying to extract from mixed output..."
+              # Extract JSON block from potentially mixed output
+              CONN_JSON=$(grep -A 20 '^{' "${CONN_FILE}" | head -15)
+              RCON_PORT=$(echo "$CONN_JSON" | jq -r '.rcon_port')
+              RCON_PASS=$(echo "$CONN_JSON" | jq -r '.rcon_password')
+              API_PORT=$(echo "$CONN_JSON" | jq -r '.api_port')
+              API_KEY=$(echo "$CONN_JSON" | jq -r '.api_key')
+              DASHBOARD_PORT=$(echo "$CONN_JSON" | jq -r '.dashboard_port')
+              ADMIN_PASS=$(echo "$CONN_JSON" | jq -r '.admin_password')
+            fi
+            
+            # Validate we got real values
+            if [ -z "$RCON_PORT" ] || [ "$RCON_PORT" = "null" ]; then
+              echo "ERROR: Failed to extract RCON_PORT from connection info"
+              exit 1
+            fi
             
             # Setup test script
             TEST_SCRIPT="/opt/smpstats-ci/plugins-staging/${RUN_ID}/run-e2e-tests.sh"
@@ -181,6 +217,7 @@ jobs:
             echo "=== Running Comprehensive E2E Tests ==="
             echo "RCON Port: ${RCON_PORT}"
             echo "API Port: ${API_PORT}"
+            echo "Dashboard Port: ${DASHBOARD_PORT}"
             echo ""
             
             # Run the comprehensive test suite
@@ -190,7 +227,7 @@ jobs:
               "${API_PORT}" \
               "${API_KEY}" \
               "${DASHBOARD_PORT}" \
-              "admin123" \
+              "${ADMIN_PASS}" \
               "localhost"
 
       - name: Collect server logs
