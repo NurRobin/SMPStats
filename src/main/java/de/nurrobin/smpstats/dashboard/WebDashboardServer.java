@@ -244,17 +244,12 @@ public class WebDashboardServer {
      * Uses SHA-256 hashing before comparison to eliminate length-based timing leaks.
      */
     private boolean constantTimeEquals(String a, String b) {
-        if (a == null || b == null) {
-            // Use constant-time comparison even for null checks by comparing dummy hashes
-            byte[] dummyA = a == null ? new byte[32] : hashString(a);
-            byte[] dummyB = b == null ? new byte[32] : hashString(b);
-            boolean result = MessageDigest.isEqual(dummyA, dummyB);
-            // Always return false if either was null
-            return result && a != null && b != null;
-        }
-        byte[] hashA = hashString(a);
-        byte[] hashB = hashString(b);
-        return MessageDigest.isEqual(hashA, hashB);
+        // Always compute both hashes to ensure constant timing regardless of null values
+        byte[] hashA = (a != null) ? hashString(a) : hashString("");
+        byte[] hashB = (b != null) ? hashString(b) : hashString("");
+        boolean result = MessageDigest.isEqual(hashA, hashB);
+        // Return false if either was null (but still do the comparison for constant time)
+        return result && a != null && b != null;
     }
     
     private byte[] hashString(String s) {
@@ -572,7 +567,7 @@ public class WebDashboardServer {
                 decay = queryParam(exchange, "decay").map(Double::parseDouble).orElse(settings.getHeatmapDecayHalfLifeHours());
                 gridSize = queryParam(exchange, "grid").map(Integer::parseInt).orElse(16);
             } catch (NumberFormatException e) {
-                sendJson(exchange, 400, Map.of("error", "Invalid numeric parameter: " + e.getMessage()));
+                sendJson(exchange, 400, Map.of("error", "Invalid parameter format"));
                 return;
             }
             
