@@ -37,6 +37,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: write
 
 env:
   JAVA_VERSION: '21'
@@ -165,6 +166,7 @@ jobs:
           strip_components: 2
 
       - name: Run comprehensive E2E tests
+        id: e2e_tests
         uses: appleboy/ssh-action@v1.0.3
         env:
           RUN_ID: ${{ steps.info.outputs.run_id }}
@@ -180,6 +182,7 @@ jobs:
           script: |
             # Load connection info with debug output
             CONN_FILE="/tmp/conn-${RUN_ID}.json"
+            RESULTS_FILE="/tmp/e2e-results-${RUN_ID}.json"
             
             echo "=== Debug: Connection file contents ==="
             cat "${CONN_FILE}" || echo "File not found!"
@@ -208,6 +211,8 @@ jobs:
             # Validate we got real values
             if [ -z "$RCON_PORT" ] || [ "$RCON_PORT" = "null" ]; then
               echo "ERROR: Failed to extract RCON_PORT from connection info"
+              # Save error to results file
+              echo '{"status":"error","message":"Failed to extract RCON_PORT from connection info","tests":[]}' > "${RESULTS_FILE}"
               exit 1
             fi
             
@@ -221,15 +226,166 @@ jobs:
             echo "Dashboard Port: ${DASHBOARD_PORT}"
             echo ""
             
-            # Run the comprehensive test suite
-            "${TEST_SCRIPT}" \
+            # Run the comprehensive test suite and capture output
+            TEST_OUTPUT=$("${TEST_SCRIPT}" \
               "${RCON_PORT}" \
               "${RCON_PASS}" \
               "${API_PORT}" \
               "${API_KEY}" \
               "${DASHBOARD_PORT}" \
               "${ADMIN_PASS}" \
-              "localhost"
+              "localhost" 2>&1) || TEST_EXIT_CODE=$?
+            
+            # Echo output for logs
+            echo "$TEST_OUTPUT"
+            
+            # Parse results from output and save to JSON
+            PASSED=$(echo "$TEST_OUTPUT" | grep -oP '(?<=Passed: )\d+' | tail -1 || echo "0")
+            FAILED=$(echo "$TEST_OUTPUT" | grep -oP '(?<=Failed: )\d+' | tail -1 || echo "0")
+            SKIPPED=$(echo "$TEST_OUTPUT" | grep -oP '(?<=Skipped: )\d+' | tail -1 || echo "0")
+            
+            # Extract failed test names (lines containing ✗)
+            FAILED_TESTS=$(echo "$TEST_OUTPUT" | grep '✗' | sed 's/\x1b\[[0-9;]*m//g' | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            
+            # Extract passed test names (lines containing ✓)
+            PASSED_TESTS=$(echo "$TEST_OUTPUT" | grep '✓' | sed 's/\x1b\[[0-9;]*m//g' | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            
+            # Create results JSON
+            cat > "${RESULTS_FILE}" << EOF
+            {
+              "status": "$([ "${TEST_EXIT_CODE:-0}" = "0" ] && echo "success" || echo "failure")",
+              "passed": ${PASSED:-0},
+              "failed": ${FAILED:-0},
+              "skipped": ${SKIPPED:-0},
+              "failed_tests": ${FAILED_TESTS:-[]},
+              "passed_tests": ${PASSED_TESTS:-[]},
+              "rcon_port": "${RCON_PORT}",
+              "api_port": "${API_PORT}",
+              "dashboard_port": "${DASHBOARD_PORT}"
+            }
+            EOF
+            
+            echo ""
+            echo "=== Results saved to ${RESULTS_FILE} ==="
+            cat "${RESULTS_FILE}"
+            
+            # Exit with original test exit code
+            exit ${TEST_EXIT_CODE:-0}
+
+      - name: Fetch test results
+        id: fetch_results
+        if: always()
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          RUN_ID: ${{ steps.info.outputs.run_id }}
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID
+          script: |
+            RESULTS_FILE="/tmp/e2e-results-${RUN_ID}.json"
+            if [ -f "${RESULTS_FILE}" ]; then
+              cat "${RESULTS_FILE}"
+            else
+              echo '{"status":"unknown","message":"Results file not found","passed":0,"failed":0,"skipped":0,"failed_tests":[]}'
+            fi
+
+      - name: Comment on PR with test results
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `${{ steps.fetch_results.outputs.stdout }}` || '{}';
+            let results;
+            try {
+              results = JSON.parse(output.trim());
+            } catch (e) {
+              results = { status: 'error', message: 'Failed to parse test results', passed: 0, failed: 0, skipped: 0, failed_tests: [] };
+            }
+            
+            const status = results.status || 'unknown';
+            const passed = results.passed || 0;
+            const failed = results.failed || 0;
+            const skipped = results.skipped || 0;
+            const failedTests = results.failed_tests || [];
+            const rconPort = results.rcon_port || 'N/A';
+            const apiPort = results.api_port || 'N/A';
+            const dashboardPort = results.dashboard_port || 'N/A';
+            
+            let statusEmoji = status === 'success' ? '✅' : status === 'failure' ? '❌' : '⚠️';
+            let statusText = status === 'success' ? 'All tests passed!' : status === 'failure' ? 'Some tests failed' : 'Test status unknown';
+            
+            let body = `## ${statusEmoji} E2E Test Results\n\n`;
+            body += `**Status:** ${statusText}\n\n`;
+            body += `### 📊 Summary\n`;
+            body += `| Metric | Count |\n`;
+            body += `|--------|-------|\n`;
+            body += `| ✅ Passed | ${passed} |\n`;
+            body += `| ❌ Failed | ${failed} |\n`;
+            body += `| ⏭️ Skipped | ${skipped} |\n\n`;
+            
+            body += `### 🔧 Test Environment\n`;
+            body += `- **Minecraft Version:** ${{ env.MC_VERSION }}\n`;
+            body += `- **Plugin Version:** ${{ needs.build.outputs.version }}\n`;
+            body += `- **RCON Port:** ${rconPort}\n`;
+            body += `- **API Port:** ${apiPort}\n`;
+            body += `- **Dashboard Port:** ${dashboardPort}\n\n`;
+            
+            if (failed > 0 && failedTests.length > 0) {
+              body += `### ❌ Failed Tests\n\n`;
+              body += `<details>\n<summary>Click to expand failed test details</summary>\n\n`;
+              body += `\`\`\`\n`;
+              failedTests.forEach(test => {
+                body += `${test}\n`;
+              });
+              body += `\`\`\`\n</details>\n\n`;
+              
+              // Categorize failures for quick reference
+              const rconFails = failedTests.filter(t => t.includes('RCON') || t.includes('command'));
+              const apiFails = failedTests.filter(t => t.includes('API') || t.includes('/stats') || t.includes('/health') || t.includes('/heatmap'));
+              const dashFails = failedTests.filter(t => t.includes('Dashboard') || t.includes('dashboard') || t.includes('admin'));
+              const dbFails = failedTests.filter(t => t.includes('Database') || t.includes('database') || t.includes('sqlite'));
+              const intFails = failedTests.filter(t => t.includes('Integration') || t.includes('consistency'));
+              
+              if (rconFails.length > 0) body += `- 🎮 **RCON/Commands:** ${rconFails.length} failure(s)\n`;
+              if (apiFails.length > 0) body += `- 🌐 **HTTP API:** ${apiFails.length} failure(s)\n`;
+              if (dashFails.length > 0) body += `- 📊 **Dashboard:** ${dashFails.length} failure(s)\n`;
+              if (dbFails.length > 0) body += `- 💾 **Database:** ${dbFails.length} failure(s)\n`;
+              if (intFails.length > 0) body += `- 🔗 **Integration:** ${intFails.length} failure(s)\n`;
+            }
+            
+            body += `\n---\n`;
+            body += `*Run ID: ${{ steps.info.outputs.run_id }} | [View full logs](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})*`;
+            
+            // Find existing comment to update or create new one
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('E2E Test Results')
+            );
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
 
       - name: Collect server logs
         if: always()
@@ -290,7 +446,7 @@ jobs:
             
             # Cleanup all staging and temp files
             rm -rf "/opt/smpstats-ci/plugins-staging/${RUN_ID}"
-            rm -f "/tmp/container-${RUN_ID}.json" "/tmp/conn-${RUN_ID}.json"
+            rm -f "/tmp/container-${RUN_ID}.json" "/tmp/conn-${RUN_ID}.json" "/tmp/e2e-results-${RUN_ID}.json"
             rm -rf "/tmp/e2e-logs-${RUN_ID}"
             
             echo "✅ Cleanup complete"
