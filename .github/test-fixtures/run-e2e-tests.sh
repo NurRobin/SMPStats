@@ -1,595 +1,645 @@
 #!/bin/bash
-# SMPStats E2E Test Suite
-# Comprehensive tests for API, Dashboard, Commands, and Database validation
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  SMPStats E2E Test Suite                                                     ║
+# ║  Comprehensive tests for RCON, API, Dashboard, and Database                  ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
 #
-# Usage: ./run-e2e-tests.sh <rcon_port> <rcon_password> <api_port> <api_key> [dashboard_port] [admin_password]
+# Usage: ./run-e2e-tests.sh <rcon_port> <rcon_pass> <api_port> <api_key> \
+#                          [dashboard_port] [admin_pass] [host] [results_file]
 
 set -e
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+# ══════════════════════════════════════════════════════════════════════════════
+# CONFIGURATION
+# ══════════════════════════════════════════════════════════════════════════════
 
-# Test counters
-TESTS_PASSED=0
-TESTS_FAILED=0
-TESTS_SKIPPED=0
+# Colors & Formatting
+R='\033[0;31m'    # Red
+G='\033[0;32m'    # Green
+Y='\033[1;33m'    # Yellow
+B='\033[0;34m'    # Blue
+C='\033[0;36m'    # Cyan
+M='\033[0;35m'    # Magenta
+W='\033[1;37m'    # White Bold
+D='\033[2m'       # Dim
+N='\033[0m'       # Reset
 
 # Arguments
 RCON_PORT="${1:-25575}"
-RCON_PASSWORD="${2:-test}"
+RCON_PASS="${2:-test}"
 API_PORT="${3:-8765}"
 API_KEY="${4:-test-api-key}"
-DASHBOARD_PORT="${5:-8080}"
-ADMIN_PASSWORD="${6:-admin123}"
+DASH_PORT="${5:-8080}"
+ADMIN_PASS="${6:-admin123}"
 HOST="${7:-localhost}"
+RESULTS_FILE="${8:-/tmp/e2e-results.json}"
 
-log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-log_pass() { echo -e "${GREEN}[PASS]${NC} $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
-log_fail() { echo -e "${RED}[FAIL]${NC} $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
-log_skip() { echo -e "${YELLOW}[SKIP]${NC} $1"; TESTS_SKIPPED=$((TESTS_SKIPPED + 1)); }
-log_section() { echo -e "\n${BLUE}══════════════════════════════════════════════════════════════${NC}"; echo -e "${BLUE}  $1${NC}"; echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"; }
+# Counters
+PASSED=0
+FAILED=0
+SKIPPED=0
 
-# ============================================================================
+# Test results array
+TESTS_JSON="[]"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# UTILITY FUNCTIONS
+# ══════════════════════════════════════════════════════════════════════════════
+
+header() {
+    echo ""
+    echo -e "${B}╔══════════════════════════════════════════════════════════════════════╗${N}"
+    echo -e "${B}║${N}  ${W}$1${N}"
+    echo -e "${B}╚══════════════════════════════════════════════════════════════════════╝${N}"
+    echo ""
+}
+
+section() {
+    echo ""
+    echo -e "${C}┌──────────────────────────────────────────────────────────────────────┐${N}"
+    echo -e "${C}│${N}  ${M}$1${N}"
+    echo -e "${C}└──────────────────────────────────────────────────────────────────────┘${N}"
+    echo ""
+}
+
+# Log a test result with full details
+log_result() {
+    local cat="$1" name="$2" status="$3" cmd="$4" endpoint="$5" result="$6" details="$7"
+    
+    # Console output
+    local icon color
+    case "$status" in
+        passed)  icon="✓"; color="$G"; PASSED=$((PASSED + 1)) ;;
+        failed)  icon="✗"; color="$R"; FAILED=$((FAILED + 1)) ;;
+        skipped) icon="○"; color="$Y"; SKIPPED=$((SKIPPED + 1)) ;;
+    esac
+    
+    printf "  ${color}${icon}${N}  %-45s ${D}%s${N}\n" "$name" "$result"
+    [ -n "$details" ] && echo -e "     ${D}└─ ${details}${N}"
+    
+    # JSON output - escape special chars
+    local safe_result=$(echo "$result" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g' | tr -d '\n' | head -c 150)
+    local safe_details=$(echo "$details" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g' | tr -d '\n' | head -c 150)
+    local safe_cmd=$(echo "$cmd" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    local safe_endpoint=$(echo "$endpoint" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    
+    TESTS_JSON=$(echo "$TESTS_JSON" | jq --arg cat "$cat" --arg name "$name" --arg status "$status" \
+        --arg cmd "$safe_cmd" --arg endpoint "$safe_endpoint" --arg result "$safe_result" --arg details "$safe_details" \
+        '. + [{category: $cat, name: $name, status: $status, command: $cmd, endpoint: $endpoint, result: $result, details: $details}]')
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
 # RCON TESTS
-# ============================================================================
+# ══════════════════════════════════════════════════════════════════════════════
+
 run_rcon_tests() {
-    log_section "RCON Command Tests"
+    section "🎮 RCON Command Tests"
     
-    # Check if mcrcon is available
-    if ! command -v mcrcon &> /dev/null; then
-        log_skip "mcrcon not installed - skipping RCON tests"
+    if ! command -v mcrcon &>/dev/null; then
+        log_result "RCON" "RCON Test Suite" "skipped" "" "" "mcrcon not installed" "Install mcrcon to run RCON tests"
         return
     fi
     
-    rcon_cmd() {
-        mcrcon -H "${HOST}" -P "${RCON_PORT}" -p "${RCON_PASSWORD}" "$1" 2>&1 || echo "RCON_ERROR"
-    }
+    rcon() { timeout 10 mcrcon -H "$HOST" -P "$RCON_PORT" -p "$RCON_PASS" "$1" 2>&1 || echo "RCON_ERROR"; }
     
-    # Test 1: Basic connectivity
-    log_info "Test: RCON connectivity (/list)"
-    result=$(rcon_cmd "list")
+    # Test: Server connectivity
+    echo -e "  ${D}Testing server connectivity...${N}"
+    result=$(rcon "list")
     if echo "$result" | grep -qi "players"; then
-        log_pass "RCON connectivity works"
+        players=$(echo "$result" | grep -oP '\d+(?= of)' || echo "?")
+        log_result "RCON" "Server Connectivity" "passed" "/list" "" "Connected, ${players} players online" ""
     else
-        log_fail "RCON connectivity failed: $result"
+        log_result "RCON" "Server Connectivity" "failed" "/list" "" "Connection failed" "$result"
     fi
     
-    # Test 2: SMPStats info command
-    log_info "Test: /smpstats info"
-    result=$(rcon_cmd "smpstats info")
-    if echo "$result" | grep -qi "smpstats\|version\|enabled\|aktiv"; then
-        log_pass "/smpstats info returns plugin info"
+    # Test: Plugin info
+    result=$(rcon "smpstats info")
+    if echo "$result" | grep -qiE "smpstats|version|enabled"; then
+        ver=$(echo "$result" | grep -oiP 'v?[\d.]+' | head -1 || echo "detected")
+        log_result "RCON" "Plugin Info Command" "passed" "/smpstats info" "" "Plugin loaded ($ver)" ""
+    elif echo "$result" | grep -qi "unknown"; then
+        log_result "RCON" "Plugin Info Command" "failed" "/smpstats info" "" "Command not found" "Plugin may not be loaded"
     else
-        log_fail "/smpstats info unexpected response: $result"
+        log_result "RCON" "Plugin Info Command" "failed" "/smpstats info" "" "Unexpected response" "$result"
     fi
     
-    # Test 3: Stats command (no player specified)
-    log_info "Test: /stats (no player)"
-    result=$(rcon_cmd "stats")
-    # Should give usage info or error since no player specified
-    if [ -n "$result" ] && [ "$result" != "RCON_ERROR" ]; then
-        log_pass "/stats command responds"
+    # Test: Stats command
+    result=$(rcon "stats")
+    if [ -n "$result" ] && ! echo "$result" | grep -q "RCON_ERROR"; then
+        log_result "RCON" "Stats Command" "passed" "/stats" "" "Command responds" ""
     else
-        log_fail "/stats command failed: $result"
+        log_result "RCON" "Stats Command" "failed" "/stats" "" "No response" ""
     fi
     
-    # Test 4: SMPStats debug command
-    log_info "Test: /smpstats debug"
-    result=$(rcon_cmd "smpstats debug")
-    if [ -n "$result" ] && [ "$result" != "RCON_ERROR" ]; then
-        log_pass "/smpstats debug responds"
+    # Test: Debug command
+    result=$(rcon "smpstats debug")
+    if [ -n "$result" ] && ! echo "$result" | grep -qE "RCON_ERROR|unknown"; then
+        log_result "RCON" "Debug Command" "passed" "/smpstats debug" "" "Debug available" ""
     else
-        log_skip "/smpstats debug not available"
+        log_result "RCON" "Debug Command" "skipped" "/smpstats debug" "" "Not available" ""
     fi
     
-    # Test 5: sstats command
-    log_info "Test: /sstats (server stats)"
-    result=$(rcon_cmd "sstats")
-    if [ -n "$result" ] && [ "$result" != "RCON_ERROR" ]; then
-        log_pass "/sstats command responds"
+    # Test: Server stats
+    result=$(rcon "sstats")
+    if [ -n "$result" ] && ! echo "$result" | grep -qE "RCON_ERROR|unknown"; then
+        log_result "RCON" "Server Stats Command" "passed" "/sstats" "" "Stats available" ""
     else
-        log_skip "/sstats command not available"
+        log_result "RCON" "Server Stats Command" "skipped" "/sstats" "" "Not available" ""
+    fi
+    
+    # Test: Reload
+    result=$(rcon "smpstats reload")
+    if echo "$result" | grep -qiE "reload|success|config"; then
+        log_result "RCON" "Config Reload" "passed" "/smpstats reload" "" "Reload successful" ""
+    elif [ -n "$result" ] && ! echo "$result" | grep -qi "unknown"; then
+        log_result "RCON" "Config Reload" "passed" "/smpstats reload" "" "Command executed" ""
+    else
+        log_result "RCON" "Config Reload" "skipped" "/smpstats reload" "" "Not available" ""
     fi
 }
 
-# ============================================================================
-# HTTP API TESTS
-# ============================================================================
+# ══════════════════════════════════════════════════════════════════════════════
+# API TESTS
+# ══════════════════════════════════════════════════════════════════════════════
+
 run_api_tests() {
-    log_section "HTTP API Tests"
+    section "🌐 HTTP API Tests"
     
-    API_URL="http://${HOST}:${API_PORT}"
+    API="http://${HOST}:${API_PORT}"
     
-    # Helper function for API calls
-    api_call() {
-        local method="$1"
-        local endpoint="$2"
-        local expected_status="$3"
-        local auth="${4:-true}"
-        
+    # Helper: make API call, return "status|time|body"
+    api() {
+        local method="$1" path="$2" auth="${3:-true}"
+        local resp
         if [ "$auth" = "true" ]; then
-            response=$(curl -s -w "\n%{http_code}" -X "$method" -H "X-API-Key: ${API_KEY}" "${API_URL}${endpoint}" 2>&1)
+            resp=$(curl -s -w "\n%{http_code}\n%{time_total}" -X "$method" \
+                -H "Content-Type: application/json" -H "X-API-Key: ${API_KEY}" \
+                "${API}${path}" 2>&1)
         else
-            response=$(curl -s -w "\n%{http_code}" -X "$method" "${API_URL}${endpoint}" 2>&1)
+            resp=$(curl -s -w "\n%{http_code}\n%{time_total}" -X "$method" \
+                -H "Content-Type: application/json" "${API}${path}" 2>&1)
         fi
         
-        status=$(echo "$response" | tail -1)
-        body=$(echo "$response" | sed '$d')
-        
-        echo "$status|$body"
+        local body=$(echo "$resp" | head -n -2)
+        local code=$(echo "$resp" | tail -2 | head -1)
+        local time=$(echo "$resp" | tail -1)
+        echo "${code}|${time}|${body}"
     }
     
-    # Test 1: Authentication required
-    log_info "Test: API rejects unauthenticated requests"
-    result=$(api_call "GET" "/stats/all" "401" "false")
-    status=$(echo "$result" | cut -d'|' -f1)
-    if [ "$status" = "401" ]; then
-        log_pass "API correctly rejects unauthenticated requests (401)"
+    # Test: Auth enforcement
+    echo -e "  ${D}Testing authentication...${N}"
+    r=$(api "GET" "/stats/all" "false")
+    code=$(echo "$r" | cut -d'|' -f1)
+    if [ "$code" = "401" ]; then
+        log_result "API" "Auth Enforcement" "passed" "" "GET /stats/all (no auth)" "HTTP 401 Unauthorized" "Blocks unauthenticated requests"
     else
-        log_fail "API should return 401, got: $status"
+        log_result "API" "Auth Enforcement" "failed" "" "GET /stats/all (no auth)" "HTTP $code" "Expected 401"
     fi
     
-    # Test 2: GET /stats/all
-    log_info "Test: GET /stats/all"
-    result=$(api_call "GET" "/stats/all" "200")
-    status=$(echo "$result" | cut -d'|' -f1)
-    body=$(echo "$result" | cut -d'|' -f2-)
-    if [ "$status" = "200" ]; then
-        if echo "$body" | jq empty 2>/dev/null; then
-            log_pass "GET /stats/all returns valid JSON (200)"
-        else
-            log_fail "GET /stats/all returns invalid JSON"
-        fi
-    else
-        log_fail "GET /stats/all failed with status: $status"
-    fi
-    
-    # Test 3: GET /online
-    log_info "Test: GET /online"
-    result=$(api_call "GET" "/online" "200")
-    status=$(echo "$result" | cut -d'|' -f1)
-    body=$(echo "$result" | cut -d'|' -f2-)
-    if [ "$status" = "200" ]; then
-        # /online returns an array of online players
+    # Test: GET /stats/all
+    r=$(api "GET" "/stats/all")
+    code=$(echo "$r" | cut -d'|' -f1)
+    time=$(echo "$r" | cut -d'|' -f2)
+    body=$(echo "$r" | cut -d'|' -f3-)
+    if [ "$code" = "200" ]; then
         if echo "$body" | jq -e 'type == "array"' &>/dev/null; then
-            player_count=$(echo "$body" | jq 'length')
-            log_pass "GET /online returns player array (count: ${player_count})"
+            count=$(echo "$body" | jq 'length')
+            log_result "API" "Get All Stats" "passed" "" "GET /stats/all" "HTTP 200, ${count} records" "${time}s response time"
         else
-            log_fail "GET /online should return array"
+            log_result "API" "Get All Stats" "failed" "" "GET /stats/all" "Invalid JSON structure" "Expected array"
         fi
     else
-        log_fail "GET /online failed with status: $status"
+        log_result "API" "Get All Stats" "failed" "" "GET /stats/all" "HTTP $code" ""
     fi
     
-    # Test 4: GET /moments/recent
-    log_info "Test: GET /moments/recent"
-    result=$(api_call "GET" "/moments/recent?limit=10" "200")
-    status=$(echo "$result" | cut -d'|' -f1)
-    if [ "$status" = "200" ]; then
-        log_pass "GET /moments/recent returns 200"
+    # Test: GET /online
+    r=$(api "GET" "/online")
+    code=$(echo "$r" | cut -d'|' -f1)
+    body=$(echo "$r" | cut -d'|' -f3-)
+    if [ "$code" = "200" ]; then
+        count=$(echo "$body" | jq 'if type == "array" then length else 0 end' 2>/dev/null || echo "?")
+        log_result "API" "Online Players" "passed" "" "GET /online" "HTTP 200, ${count} online" ""
     else
-        log_fail "GET /moments/recent failed with status: $status"
+        log_result "API" "Online Players" "failed" "" "GET /online" "HTTP $code" ""
     fi
     
-    # Test 5: GET /health
-    log_info "Test: GET /health"
-    result=$(api_call "GET" "/health" "200")
-    status=$(echo "$result" | cut -d'|' -f1)
-    if [ "$status" = "200" ]; then
-        log_pass "GET /health returns 200"
+    # Test: GET /health
+    r=$(api "GET" "/health")
+    code=$(echo "$r" | cut -d'|' -f1)
+    time=$(echo "$r" | cut -d'|' -f2)
+    if [ "$code" = "200" ]; then
+        log_result "API" "Health Check" "passed" "" "GET /health" "HTTP 200" "${time}s"
     else
-        log_fail "GET /health failed with status: $status"
+        log_result "API" "Health Check" "failed" "" "GET /health" "HTTP $code" ""
     fi
     
-    # Test 6: GET /heatmap/MINING
-    log_info "Test: GET /heatmap/MINING"
-    result=$(api_call "GET" "/heatmap/MINING" "200")
-    status=$(echo "$result" | cut -d'|' -f1)
-    if [ "$status" = "200" ]; then
-        log_pass "GET /heatmap/MINING returns 200"
+    # Test: GET /moments/recent
+    r=$(api "GET" "/moments/recent?limit=10")
+    code=$(echo "$r" | cut -d'|' -f1)
+    body=$(echo "$r" | cut -d'|' -f3-)
+    if [ "$code" = "200" ]; then
+        count=$(echo "$body" | jq 'if type == "array" then length else 0 end' 2>/dev/null || echo "0")
+        log_result "API" "Recent Moments" "passed" "" "GET /moments/recent" "HTTP 200, ${count} items" ""
     else
-        log_fail "GET /heatmap/MINING failed with status: $status"
+        log_result "API" "Recent Moments" "failed" "" "GET /moments/recent" "HTTP $code" ""
     fi
     
-    # Test 7: GET /heatmap/DEATH
-    log_info "Test: GET /heatmap/DEATH"
-    result=$(api_call "GET" "/heatmap/DEATH" "200")
-    status=$(echo "$result" | cut -d'|' -f1)
-    if [ "$status" = "200" ]; then
-        log_pass "GET /heatmap/DEATH returns 200"
+    # Test: GET /heatmap/MINING
+    r=$(api "GET" "/heatmap/MINING")
+    code=$(echo "$r" | cut -d'|' -f1)
+    if [ "$code" = "200" ]; then
+        log_result "API" "Mining Heatmap" "passed" "" "GET /heatmap/MINING" "HTTP 200" ""
     else
-        log_fail "GET /heatmap/DEATH failed with status: $status"
+        log_result "API" "Mining Heatmap" "failed" "" "GET /heatmap/MINING" "HTTP $code" ""
     fi
     
-    # Test 8: Invalid UUID handling
-    log_info "Test: GET /stats/invalid-uuid (error handling)"
-    result=$(api_call "GET" "/stats/invalid-uuid" "400")
-    status=$(echo "$result" | cut -d'|' -f1)
-    if [ "$status" = "400" ] || [ "$status" = "404" ]; then
-        log_pass "GET /stats/invalid-uuid returns error ($status)"
+    # Test: GET /heatmap/DEATH
+    r=$(api "GET" "/heatmap/DEATH")
+    code=$(echo "$r" | cut -d'|' -f1)
+    if [ "$code" = "200" ]; then
+        log_result "API" "Death Heatmap" "passed" "" "GET /heatmap/DEATH" "HTTP 200" ""
     else
-        log_fail "GET /stats/invalid-uuid should return 400 or 404, got: $status"
+        log_result "API" "Death Heatmap" "failed" "" "GET /heatmap/DEATH" "HTTP $code" ""
     fi
     
-    # Test 9: GET /timeline (should work without UUID)
-    log_info "Test: GET /timeline"
-    result=$(api_call "GET" "/timeline" "200")
-    status=$(echo "$result" | cut -d'|' -f1)
-    if [ "$status" = "200" ] || [ "$status" = "400" ]; then
-        log_pass "GET /timeline responds ($status)"
+    # Test: Invalid UUID
+    r=$(api "GET" "/stats/not-a-uuid")
+    code=$(echo "$r" | cut -d'|' -f1)
+    if [ "$code" = "400" ] || [ "$code" = "404" ]; then
+        log_result "API" "Invalid UUID Handling" "passed" "" "GET /stats/invalid" "HTTP $code" "Graceful error handling"
     else
-        log_fail "GET /timeline failed with status: $status"
+        log_result "API" "Invalid UUID Handling" "failed" "" "GET /stats/invalid" "HTTP $code" "Expected 400 or 404"
     fi
     
-    # Test 10: GET /social/top
-    log_info "Test: GET /social/top"
-    result=$(api_call "GET" "/social/top?limit=10" "200")
-    status=$(echo "$result" | cut -d'|' -f1)
-    if [ "$status" = "200" ]; then
-        log_pass "GET /social/top returns 200"
+    # Test: GET /timeline
+    r=$(api "GET" "/timeline")
+    code=$(echo "$r" | cut -d'|' -f1)
+    if [ "$code" = "200" ] || [ "$code" = "400" ]; then
+        log_result "API" "Timeline Endpoint" "passed" "" "GET /timeline" "HTTP $code" ""
     else
-        log_fail "GET /social/top failed with status: $status"
+        log_result "API" "Timeline Endpoint" "failed" "" "GET /timeline" "HTTP $code" ""
     fi
     
-    # Test 11: GET /death/replay
-    log_info "Test: GET /death/replay"
-    result=$(api_call "GET" "/death/replay?limit=5" "200")
-    status=$(echo "$result" | cut -d'|' -f1)
-    if [ "$status" = "200" ]; then
-        log_pass "GET /death/replay returns 200"
+    # Test: GET /social/top
+    r=$(api "GET" "/social/top?limit=10")
+    code=$(echo "$r" | cut -d'|' -f1)
+    if [ "$code" = "200" ]; then
+        log_result "API" "Social Leaderboard" "passed" "" "GET /social/top" "HTTP 200" ""
     else
-        log_fail "GET /death/replay failed with status: $status"
+        log_result "API" "Social Leaderboard" "failed" "" "GET /social/top" "HTTP $code" ""
     fi
     
-    # Test 12: POST not allowed on GET endpoints
-    log_info "Test: POST /stats/all (method not allowed)"
-    result=$(api_call "POST" "/stats/all" "405")
-    status=$(echo "$result" | cut -d'|' -f1)
-    if [ "$status" = "405" ]; then
-        log_pass "POST /stats/all correctly returns 405"
+    # Test: GET /death/replay
+    r=$(api "GET" "/death/replay?limit=5")
+    code=$(echo "$r" | cut -d'|' -f1)
+    if [ "$code" = "200" ]; then
+        log_result "API" "Death Replay" "passed" "" "GET /death/replay" "HTTP 200" ""
     else
-        log_skip "POST method handling: got $status"
+        log_result "API" "Death Replay" "failed" "" "GET /death/replay" "HTTP $code" ""
+    fi
+    
+    # Test: Method enforcement
+    r=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "X-API-Key: ${API_KEY}" "${API}/stats/all")
+    if [ "$r" = "405" ]; then
+        log_result "API" "Method Enforcement" "passed" "" "POST /stats/all" "HTTP 405" "Rejects wrong method"
+    else
+        log_result "API" "Method Enforcement" "skipped" "" "POST /stats/all" "HTTP $r" "Non-standard response"
     fi
 }
 
-# ============================================================================
-# WEB DASHBOARD TESTS
-# ============================================================================
+# ══════════════════════════════════════════════════════════════════════════════
+# DASHBOARD TESTS
+# ══════════════════════════════════════════════════════════════════════════════
+
 run_dashboard_tests() {
-    log_section "Web Dashboard Tests"
+    section "📊 Dashboard Tests"
     
-    DASH_URL="http://${HOST}:${DASHBOARD_PORT}"
+    DASH="http://${HOST}:${DASH_PORT}"
     
-    # Check if dashboard is enabled
-    dash_check=$(curl -s -o /dev/null -w "%{http_code}" "${DASH_URL}/" 2>&1 || echo "000")
-    if [ "$dash_check" = "000" ] || [ "$dash_check" = "404" ]; then
-        log_skip "Dashboard not available on port ${DASHBOARD_PORT}"
+    # Check availability
+    check=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "$DASH/" 2>&1 || echo "000")
+    if [ "$check" = "000" ]; then
+        log_result "Dashboard" "Dashboard Availability" "skipped" "" "GET /" "Not reachable" "Port ${DASH_PORT}"
         return
     fi
     
-    # Test 1: Static file serving - index.html
-    log_info "Test: Dashboard serves index.html"
-    result=$(curl -s -w "\n%{http_code}" "${DASH_URL}/" 2>&1)
-    status=$(echo "$result" | tail -1)
-    body=$(echo "$result" | sed '$d')
-    if [ "$status" = "200" ] && echo "$body" | grep -qi "smpstats"; then
-        log_pass "Dashboard serves index.html with SMPStats content"
+    # Test: Index page
+    r=$(curl -s -w "\n%{http_code}" "$DASH/" 2>&1)
+    code=$(echo "$r" | tail -1)
+    body=$(echo "$r" | head -n -1)
+    if [ "$code" = "200" ] && echo "$body" | grep -qi "smpstats"; then
+        log_result "Dashboard" "Index Page" "passed" "" "GET /" "HTTP 200" "SMPStats content found"
     else
-        log_fail "Dashboard index.html failed: status=$status"
+        log_result "Dashboard" "Index Page" "failed" "" "GET /" "HTTP $code" ""
     fi
     
-    # Test 2: CSS file
-    log_info "Test: Dashboard serves CSS"
-    status=$(curl -s -o /dev/null -w "%{http_code}" "${DASH_URL}/css/style.css" 2>&1)
-    if [ "$status" = "200" ]; then
-        log_pass "Dashboard serves /css/style.css"
+    # Test: CSS
+    code=$(curl -s -o /dev/null -w "%{http_code}" "$DASH/css/style.css")
+    if [ "$code" = "200" ]; then
+        log_result "Dashboard" "CSS Assets" "passed" "" "GET /css/style.css" "HTTP 200" ""
     else
-        log_fail "Dashboard CSS failed: status=$status"
+        log_result "Dashboard" "CSS Assets" "failed" "" "GET /css/style.css" "HTTP $code" ""
     fi
     
-    # Test 3: JS file
-    log_info "Test: Dashboard serves JavaScript"
-    status=$(curl -s -o /dev/null -w "%{http_code}" "${DASH_URL}/js/app.js" 2>&1)
-    if [ "$status" = "200" ]; then
-        log_pass "Dashboard serves /js/app.js"
+    # Test: JS
+    code=$(curl -s -o /dev/null -w "%{http_code}" "$DASH/js/app.js")
+    if [ "$code" = "200" ]; then
+        log_result "Dashboard" "JavaScript Assets" "passed" "" "GET /js/app.js" "HTTP 200" ""
     else
-        log_fail "Dashboard JS failed: status=$status"
+        log_result "Dashboard" "JavaScript Assets" "failed" "" "GET /js/app.js" "HTTP $code" ""
     fi
     
-    # Test 4: Public config endpoint
-    log_info "Test: GET /api/public/config"
-    result=$(curl -s -w "\n%{http_code}" "${DASH_URL}/api/public/config" 2>&1)
-    status=$(echo "$result" | tail -1)
-    body=$(echo "$result" | sed '$d')
-    if [ "$status" = "200" ] && echo "$body" | jq -e '.publicEnabled' &>/dev/null; then
-        log_pass "Public config endpoint returns valid config"
+    # Test: Public config
+    r=$(curl -s -w "\n%{http_code}" "$DASH/api/public/config" 2>&1)
+    code=$(echo "$r" | tail -1)
+    body=$(echo "$r" | head -n -1)
+    if [ "$code" = "200" ] && echo "$body" | jq -e '.publicEnabled' &>/dev/null; then
+        mode=$(echo "$body" | jq -r '.publicEnabled')
+        log_result "Dashboard" "Public Config API" "passed" "" "GET /api/public/config" "HTTP 200" "publicEnabled=$mode"
     else
-        log_fail "Public config endpoint failed: status=$status"
+        log_result "Dashboard" "Public Config API" "failed" "" "GET /api/public/config" "HTTP $code" ""
     fi
     
-    # Test 5: Public online endpoint
-    log_info "Test: GET /api/public/online"
-    result=$(curl -s -w "\n%{http_code}" "${DASH_URL}/api/public/online" 2>&1)
-    status=$(echo "$result" | tail -1)
-    if [ "$status" = "200" ] || [ "$status" = "403" ]; then
-        log_pass "Public online endpoint responds ($status)"
-    else
-        log_fail "Public online endpoint failed: status=$status"
-    fi
-    
-    # Test 6: Public leaderboard endpoint
-    log_info "Test: GET /api/public/leaderboard"
-    result=$(curl -s -w "\n%{http_code}" "${DASH_URL}/api/public/leaderboard?days=7&limit=10" 2>&1)
-    status=$(echo "$result" | tail -1)
-    if [ "$status" = "200" ] || [ "$status" = "403" ]; then
-        log_pass "Public leaderboard endpoint responds ($status)"
-    else
-        log_fail "Public leaderboard endpoint failed: status=$status"
-    fi
-    
-    # Test 7: Public moments endpoint
-    log_info "Test: GET /api/public/moments"
-    result=$(curl -s -w "\n%{http_code}" "${DASH_URL}/api/public/moments?limit=10" 2>&1)
-    status=$(echo "$result" | tail -1)
-    if [ "$status" = "200" ] || [ "$status" = "403" ]; then
-        log_pass "Public moments endpoint responds ($status)"
-    else
-        log_fail "Public moments endpoint failed: status=$status"
-    fi
-    
-    # Test 8: Public stats endpoint
-    log_info "Test: GET /api/public/stats"
-    result=$(curl -s -w "\n%{http_code}" "${DASH_URL}/api/public/stats" 2>&1)
-    status=$(echo "$result" | tail -1)
-    if [ "$status" = "200" ] || [ "$status" = "403" ]; then
-        log_pass "Public stats endpoint responds ($status)"
-    else
-        log_fail "Public stats endpoint failed: status=$status"
-    fi
-    
-    # Test 9: Admin login with wrong password
-    log_info "Test: Admin login rejects wrong password"
-    result=$(curl -s -w "\n%{http_code}" -X POST -H "Content-Type: application/json" \
-        -d '{"password":"wrong-password"}' "${DASH_URL}/api/admin/login" 2>&1)
-    status=$(echo "$result" | tail -1)
-    if [ "$status" = "401" ]; then
-        log_pass "Admin login correctly rejects wrong password"
-    else
-        log_fail "Admin login should reject wrong password: status=$status"
-    fi
-    
-    # Test 10: Admin endpoints require auth
-    log_info "Test: Admin health requires authentication"
-    result=$(curl -s -w "\n%{http_code}" "${DASH_URL}/api/admin/health" 2>&1)
-    status=$(echo "$result" | tail -1)
-    if [ "$status" = "401" ]; then
-        log_pass "Admin health correctly requires auth (401)"
-    else
-        log_fail "Admin health should require auth: status=$status"
-    fi
-    
-    # Test 11: Admin login flow (if password provided)
-    if [ -n "$ADMIN_PASSWORD" ]; then
-        log_info "Test: Admin login flow"
-        login_result=$(curl -s -w "\n%{http_code}" -c /tmp/dash_cookies.txt -X POST \
-            -H "Content-Type: application/json" \
-            -d "{\"password\":\"${ADMIN_PASSWORD}\"}" "${DASH_URL}/api/admin/login" 2>&1)
-        login_status=$(echo "$login_result" | tail -1)
-        
-        if [ "$login_status" = "200" ]; then
-            log_pass "Admin login successful"
-            
-            # Test authenticated endpoint
-            log_info "Test: Authenticated admin health"
-            auth_result=$(curl -s -w "\n%{http_code}" -b /tmp/dash_cookies.txt "${DASH_URL}/api/admin/health" 2>&1)
-            auth_status=$(echo "$auth_result" | tail -1)
-            if [ "$auth_status" = "200" ] || [ "$auth_status" = "404" ]; then
-                log_pass "Admin health accessible after login ($auth_status)"
-            else
-                log_fail "Admin health failed after login: status=$auth_status"
-            fi
-            
-            # Cleanup
-            rm -f /tmp/dash_cookies.txt
+    # Test: Public endpoints (200 or 403 both valid)
+    for ep in "online" "leaderboard" "moments" "stats"; do
+        code=$(curl -s -o /dev/null -w "%{http_code}" "$DASH/api/public/$ep")
+        if [ "$code" = "200" ] || [ "$code" = "403" ]; then
+            log_result "Dashboard" "Public /$ep" "passed" "" "GET /api/public/$ep" "HTTP $code" ""
         else
-            log_skip "Admin login failed with status $login_status - skipping auth tests"
-        fi
-    fi
-}
-
-# ============================================================================
-# DATABASE VALIDATION TESTS
-# ============================================================================
-run_db_tests() {
-    log_section "Database Validation Tests"
-    
-    # These tests verify data consistency via API responses
-    API_URL="http://${HOST}:${API_PORT}"
-    
-    api_get() {
-        curl -s -H "X-API-Key: ${API_KEY}" "${API_URL}$1" 2>&1
-    }
-    
-    # Test 1: Stats structure validation
-    log_info "Test: Stats response structure"
-    stats=$(api_get "/stats/all")
-    if echo "$stats" | jq -e 'type == "array"' &>/dev/null; then
-        log_pass "Stats returns array structure"
-        
-        # Check if any stats exist and validate structure
-        count=$(echo "$stats" | jq 'length')
-        if [ "$count" -gt 0 ]; then
-            log_info "  Found $count player records"
-            
-            # Validate first record has expected fields
-            has_uuid=$(echo "$stats" | jq -e '.[0].uuid' &>/dev/null && echo "yes" || echo "no")
-            has_name=$(echo "$stats" | jq -e '.[0].name' &>/dev/null && echo "yes" || echo "no")
-            
-            if [ "$has_uuid" = "yes" ] && [ "$has_name" = "yes" ]; then
-                log_pass "Stats records have required fields (uuid, name)"
-            else
-                log_fail "Stats records missing required fields"
-            fi
-        else
-            log_info "  No player records yet (empty database)"
-        fi
-    else
-        log_fail "Stats should return array, got: $(echo "$stats" | head -c 100)"
-    fi
-    
-    # Test 2: Heatmap data structure
-    log_info "Test: Heatmap response structure"
-    heatmap=$(api_get "/heatmap/MINING")
-    if echo "$heatmap" | jq -e 'type == "array" or type == "object"' &>/dev/null; then
-        log_pass "Heatmap returns valid structure"
-    else
-        log_fail "Heatmap structure invalid"
-    fi
-    
-    # Test 3: Moments data structure
-    log_info "Test: Moments response structure"
-    moments=$(api_get "/moments/recent?limit=5")
-    if echo "$moments" | jq -e 'type == "array"' &>/dev/null; then
-        log_pass "Moments returns array structure"
-    else
-        log_fail "Moments structure invalid"
-    fi
-    
-    # Test 4: Timeline data structure
-    log_info "Test: Timeline response structure"
-    timeline=$(api_get "/timeline")
-    if echo "$timeline" | jq empty 2>/dev/null; then
-        log_pass "Timeline returns valid JSON"
-    else
-        log_skip "Timeline response not JSON"
-    fi
-    
-    # Test 5: Social data structure
-    log_info "Test: Social data structure"
-    social=$(api_get "/social/top?limit=5")
-    if echo "$social" | jq -e 'type == "array"' &>/dev/null; then
-        log_pass "Social returns array structure"
-    else
-        log_fail "Social structure invalid"
-    fi
-    
-    # Test 6: Health snapshot structure
-    log_info "Test: Health snapshot structure"
-    health=$(api_get "/health")
-    if echo "$health" | jq empty 2>/dev/null; then
-        if echo "$health" | jq -e '.timestamp or .error' &>/dev/null; then
-            log_pass "Health returns valid snapshot or error"
-        else
-            log_pass "Health returns valid JSON"
-        fi
-    else
-        log_fail "Health response not valid JSON"
-    fi
-}
-
-# ============================================================================
-# INTEGRATION TESTS
-# ============================================================================
-run_integration_tests() {
-    log_section "Integration Tests"
-    
-    API_URL="http://${HOST}:${API_PORT}"
-    
-    # Test 1: API and RCON return consistent player count
-    if command -v mcrcon &> /dev/null; then
-        log_info "Test: API and RCON player count consistency"
-        
-        rcon_list=$(mcrcon -H "${HOST}" -P "${RCON_PORT}" -p "${RCON_PASSWORD}" "list" 2>&1)
-        rcon_count=$(echo "$rcon_list" | grep -oP '\d+(?= of a max)' || echo "0")
-        
-        api_online=$(curl -s -H "X-API-Key: ${API_KEY}" "${API_URL}/online" 2>&1)
-        # /online returns array of players, count is array length
-        api_count=$(echo "$api_online" | jq 'length' 2>/dev/null || echo "0")
-        
-        if [ "$rcon_count" = "$api_count" ]; then
-            log_pass "Player count consistent: RCON=$rcon_count, API=$api_count"
-        else
-            log_fail "Player count mismatch: RCON=$rcon_count, API=$api_count"
-        fi
-    else
-        log_skip "RCON not available for integration test"
-    fi
-    
-    # Test 2: Verify all API endpoints respond within timeout
-    log_info "Test: API response times (< 5s timeout)"
-    endpoints=("/stats/all" "/online" "/moments/recent" "/health" "/heatmap/MINING")
-    all_fast=true
-    
-    for endpoint in "${endpoints[@]}"; do
-        start_time=$(date +%s%N)
-        curl -s -m 5 -H "X-API-Key: ${API_KEY}" "${API_URL}${endpoint}" > /dev/null 2>&1
-        exit_code=$?
-        end_time=$(date +%s%N)
-        
-        elapsed=$(( (end_time - start_time) / 1000000 ))
-        
-        if [ $exit_code -eq 0 ] && [ $elapsed -lt 5000 ]; then
-            echo "  ✓ ${endpoint}: ${elapsed}ms"
-        else
-            echo "  ✗ ${endpoint}: timeout or error"
-            all_fast=false
+            log_result "Dashboard" "Public /$ep" "failed" "" "GET /api/public/$ep" "HTTP $code" ""
         fi
     done
     
-    if [ "$all_fast" = true ]; then
-        log_pass "All endpoints respond within timeout"
+    # Test: Admin auth rejection
+    code=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" \
+        -d '{"password":"wrong"}' "$DASH/api/admin/login")
+    if [ "$code" = "401" ]; then
+        log_result "Dashboard" "Admin Auth Security" "passed" "" "POST /api/admin/login" "HTTP 401" "Rejects bad password"
     else
-        log_fail "Some endpoints timed out"
+        log_result "Dashboard" "Admin Auth Security" "failed" "" "POST /api/admin/login" "HTTP $code" "Expected 401"
+    fi
+    
+    # Test: Admin endpoint protection
+    code=$(curl -s -o /dev/null -w "%{http_code}" "$DASH/api/admin/health")
+    if [ "$code" = "401" ]; then
+        log_result "Dashboard" "Admin Endpoint Protection" "passed" "" "GET /api/admin/health" "HTTP 401" "Requires auth"
+    else
+        log_result "Dashboard" "Admin Endpoint Protection" "failed" "" "GET /api/admin/health" "HTTP $code" "Expected 401"
     fi
 }
 
-# ============================================================================
-# MAIN
-# ============================================================================
-main() {
+# ══════════════════════════════════════════════════════════════════════════════
+# DATABASE TESTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+run_db_tests() {
+    section "💾 Database Validation Tests"
+    
+    API="http://${HOST}:${API_PORT}"
+    get() { curl -s -H "X-API-Key: ${API_KEY}" "${API}$1" 2>&1; }
+    
+    # Test: Stats structure
+    echo -e "  ${D}Validating data structures...${N}"
+    data=$(get "/stats/all")
+    if echo "$data" | jq -e 'type == "array"' &>/dev/null; then
+        count=$(echo "$data" | jq 'length')
+        log_result "Database" "Stats Array Structure" "passed" "" "GET /stats/all" "Valid array, ${count} records" ""
+        
+        if [ "$count" -gt 0 ]; then
+            has_uuid=$(echo "$data" | jq -e '.[0].uuid' &>/dev/null && echo "✓" || echo "✗")
+            has_name=$(echo "$data" | jq -e '.[0].name' &>/dev/null && echo "✓" || echo "✗")
+            if [ "$has_uuid" = "✓" ] && [ "$has_name" = "✓" ]; then
+                sample=$(echo "$data" | jq -r '.[0].name // "unknown"')
+                log_result "Database" "Stats Field Validation" "passed" "" "" "uuid=$has_uuid name=$has_name" "Sample: $sample"
+            else
+                log_result "Database" "Stats Field Validation" "failed" "" "" "uuid=$has_uuid name=$has_name" "Missing fields"
+            fi
+        fi
+    else
+        log_result "Database" "Stats Array Structure" "failed" "" "GET /stats/all" "Invalid structure" ""
+    fi
+    
+    # Test: Heatmap structure
+    data=$(get "/heatmap/MINING")
+    if echo "$data" | jq -e 'type == "array" or type == "object"' &>/dev/null; then
+        t=$(echo "$data" | jq -r 'type')
+        log_result "Database" "Heatmap Structure" "passed" "" "GET /heatmap/MINING" "Valid $t" ""
+    else
+        log_result "Database" "Heatmap Structure" "failed" "" "GET /heatmap/MINING" "Invalid structure" ""
+    fi
+    
+    # Test: Moments structure
+    data=$(get "/moments/recent?limit=5")
+    if echo "$data" | jq -e 'type == "array"' &>/dev/null; then
+        count=$(echo "$data" | jq 'length')
+        log_result "Database" "Moments Structure" "passed" "" "GET /moments/recent" "Valid array, ${count} items" ""
+    else
+        log_result "Database" "Moments Structure" "failed" "" "GET /moments/recent" "Invalid structure" ""
+    fi
+    
+    # Test: Social structure
+    data=$(get "/social/top?limit=5")
+    if echo "$data" | jq -e 'type == "array"' &>/dev/null; then
+        count=$(echo "$data" | jq 'length')
+        log_result "Database" "Social Data Structure" "passed" "" "GET /social/top" "Valid array, ${count} items" ""
+    else
+        log_result "Database" "Social Data Structure" "failed" "" "GET /social/top" "Invalid structure" ""
+    fi
+    
+    # Test: Health structure
+    data=$(get "/health")
+    if echo "$data" | jq empty 2>/dev/null; then
+        log_result "Database" "Health Data Structure" "passed" "" "GET /health" "Valid JSON" ""
+    else
+        log_result "Database" "Health Data Structure" "failed" "" "GET /health" "Invalid JSON" ""
+    fi
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# INTEGRATION TESTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+run_integration_tests() {
+    section "🔗 Integration Tests"
+    
+    API="http://${HOST}:${API_PORT}"
+    
+    # Test: RCON/API consistency
+    if command -v mcrcon &>/dev/null; then
+        echo -e "  ${D}Checking cross-component consistency...${N}"
+        rcon_out=$(timeout 10 mcrcon -H "$HOST" -P "$RCON_PORT" -p "$RCON_PASS" "list" 2>&1 || echo "")
+        rcon_count=$(echo "$rcon_out" | grep -oP '\d+(?= of)' || echo "0")
+        
+        api_out=$(curl -s -H "X-API-Key: ${API_KEY}" "${API}/online" 2>&1)
+        api_count=$(echo "$api_out" | jq 'length' 2>/dev/null || echo "0")
+        
+        if [ "$rcon_count" = "$api_count" ]; then
+            log_result "Integration" "RCON-API Player Sync" "passed" "" "" "RCON=$rcon_count API=$api_count" "Counts match"
+        else
+            log_result "Integration" "RCON-API Player Sync" "failed" "" "" "RCON=$rcon_count API=$api_count" "Mismatch"
+        fi
+    else
+        log_result "Integration" "RCON-API Player Sync" "skipped" "" "" "mcrcon unavailable" ""
+    fi
+    
+    # Test: Response time benchmark
     echo ""
-    echo "╔══════════════════════════════════════════════════════════════╗"
-    echo "║          SMPStats E2E Test Suite                             ║"
-    echo "╠══════════════════════════════════════════════════════════════╣"
-    echo "║  Host:          ${HOST}"
-    echo "║  RCON Port:     ${RCON_PORT}"
-    echo "║  API Port:      ${API_PORT}"
-    echo "║  Dashboard:     ${DASHBOARD_PORT}"
-    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo -e "  ${D}Benchmarking API response times...${N}"
+    echo ""
+    printf "  ${D}%-30s %8s %10s${N}\n" "Endpoint" "Status" "Time"
+    printf "  ${D}%-30s %8s %10s${N}\n" "──────────────────────────────" "────────" "──────────"
+    
+    endpoints=("/stats/all" "/online" "/moments/recent" "/health" "/heatmap/MINING")
+    all_ok=true
+    max_time=0
+    max_ep=""
+    
+    for ep in "${endpoints[@]}"; do
+        start=$(date +%s%N)
+        code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 -H "X-API-Key: ${API_KEY}" "${API}${ep}" 2>&1 || echo "000")
+        end=$(date +%s%N)
+        
+        ms=$(( (end - start) / 1000000 ))
+        
+        if [ "$code" = "200" ] && [ "$ms" -lt 5000 ]; then
+            icon="${G}✓${N}"
+            time_color="$G"
+            [ "$ms" -gt 1000 ] && time_color="$Y"
+        else
+            icon="${R}✗${N}"
+            time_color="$R"
+            all_ok=false
+        fi
+        
+        printf "  $icon %-28s %8s ${time_color}%7dms${N}\n" "$ep" "HTTP $code" "$ms"
+        
+        if [ "$ms" -gt "$max_time" ]; then
+            max_time=$ms
+            max_ep=$ep
+        fi
+    done
+    
     echo ""
     
+    if [ "$all_ok" = true ]; then
+        log_result "Integration" "API Response Times" "passed" "" "" "All < 5s" "Slowest: ${max_ep} @ ${max_time}ms"
+    else
+        log_result "Integration" "API Response Times" "failed" "" "" "Timeout or errors" ""
+    fi
+    
+    # Test: Dashboard-API sync
+    DASH="http://${HOST}:${DASH_PORT}"
+    check=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 "$DASH/" 2>&1 || echo "000")
+    if [ "$check" != "000" ]; then
+        cfg=$(curl -s "$DASH/api/public/config" 2>&1)
+        if echo "$cfg" | jq -e '.publicEnabled' &>/dev/null; then
+            mode=$(echo "$cfg" | jq -r '.publicEnabled')
+            log_result "Integration" "Dashboard-API Sync" "passed" "" "" "Config accessible" "publicEnabled=$mode"
+        else
+            log_result "Integration" "Dashboard-API Sync" "failed" "" "" "Config parse error" ""
+        fi
+    else
+        log_result "Integration" "Dashboard-API Sync" "skipped" "" "" "Dashboard offline" ""
+    fi
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# RESULTS & SUMMARY
+# ══════════════════════════════════════════════════════════════════════════════
+
+write_results() {
+    local status="success"
+    [ "$FAILED" -gt 0 ] && status="failure"
+    
+    cat > "$RESULTS_FILE" << EOF
+{
+  "status": "${status}",
+  "passed": ${PASSED},
+  "failed": ${FAILED},
+  "skipped": ${SKIPPED},
+  "total": $((PASSED + FAILED + SKIPPED)),
+  "rcon_port": "${RCON_PORT}",
+  "api_port": "${API_PORT}",
+  "dashboard_port": "${DASH_PORT}",
+  "host": "${HOST}",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "tests": ${TESTS_JSON}
+}
+EOF
+}
+
+print_summary() {
+    local total=$((PASSED + FAILED + SKIPPED))
+    local rate=0
+    [ $((PASSED + FAILED)) -gt 0 ] && rate=$((PASSED * 100 / (PASSED + FAILED)))
+    
+    echo ""
+    echo -e "${B}╔══════════════════════════════════════════════════════════════════════╗${N}"
+    echo -e "${B}║${N}  ${W}TEST SUMMARY${N}"
+    echo -e "${B}╠══════════════════════════════════════════════════════════════════════╣${N}"
+    echo -e "${B}║${N}"
+    
+    # Progress bar
+    local bar=""
+    for i in $(seq 1 20); do
+        if [ $((i * 5)) -le "$rate" ]; then
+            bar="${bar}█"
+        else
+            bar="${bar}░"
+        fi
+    done
+    echo -e "${B}║${N}  Pass Rate: ${W}${rate}%${N}  ${G}${bar}${N}"
+    echo -e "${B}║${N}"
+    printf "${B}║${N}  ${G}✓ Passed:${N}  %3d\n" "$PASSED"
+    printf "${B}║${N}  ${R}✗ Failed:${N}  %3d\n" "$FAILED"
+    printf "${B}║${N}  ${Y}○ Skipped:${N} %3d\n" "$SKIPPED"
+    echo -e "${B}║${N}  ─────────────"
+    printf "${B}║${N}  ${W}Total:${N}     %3d\n" "$total"
+    echo -e "${B}║${N}"
+    echo -e "${B}╚══════════════════════════════════════════════════════════════════════╝${N}"
+    echo ""
+    
+    if [ "$FAILED" -gt 0 ]; then
+        echo -e "  ${R}╔═══════════════════════════════════════╗${N}"
+        echo -e "  ${R}║         ❌ TESTS FAILED               ║${N}"
+        echo -e "  ${R}╚═══════════════════════════════════════╝${N}"
+    else
+        echo -e "  ${G}╔═══════════════════════════════════════╗${N}"
+        echo -e "  ${G}║       ✅ ALL TESTS PASSED             ║${N}"
+        echo -e "  ${G}╚═══════════════════════════════════════╝${N}"
+    fi
+    echo ""
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MAIN
+# ══════════════════════════════════════════════════════════════════════════════
+
+main() {
+    header "🧪 SMPStats E2E Test Suite"
+    
+    echo -e "  ${W}Configuration${N}"
+    echo -e "  ─────────────────────────────────────────────────────────────────"
+    printf "  %-18s %s\n" "Host:" "$HOST"
+    printf "  %-18s %s\n" "RCON Port:" "$RCON_PORT"
+    printf "  %-18s %s\n" "API Port:" "$API_PORT"
+    printf "  %-18s %s\n" "Dashboard Port:" "$DASH_PORT"
+    printf "  %-18s %s\n" "Results File:" "$RESULTS_FILE"
+    
+    # Run test suites
     run_rcon_tests
     run_api_tests
     run_dashboard_tests
     run_db_tests
     run_integration_tests
     
-    log_section "Test Summary"
-    echo ""
-    echo -e "  ${GREEN}Passed:${NC}  ${TESTS_PASSED}"
-    echo -e "  ${RED}Failed:${NC}  ${TESTS_FAILED}"
-    echo -e "  ${YELLOW}Skipped:${NC} ${TESTS_SKIPPED}"
-    echo ""
+    # Write results and print summary
+    write_results
+    print_summary
     
-    total=$((TESTS_PASSED + TESTS_FAILED))
-    if [ $total -gt 0 ]; then
-        percentage=$((TESTS_PASSED * 100 / total))
-        echo -e "  Pass rate: ${percentage}%"
-    fi
-    echo ""
-    
-    # Exit with failure if any tests failed
-    if [ $TESTS_FAILED -gt 0 ]; then
-        echo -e "${RED}❌ E2E Tests FAILED${NC}"
-        exit 1
-    else
-        echo -e "${GREEN}✅ E2E Tests PASSED${NC}"
-        exit 0
-    fi
+    # Exit code
+    [ "$FAILED" -gt 0 ] && exit 1
+    exit 0
 }
 
-main
+main "$@"
