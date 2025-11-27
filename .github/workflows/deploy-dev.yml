@@ -23,6 +23,9 @@ concurrency:
   group: deploy-dev-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   build:
     uses: ./.github/workflows/build.yml
