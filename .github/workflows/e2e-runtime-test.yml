@@ -1,0 +1,613 @@
+name: End-to-End Runtime Tests (Docker)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mc_version:
+        description: 'Minecraft server version'
+        required: false
+        type: string
+        default: '1.21.10'
+      run_api_tests:
+        description: 'Run HTTP API tests'
+        required: false
+        type: boolean
+        default: true
+      run_rcon_tests:
+        description: 'Run RCON command tests'
+        required: false
+        type: boolean
+        default: true
+      run_dashboard_tests:
+        description: 'Run Dashboard tests'
+        required: false
+        type: boolean
+        default: true
+      run_db_tests:
+        description: 'Run Database validation tests'
+        required: false
+        type: boolean
+        default: true
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - '**.java'
+      - 'pom.xml'
+      - 'src/**'
+      - 'plugin.yml'
+      - '.github/workflows/e2e-runtime-test.yml'
+      - '.github/test-fixtures/**'
+
+concurrency:
+  group: e2e-test-${{ github.ref }}-${{ github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  JAVA_VERSION: '21'
+  MC_VERSION: ${{ inputs.mc_version || '1.21.10' }}
+
+jobs:
+  changes:
+    name: 🔍 Detect Changes
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    outputs:
+      should_run: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            relevant:
+              - '**.java'
+              - 'pom.xml'
+              - 'src/**'
+              - 'plugin.yml'
+              - '.github/workflows/e2e-runtime-test.yml'
+              - '.github/test-fixtures/**'
+
+      - if: steps.filter.outputs.relevant == 'false'
+        run: |
+          echo "## ⏭️ E2E Tests Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "No relevant changes detected." >> $GITHUB_STEP_SUMMARY
+
+  build:
+    name: 🔨 Build
+    needs: [changes]
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.should_run == 'true' || needs.changes.result == 'skipped')
+    uses: ./.github/workflows/build.yml
+    with:
+      skip-tests: true
+      upload-coverage: false
+
+  e2e-test:
+    name: 🧪 E2E Tests
+    needs: [changes, build]
+    if: always() && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: dev-server
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 📦 Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+          path: target/
+
+      - name: 📋 Setup
+        id: info
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          RUN_ID="e2e-${{ github.run_id }}-${SHORT_SHA}"
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "run_id=${RUN_ID}" >> $GITHUB_OUTPUT
+
+      - name: 📤 Upload JAR
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          source: "target/SMPStats.jar"
+          target: "/opt/smpstats-ci/plugins-staging/${{ steps.info.outputs.run_id }}/"
+          strip_components: 1
+
+      - name: 🐳 Start Container
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          RUN_ID: ${{ steps.info.outputs.run_id }}
+          MC_VERSION: ${{ env.MC_VERSION }}
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID,MC_VERSION
+          script: |
+            MANAGER="/opt/smpstats-ci/manage-test-server.sh"
+            PLUGIN_JAR="/opt/smpstats-ci/plugins-staging/${RUN_ID}/SMPStats.jar"
+            
+            echo ""
+            echo "╔══════════════════════════════════════════════════════════════════╗"
+            echo "║  🐳 STARTING MINECRAFT TEST CONTAINER                            ║"
+            echo "╠══════════════════════════════════════════════════════════════════╣"
+            echo "║  Run ID:     ${RUN_ID}"
+            echo "║  MC Version: ${MC_VERSION}"
+            echo "║  Plugin:     ${PLUGIN_JAR}"
+            echo "╚══════════════════════════════════════════════════════════════════╝"
+            echo ""
+            
+            ${MANAGER} start "${RUN_ID}" "${PLUGIN_JAR}" "${MC_VERSION}" 2>/tmp/container-${RUN_ID}.log | tee /tmp/conn-${RUN_ID}.json
+            
+            echo ""
+            echo "┌──────────────────────────────────────────────────────────────────┐"
+            echo "│  📡 Connection Info                                              │"
+            echo "└──────────────────────────────────────────────────────────────────┘"
+            
+            if jq -e . /tmp/conn-${RUN_ID}.json >/dev/null 2>&1; then
+              jq -r '"  RCON Port:      \(.rcon_port)\n  API Port:       \(.api_port)\n  Dashboard Port: \(.dashboard_port)"' /tmp/conn-${RUN_ID}.json
+              echo ""
+              echo "  ✅ Container started successfully"
+            else
+              echo "  ⚠️  JSON parse failed, attempting recovery..."
+              grep -A 20 '^{' /tmp/conn-${RUN_ID}.json | head -15 > /tmp/conn-${RUN_ID}.json.tmp
+              mv /tmp/conn-${RUN_ID}.json.tmp /tmp/conn-${RUN_ID}.json
+            fi
+
+      - name: ⏳ Wait for Server
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          RUN_ID: ${{ steps.info.outputs.run_id }}
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID
+          script: |
+            CONTAINER="smpstats-test-${RUN_ID}"
+            
+            echo ""
+            echo "┌──────────────────────────────────────────────────────────────────┐"
+            echo "│  ⏳ Waiting for SMPStats initialization...                       │"
+            echo "└──────────────────────────────────────────────────────────────────┘"
+            echo ""
+            
+            sleep 15
+            
+            echo "  📋 Recent SMPStats log entries:"
+            echo "  ────────────────────────────────────────────────────────────────"
+            docker logs "${CONTAINER}" 2>&1 | grep -i "SMPStats" | tail -10 | sed 's/^/  │ /'
+            echo "  ────────────────────────────────────────────────────────────────"
+
+      - name: 📤 Upload Test Script
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          source: ".github/test-fixtures/run-e2e-tests.sh"
+          target: "/opt/smpstats-ci/plugins-staging/${{ steps.info.outputs.run_id }}/"
+          strip_components: 2
+
+      - name: 🧪 Run E2E Tests
+        id: e2e_tests
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          RUN_ID: ${{ steps.info.outputs.run_id }}
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID
+          command_timeout: 5m
+          script: |
+            CONN_FILE="/tmp/conn-${RUN_ID}.json"
+            RESULTS_FILE="/tmp/e2e-results-${RUN_ID}.json"
+            
+            # Parse connection info
+            if jq -e . "${CONN_FILE}" >/dev/null 2>&1; then
+              RCON_PORT=$(jq -r '.rcon_port' "${CONN_FILE}")
+              RCON_PASS=$(jq -r '.rcon_password' "${CONN_FILE}")
+              API_PORT=$(jq -r '.api_port' "${CONN_FILE}")
+              API_KEY=$(jq -r '.api_key' "${CONN_FILE}")
+              DASHBOARD_PORT=$(jq -r '.dashboard_port' "${CONN_FILE}")
+              ADMIN_PASS=$(jq -r '.admin_password' "${CONN_FILE}")
+            else
+              CONN_JSON=$(grep -A 20 '^{' "${CONN_FILE}" | head -15)
+              RCON_PORT=$(echo "$CONN_JSON" | jq -r '.rcon_port')
+              RCON_PASS=$(echo "$CONN_JSON" | jq -r '.rcon_password')
+              API_PORT=$(echo "$CONN_JSON" | jq -r '.api_port')
+              API_KEY=$(echo "$CONN_JSON" | jq -r '.api_key')
+              DASHBOARD_PORT=$(echo "$CONN_JSON" | jq -r '.dashboard_port')
+              ADMIN_PASS=$(echo "$CONN_JSON" | jq -r '.admin_password')
+            fi
+            
+            if [ -z "$RCON_PORT" ] || [ "$RCON_PORT" = "null" ]; then
+              echo "❌ Failed to extract connection info"
+              echo '{"status":"error","message":"Connection info extraction failed","passed":0,"failed":0,"skipped":0,"tests":[]}' > "${RESULTS_FILE}"
+              exit 1
+            fi
+            
+            TEST_SCRIPT="/opt/smpstats-ci/plugins-staging/${RUN_ID}/run-e2e-tests.sh"
+            chmod +x "${TEST_SCRIPT}"
+            
+            set +e
+            "${TEST_SCRIPT}" \
+              "${RCON_PORT}" \
+              "${RCON_PASS}" \
+              "${API_PORT}" \
+              "${API_KEY}" \
+              "${DASHBOARD_PORT}" \
+              "${ADMIN_PASS}" \
+              "localhost" \
+              "${RESULTS_FILE}"
+            TEST_EXIT_CODE=$?
+            set -e
+            
+            exit ${TEST_EXIT_CODE}
+
+      - name: 📥 Download Results
+        id: download_results
+        if: always()
+        continue-on-error: true
+        uses: nicklasfrahm/scp-action@v1.0.1
+        with:
+          direction: download
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          source: /tmp/e2e-results-${{ steps.info.outputs.run_id }}.json
+          target: ./e2e-results.json
+          insecure_ignore_fingerprint: true
+
+      - name: 📊 Parse Results
+        id: parse_results
+        if: always()
+        run: |
+          if [ -f "./e2e-results.json" ]; then
+            # Core metrics
+            STATUS=$(jq -r '.status // "unknown"' ./e2e-results.json)
+            PASSED=$(jq -r '.passed // 0' ./e2e-results.json)
+            FAILED=$(jq -r '.failed // 0' ./e2e-results.json)
+            SKIPPED=$(jq -r '.skipped // 0' ./e2e-results.json)
+            
+            # Connection info
+            RCON_PORT=$(jq -r '.rcon_port // "N/A"' ./e2e-results.json)
+            API_PORT=$(jq -r '.api_port // "N/A"' ./e2e-results.json)
+            DASHBOARD_PORT=$(jq -r '.dashboard_port // "N/A"' ./e2e-results.json)
+            
+            # Failed/Skipped test names for PR comment
+            FAILED_NAMES=$(jq -r '[.tests[]? | select(.status == "failed") | .name] | join(", ")' ./e2e-results.json)
+            SKIPPED_NAMES=$(jq -r '[.tests[]? | select(.status == "skipped") | .name] | join(", ")' ./e2e-results.json)
+            
+            # Full test data for summary
+            TESTS_JSON=$(jq -c '.tests // []' ./e2e-results.json)
+            
+            echo "status=${STATUS}" >> $GITHUB_OUTPUT
+            echo "passed=${PASSED}" >> $GITHUB_OUTPUT
+            echo "failed=${FAILED}" >> $GITHUB_OUTPUT
+            echo "skipped=${SKIPPED}" >> $GITHUB_OUTPUT
+            echo "rcon_port=${RCON_PORT}" >> $GITHUB_OUTPUT
+            echo "api_port=${API_PORT}" >> $GITHUB_OUTPUT
+            echo "dashboard_port=${DASHBOARD_PORT}" >> $GITHUB_OUTPUT
+            
+            # Use delimiter for multiline
+            echo "failed_names<<NAMES_EOF" >> $GITHUB_OUTPUT
+            echo "${FAILED_NAMES}" >> $GITHUB_OUTPUT
+            echo "NAMES_EOF" >> $GITHUB_OUTPUT
+            
+            echo "skipped_names<<NAMES_EOF" >> $GITHUB_OUTPUT
+            echo "${SKIPPED_NAMES}" >> $GITHUB_OUTPUT
+            echo "NAMES_EOF" >> $GITHUB_OUTPUT
+            
+            echo "tests_json<<JSON_EOF" >> $GITHUB_OUTPUT
+            echo "${TESTS_JSON}" >> $GITHUB_OUTPUT
+            echo "JSON_EOF" >> $GITHUB_OUTPUT
+          else
+            echo "status=error" >> $GITHUB_OUTPUT
+            echo "passed=0" >> $GITHUB_OUTPUT
+            echo "failed=0" >> $GITHUB_OUTPUT
+            echo "skipped=0" >> $GITHUB_OUTPUT
+            echo "rcon_port=N/A" >> $GITHUB_OUTPUT
+            echo "api_port=N/A" >> $GITHUB_OUTPUT
+            echo "dashboard_port=N/A" >> $GITHUB_OUTPUT
+            echo "failed_names=" >> $GITHUB_OUTPUT
+            echo "skipped_names=" >> $GITHUB_OUTPUT
+            echo "tests_json=[]" >> $GITHUB_OUTPUT
+            echo "message=Results file not found" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 💬 PR Comment
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          TEST_STATUS: ${{ steps.parse_results.outputs.status }}
+          TEST_PASSED: ${{ steps.parse_results.outputs.passed }}
+          TEST_FAILED: ${{ steps.parse_results.outputs.failed }}
+          TEST_SKIPPED: ${{ steps.parse_results.outputs.skipped }}
+          FAILED_NAMES: ${{ steps.parse_results.outputs.failed_names }}
+          SKIPPED_NAMES: ${{ steps.parse_results.outputs.skipped_names }}
+          MC_VERSION: ${{ env.MC_VERSION }}
+          PLUGIN_VERSION: ${{ needs.build.outputs.version }}
+        with:
+          script: |
+            const status = process.env.TEST_STATUS || 'unknown';
+            const passed = parseInt(process.env.TEST_PASSED) || 0;
+            const failed = parseInt(process.env.TEST_FAILED) || 0;
+            const skipped = parseInt(process.env.TEST_SKIPPED) || 0;
+            const total = passed + failed + skipped;
+            const failedNames = process.env.FAILED_NAMES || '';
+            const skippedNames = process.env.SKIPPED_NAMES || '';
+            
+            // Determine emoji and text
+            let emoji, statusLine;
+            if (status === 'success') {
+              emoji = '✅';
+              statusLine = `**${passed}/${total}** tests passed`;
+            } else if (status === 'failure') {
+              emoji = '❌';
+              statusLine = `**${passed}/${total}** passed, **${failed} failed**`;
+            } else {
+              emoji = '⚠️';
+              statusLine = `Tests did not complete`;
+            }
+            
+            // Build compact comment
+            let body = `## ${emoji} E2E Tests: ${statusLine}\n\n`;
+            body += `> MC ${process.env.MC_VERSION} · Plugin ${process.env.PLUGIN_VERSION}\n\n`;
+            
+            // Only show failures/skips if any
+            if (failed > 0 && failedNames) {
+              body += `**❌ Failed:** ${failedNames}\n\n`;
+            }
+            if (skipped > 0 && skippedNames) {
+              body += `**⏭️ Skipped:** ${skippedNames}\n\n`;
+            }
+            
+            // Link to details
+            body += `📋 [View detailed results](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`;
+            
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(c => 
+              c.user.type === 'Bot' && c.body.includes('E2E Tests')
+            );
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body
+              });
+            }
+
+      - name: 📜 Collect Logs
+        if: always()
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          RUN_ID: ${{ steps.info.outputs.run_id }}
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID
+          script: |
+            CONTAINER="smpstats-test-${RUN_ID}"
+            LOG_DIR="/tmp/e2e-logs-${RUN_ID}"
+            mkdir -p "${LOG_DIR}"
+            
+            echo ""
+            echo "┌──────────────────────────────────────────────────────────────────┐"
+            echo "│  📜 Server Logs                                                  │"
+            echo "└──────────────────────────────────────────────────────────────────┘"
+            echo ""
+            
+            docker logs "${CONTAINER}" > "${LOG_DIR}/server.log" 2>&1
+            
+            echo "  Last 15 SMPStats messages:"
+            echo "  ────────────────────────────────────────────────────────────────"
+            grep -i "SMPStats" "${LOG_DIR}/server.log" | tail -15 | sed 's/^/  │ /' || echo "  │ (none)"
+            echo "  ────────────────────────────────────────────────────────────────"
+
+      - name: 🧹 Cleanup
+        if: always()
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          RUN_ID: ${{ steps.info.outputs.run_id }}
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID
+          script: |
+            MANAGER="/opt/smpstats-ci/manage-test-server.sh"
+            CONTAINER="smpstats-test-${RUN_ID}"
+            
+            echo ""
+            echo "┌──────────────────────────────────────────────────────────────────┐"
+            echo "│  🧹 Cleanup                                                      │"
+            echo "└──────────────────────────────────────────────────────────────────┘"
+            echo ""
+            
+            ${MANAGER} stop "${RUN_ID}" 2>/dev/null || true
+            
+            if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
+              docker rm -f "${CONTAINER}" 2>/dev/null || true
+            fi
+            
+            rm -rf "/opt/smpstats-ci/plugins-staging/${RUN_ID}"
+            rm -f "/tmp/container-${RUN_ID}.json" "/tmp/conn-${RUN_ID}.json" "/tmp/e2e-results-${RUN_ID}.json"
+            rm -rf "/tmp/e2e-logs-${RUN_ID}"
+            
+            echo "  ✅ Container and temp files removed"
+
+      - name: 📊 Job Summary
+        if: always()
+        env:
+          TEST_STATUS: ${{ steps.parse_results.outputs.status }}
+          TEST_PASSED: ${{ steps.parse_results.outputs.passed }}
+          TEST_FAILED: ${{ steps.parse_results.outputs.failed }}
+          TEST_SKIPPED: ${{ steps.parse_results.outputs.skipped }}
+          RCON_PORT: ${{ steps.parse_results.outputs.rcon_port }}
+          API_PORT: ${{ steps.parse_results.outputs.api_port }}
+          DASHBOARD_PORT: ${{ steps.parse_results.outputs.dashboard_port }}
+          TESTS_JSON: ${{ steps.parse_results.outputs.tests_json }}
+        run: |
+          STATUS="${TEST_STATUS:-unknown}"
+          PASSED="${TEST_PASSED:-0}"
+          FAILED="${TEST_FAILED:-0}"
+          SKIPPED="${TEST_SKIPPED:-0}"
+          TOTAL=$((PASSED + FAILED + SKIPPED))
+          
+          # Calculate pass rate
+          if [ $((PASSED + FAILED)) -gt 0 ]; then
+            PASS_RATE=$((PASSED * 100 / (PASSED + FAILED)))
+          else
+            PASS_RATE=0
+          fi
+          
+          # Header with status
+          if [ "$STATUS" = "success" ]; then
+            echo "# ✅ E2E Tests Passed" >> $GITHUB_STEP_SUMMARY
+          elif [ "$STATUS" = "failure" ]; then
+            echo "# ❌ E2E Tests Failed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "# ⚠️ E2E Tests Incomplete" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Quick stats bar
+          echo "## 📊 Results: ${PASSED}/${TOTAL} passed (${PASS_RATE}%)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Visual bar
+          if [ "$TOTAL" -gt 0 ]; then
+            BAR=""
+            for i in $(seq 1 20); do
+              threshold=$((i * 5))
+              if [ $PASS_RATE -ge $threshold ]; then
+                BAR="${BAR}🟩"
+              elif [ $((PASS_RATE + (FAILED * 100 / TOTAL))) -ge $threshold ]; then
+                BAR="${BAR}🟥"
+              else
+                BAR="${BAR}⬜"
+              fi
+            done
+            echo "${BAR}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Summary table
+          echo "| ✅ Passed | ❌ Failed | ⏭️ Skipped | Total |" >> $GITHUB_STEP_SUMMARY
+          echo "|:---------:|:---------:|:----------:|:-----:|" >> $GITHUB_STEP_SUMMARY
+          echo "| ${PASSED} | ${FAILED} | ${SKIPPED} | ${TOTAL} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Environment info
+          echo "### 🔧 Environment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Minecraft | ${{ env.MC_VERSION }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Plugin | ${{ needs.build.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Run ID | \`${{ steps.info.outputs.run_id }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| RCON Port | ${RCON_PORT} |" >> $GITHUB_STEP_SUMMARY
+          echo "| API Port | ${API_PORT} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dashboard | ${DASHBOARD_PORT} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Detailed test results by category
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📋 Test Details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -n "$TESTS_JSON" ] && [ "$TESTS_JSON" != "[]" ]; then
+            # Process each category
+            for CATEGORY in "RCON" "API" "Dashboard" "Database" "Integration"; do
+              CATEGORY_TESTS=$(echo "$TESTS_JSON" | jq -c "[.[] | select(.category == \"$CATEGORY\")]" 2>/dev/null || echo "[]")
+              CATEGORY_COUNT=$(echo "$CATEGORY_TESTS" | jq 'length' 2>/dev/null || echo "0")
+              
+              if [ "$CATEGORY_COUNT" -gt 0 ]; then
+                CATEGORY_PASSED=$(echo "$CATEGORY_TESTS" | jq '[.[] | select(.status == "passed")] | length')
+                CATEGORY_FAILED=$(echo "$CATEGORY_TESTS" | jq '[.[] | select(.status == "failed")] | length')
+                
+                # Category icon
+                if [ "$CATEGORY_FAILED" -gt 0 ]; then
+                  CAT_ICON="❌"
+                else
+                  CAT_ICON="✅"
+                fi
+                
+                # Category emoji
+                case "$CATEGORY" in
+                  "RCON") CAT_EMOJI="🎮" ;;
+                  "API") CAT_EMOJI="🌐" ;;
+                  "Dashboard") CAT_EMOJI="📊" ;;
+                  "Database") CAT_EMOJI="💾" ;;
+                  "Integration") CAT_EMOJI="🔗" ;;
+                  *) CAT_EMOJI="📦" ;;
+                esac
+                
+                echo "<details>" >> $GITHUB_STEP_SUMMARY
+                echo "<summary>${CAT_ICON} ${CAT_EMOJI} <b>${CATEGORY}</b> — ${CATEGORY_PASSED}/${CATEGORY_COUNT} passed</summary>" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "| Status | Test | Command / Endpoint | Result |" >> $GITHUB_STEP_SUMMARY
+                echo "|:------:|------|-------------------|--------|" >> $GITHUB_STEP_SUMMARY
+                
+                echo "$CATEGORY_TESTS" | jq -r '.[] | 
+                  (if .status == "passed" then "✅" elif .status == "failed" then "❌" else "⏭️" end) as $icon |
+                  (.command // .endpoint // "-") as $cmd |
+                  (.result // .details // "-" | gsub("\\|"; "/") | .[0:50]) as $result |
+                  "| \($icon) | \(.name) | `\($cmd)` | \($result) |"
+                ' >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "| - | Error parsing tests | - | - |" >> $GITHUB_STEP_SUMMARY
+                
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "</details>" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+              fi
+            done
+          else
+            echo "_No test data available_" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Failed tests highlight
+          if [ "$FAILED" -gt 0 ]; then
+            echo "---" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "## ❌ Failed Tests" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "$TESTS_JSON" | jq -r '.[] | select(.status == "failed") | "- **\(.name)** (\(.category)): \(.result // .details // "No details")"' >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
+          fi

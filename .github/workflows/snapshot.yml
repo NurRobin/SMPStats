@@ -21,7 +21,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Early skip detection
+  changes:
+    name: Check for relevant changes
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    outputs:
+      should_run: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for code changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          # Compare against previous commit (HEAD~1), not base branch
+          base: HEAD~1
+          initial_fetch_depth: 2
+          filters: |
+            relevant:
+              - '**.java'
+              - 'pom.xml'
+              - 'src/**'
+              - 'plugin.yml'
+              - '.github/workflows/snapshot.yml'
+
+      - name: Skip notification
+        if: steps.filter.outputs.relevant == 'false'
+        run: |
+          echo "## ⏭️ Snapshot Build Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "No changes to code or build files detected." >> $GITHUB_STEP_SUMMARY
+
   snapshot:
+    needs: [changes]
+    if: always() && (github.event_name != 'push' || needs.changes.outputs.should_run == 'true' || needs.changes.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: read

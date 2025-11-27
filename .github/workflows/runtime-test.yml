@@ -24,14 +24,52 @@ on:
       - '.github/workflows/runtime-test.yml'
 
 jobs:
+  # Early skip detection - saves build + matrix runtime tests
+  changes:
+    name: Check for relevant changes
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    outputs:
+      should_run: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for code changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          # Compare against previous commit, not base branch
+          base: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          initial_fetch_depth: 2
+          filters: |
+            relevant:
+              - '**.java'
+              - 'pom.xml'
+              - 'src/**'
+              - 'plugin.yml'
+              - '.github/workflows/runtime-test.yml'
+
+      - name: Skip notification
+        if: steps.filter.outputs.relevant == 'false'
+        run: |
+          echo "## ⏭️ Runtime Tests Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "No changes to code or build files detected." >> $GITHUB_STEP_SUMMARY
+          echo "Skipping Minecraft server runtime tests." >> $GITHUB_STEP_SUMMARY
+
   build:
+    needs: [changes]
+    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.should_run == 'true' || needs.changes.result == 'skipped')
     uses: ./.github/workflows/build.yml
     with:
       skip-tests: true
   
   runtime-test:
     name: Test on Paper ${{ matrix.mcVersion }}
-    needs: [build]
+    needs: [changes, build]
+    if: always() && needs.build.result == 'success'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false  # Continue testing other versions even if one fails
