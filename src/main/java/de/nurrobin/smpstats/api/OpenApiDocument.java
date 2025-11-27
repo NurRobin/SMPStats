@@ -333,7 +333,7 @@ class OpenApiDocument {
                         "x", Map.of("type", "integer", "description", "Grid x index"),
                         "z", Map.of("type", "integer", "description", "Grid z index"),
                         "gridSize", Map.of("type", "integer", "description", "Bin size in blocks"),
-                        "count", Map.of("type", "number")
+                        "count", Map.of("type", "number", "description", "Weighted hits recorded in the bin (decay applied when configured)")
                 )
         ));
 

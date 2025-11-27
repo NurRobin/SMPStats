@@ -13,6 +13,7 @@ import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import org.bukkit.plugin.PluginDescriptionFile;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -50,7 +51,12 @@ public class ApiServer {
         this.heatmapService = heatmapService;
         this.timelineService = timelineService;
         this.serverHealthService = serverHealthService;
-        this.openApiDocument = new OpenApiDocument(settings, plugin.getDescription().getVersion());
+        this.openApiDocument = new OpenApiDocument(settings, resolvePluginVersion(plugin));
+    }
+
+    private String resolvePluginVersion(SMPStats plugin) {
+        PluginDescriptionFile description = plugin != null ? plugin.getDescription() : null;
+        return description != null ? description.getVersion() : "unknown";
     }
 
     public void start() {
@@ -110,7 +116,7 @@ public class ApiServer {
     }
 
     private void sendJson(HttpExchange exchange, int status, Object body) throws IOException {
-        byte[] data = gson.toJson(body).getBytes();
+        byte[] data = gson.toJson(body).getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(status, data.length);
         try (OutputStream os = exchange.getResponseBody()) {

@@ -219,7 +219,7 @@ These principles guide every feature and decision:
 | **Damage Heatmaps** | Medium | M | ✅ Done | Identify PvP hotspots and mob danger zones |
 | **Resource-Specific Heatmaps** | Medium | M | ✅ Done | Track diamond, iron, gold, ancient debris separately |
 | **OpenAPI-Published API** | High | M | ⚠️ Partial | Machine-readable docs exposed for external tooling |
-| **Time-Range Filters** | Medium | M | ⏳ Todo | Query "last 6h", "today", "this week" |
+| **Time-Range Filters** | Medium | M | ✅ Done | Query "last 6h", "today", "this week" |
 | **Biome-Filtered Views** | Low | S | ⏳ Todo | Filter any heatmap by biome type |
 | **In-Game GUI** | High | L | ✅ Done | Rich chest-menu interface with visual insights |
 | **Live Activity Dashboard** | Medium | M | ⚠️ Partial | "Who's farming what right now" real-time view |
