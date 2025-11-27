@@ -47,6 +47,9 @@ jobs:
         id: filter
         uses: dorny/paths-filter@v3
         with:
+          # Compare against previous commit (HEAD~1), not base branch
+          base: HEAD~1
+          initial_fetch_depth: 2
           filters: |
             relevant:
               - '**.java'
@@ -116,6 +119,7 @@ jobs:
           key: ${{ secrets.DEV_SERVER_SSH_KEY }}
           port: ${{ secrets.DEV_SERVER_SSH_PORT }}
           envs: RUN_ID,SHORT_SHA,VERSION,MC_VERSION
+          command_timeout: 2m
           script: |
             MANAGER="/opt/smpstats-ci/manage-test-server.sh"
             PLUGIN_DIR="/opt/smpstats-ci/plugins-staging"
@@ -142,6 +146,7 @@ jobs:
           source: "target/SMPStats.jar"
           target: "/opt/smpstats-ci/plugins-staging/${{ steps.info.outputs.run_id }}/"
           strip_components: 1
+          timeout: 60s
 
       - name: Start Docker container and get connection info
         uses: appleboy/ssh-action@v1.0.3
@@ -155,6 +160,7 @@ jobs:
           key: ${{ secrets.DEV_SERVER_SSH_KEY }}
           port: ${{ secrets.DEV_SERVER_SSH_PORT }}
           envs: RUN_ID,MC_VERSION
+          command_timeout: 3m
           script: |
             MANAGER="/opt/smpstats-ci/manage-test-server.sh"
             PLUGIN_JAR="/opt/smpstats-ci/plugins-staging/${RUN_ID}/SMPStats.jar"
@@ -172,6 +178,7 @@ jobs:
           key: ${{ secrets.DEV_SERVER_SSH_KEY }}
           port: ${{ secrets.DEV_SERVER_SSH_PORT }}
           envs: RUN_ID
+          command_timeout: 1m
           script: |
             CONTAINER="smpstats-test-${RUN_ID}"
             
@@ -222,6 +229,7 @@ jobs:
           username: ${{ secrets.DEV_SERVER_USER }}
           key: ${{ secrets.DEV_SERVER_SSH_KEY }}
           port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          command_timeout: 2m
           script: |
             echo "Cleaning up old containers..."
             

@@ -59,6 +59,11 @@ jobs:
         id: filter
         uses: dorny/paths-filter@v3
         with:
+          # Compare against previous commit, not base branch
+          base: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          # Only check the latest commit
+          initial_fetch_depth: 2
           filters: |
             relevant:
               - '**.java'
@@ -307,53 +312,108 @@ jobs:
             # Exit with original test exit code
             exit ${TEST_EXIT_CODE:-0}
 
-      - name: Fetch test results
-        id: fetch_results
+      - name: Download test results
+        id: download_results
         if: always()
-        uses: appleboy/ssh-action@v1.0.3
-        env:
-          RUN_ID: ${{ steps.info.outputs.run_id }}
+        continue-on-error: true
+        uses: nicklasfrahm/scp-action@v1.0.1
         with:
+          direction: download
           host: ${{ secrets.DEV_SERVER_HOST }}
           username: ${{ secrets.DEV_SERVER_USER }}
           key: ${{ secrets.DEV_SERVER_SSH_KEY }}
           port: ${{ secrets.DEV_SERVER_SSH_PORT }}
-          envs: RUN_ID
-          script: |
-            RESULTS_FILE="/tmp/e2e-results-${RUN_ID}.json"
-            if [ -f "${RESULTS_FILE}" ]; then
-              cat "${RESULTS_FILE}"
-            else
-              echo '{"status":"unknown","message":"Results file not found","passed":0,"failed":0,"skipped":0,"failed_tests":[]}'
-            fi
+          source: /tmp/e2e-results-${{ steps.info.outputs.run_id }}.json
+          target: ./e2e-results.json
+          insecure_ignore_fingerprint: true
+
+      - name: Parse test results
+        id: parse_results
+        if: always()
+        run: |
+          # Check if we have a results file
+          if [ -f "./e2e-results.json" ]; then
+            echo "Found results file"
+            cat ./e2e-results.json
+            
+            # Parse JSON and set outputs
+            STATUS=$(jq -r '.status // "unknown"' ./e2e-results.json)
+            PASSED=$(jq -r '.passed // 0' ./e2e-results.json)
+            FAILED=$(jq -r '.failed // 0' ./e2e-results.json)
+            SKIPPED=$(jq -r '.skipped // 0' ./e2e-results.json)
+            RCON_PORT=$(jq -r '.rcon_port // "N/A"' ./e2e-results.json)
+            API_PORT=$(jq -r '.api_port // "N/A"' ./e2e-results.json)
+            DASHBOARD_PORT=$(jq -r '.dashboard_port // "N/A"' ./e2e-results.json)
+            FAILED_TESTS=$(jq -c '.failed_tests // []' ./e2e-results.json)
+            PASSED_TESTS=$(jq -c '.passed_tests // []' ./e2e-results.json)
+            
+            echo "status=${STATUS}" >> $GITHUB_OUTPUT
+            echo "passed=${PASSED}" >> $GITHUB_OUTPUT
+            echo "failed=${FAILED}" >> $GITHUB_OUTPUT
+            echo "skipped=${SKIPPED}" >> $GITHUB_OUTPUT
+            echo "rcon_port=${RCON_PORT}" >> $GITHUB_OUTPUT
+            echo "api_port=${API_PORT}" >> $GITHUB_OUTPUT
+            echo "dashboard_port=${DASHBOARD_PORT}" >> $GITHUB_OUTPUT
+            echo "failed_tests=${FAILED_TESTS}" >> $GITHUB_OUTPUT
+            echo "passed_tests=${PASSED_TESTS}" >> $GITHUB_OUTPUT
+          else
+            echo "No results file found - tests may have failed to run"
+            echo "status=error" >> $GITHUB_OUTPUT
+            echo "passed=0" >> $GITHUB_OUTPUT
+            echo "failed=0" >> $GITHUB_OUTPUT
+            echo "skipped=0" >> $GITHUB_OUTPUT
+            echo "rcon_port=N/A" >> $GITHUB_OUTPUT
+            echo "api_port=N/A" >> $GITHUB_OUTPUT
+            echo "dashboard_port=N/A" >> $GITHUB_OUTPUT
+            echo "failed_tests=[]" >> $GITHUB_OUTPUT
+            echo "passed_tests=[]" >> $GITHUB_OUTPUT
+            echo "message=Results file not found - tests may have failed to start" >> $GITHUB_OUTPUT
+          fi
 
       - name: Comment on PR with test results
         if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
+        env:
+          TEST_STATUS: ${{ steps.parse_results.outputs.status }}
+          TEST_PASSED: ${{ steps.parse_results.outputs.passed }}
+          TEST_FAILED: ${{ steps.parse_results.outputs.failed }}
+          TEST_SKIPPED: ${{ steps.parse_results.outputs.skipped }}
+          RCON_PORT: ${{ steps.parse_results.outputs.rcon_port }}
+          API_PORT: ${{ steps.parse_results.outputs.api_port }}
+          DASHBOARD_PORT: ${{ steps.parse_results.outputs.dashboard_port }}
+          FAILED_TESTS: ${{ steps.parse_results.outputs.failed_tests }}
+          PASSED_TESTS: ${{ steps.parse_results.outputs.passed_tests }}
+          RESULT_MESSAGE: ${{ steps.parse_results.outputs.message }}
         with:
           script: |
-            const output = `${{ steps.fetch_results.outputs.stdout }}` || '{}';
-            let results;
+            const status = process.env.TEST_STATUS || 'unknown';
+            const passed = parseInt(process.env.TEST_PASSED) || 0;
+            const failed = parseInt(process.env.TEST_FAILED) || 0;
+            const skipped = parseInt(process.env.TEST_SKIPPED) || 0;
+            const rconPort = process.env.RCON_PORT || 'N/A';
+            const apiPort = process.env.API_PORT || 'N/A';
+            const dashboardPort = process.env.DASHBOARD_PORT || 'N/A';
+            const message = process.env.RESULT_MESSAGE || '';
+            
+            let failedTests = [];
+            let passedTests = [];
             try {
-              results = JSON.parse(output.trim());
+              failedTests = JSON.parse(process.env.FAILED_TESTS || '[]');
+              passedTests = JSON.parse(process.env.PASSED_TESTS || '[]');
             } catch (e) {
-              results = { status: 'error', message: 'Failed to parse test results', passed: 0, failed: 0, skipped: 0, failed_tests: [] };
+              console.log('Failed to parse test arrays:', e);
             }
             
-            const status = results.status || 'unknown';
-            const passed = results.passed || 0;
-            const failed = results.failed || 0;
-            const skipped = results.skipped || 0;
-            const failedTests = results.failed_tests || [];
-            const rconPort = results.rcon_port || 'N/A';
-            const apiPort = results.api_port || 'N/A';
-            const dashboardPort = results.dashboard_port || 'N/A';
-            
             let statusEmoji = status === 'success' ? '✅' : status === 'failure' ? '❌' : '⚠️';
-            let statusText = status === 'success' ? 'All tests passed!' : status === 'failure' ? 'Some tests failed' : 'Test status unknown';
+            let statusText = status === 'success' ? 'All tests passed!' : 
+                            status === 'failure' ? 'Some tests failed' : 
+                            status === 'error' ? 'Tests failed to run' : 'Test status unknown';
             
             let body = `## ${statusEmoji} E2E Test Results\n\n`;
-            body += `**Status:** ${statusText}\n\n`;
+            body += `**Status:** ${statusText}\n`;
+            if (message) body += `**Note:** ${message}\n`;
+            body += `\n`;
+            
             body += `### 📊 Summary\n`;
             body += `| Metric | Count |\n`;
             body += `|--------|-------|\n`;
@@ -389,6 +449,16 @@ jobs:
               if (dashFails.length > 0) body += `- 📊 **Dashboard:** ${dashFails.length} failure(s)\n`;
               if (dbFails.length > 0) body += `- 💾 **Database:** ${dbFails.length} failure(s)\n`;
               if (intFails.length > 0) body += `- 🔗 **Integration:** ${intFails.length} failure(s)\n`;
+            }
+            
+            if (passed > 0 && passedTests.length > 0) {
+              body += `\n<details>\n<summary>✅ Passed Tests (${passed})</summary>\n\n`;
+              body += `\`\`\`\n`;
+              passedTests.slice(0, 50).forEach(test => {
+                body += `${test}\n`;
+              });
+              if (passedTests.length > 50) body += `... and ${passedTests.length - 50} more\n`;
+              body += `\`\`\`\n</details>\n`;
             }
             
             body += `\n---\n`;
@@ -488,23 +558,103 @@ jobs:
 
       - name: Test summary
         if: always()
+        env:
+          TEST_STATUS: ${{ steps.parse_results.outputs.status }}
+          TEST_PASSED: ${{ steps.parse_results.outputs.passed }}
+          TEST_FAILED: ${{ steps.parse_results.outputs.failed }}
+          TEST_SKIPPED: ${{ steps.parse_results.outputs.skipped }}
+          RCON_PORT: ${{ steps.parse_results.outputs.rcon_port }}
+          API_PORT: ${{ steps.parse_results.outputs.api_port }}
+          DASHBOARD_PORT: ${{ steps.parse_results.outputs.dashboard_port }}
+          FAILED_TESTS: ${{ steps.parse_results.outputs.failed_tests }}
+          PASSED_TESTS: ${{ steps.parse_results.outputs.passed_tests }}
         run: |
-          echo "## 🧪 E2E Test Summary" >> $GITHUB_STEP_SUMMARY
+          STATUS="${TEST_STATUS:-unknown}"
+          PASSED="${TEST_PASSED:-0}"
+          FAILED="${TEST_FAILED:-0}"
+          SKIPPED="${TEST_SKIPPED:-0}"
+          TOTAL=$((PASSED + FAILED + SKIPPED))
+          
+          # Determine overall result emoji
+          if [ "$STATUS" = "success" ]; then
+            RESULT_EMOJI="✅"
+            RESULT_TEXT="All tests passed!"
+          elif [ "$STATUS" = "failure" ]; then
+            RESULT_EMOJI="❌"
+            RESULT_TEXT="Some tests failed"
+          else
+            RESULT_EMOJI="⚠️"
+            RESULT_TEXT="Tests did not complete properly"
+          fi
+          
+          echo "## ${RESULT_EMOJI} E2E Test Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Minecraft Version:** ${{ env.MC_VERSION }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Plugin Version:** ${{ needs.build.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Run ID:** ${{ steps.info.outputs.run_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Result:** ${RESULT_TEXT}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Test Categories" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### 📊 Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| ✅ Passed | ${PASSED} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ❌ Failed | ${FAILED} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ⏭️ Skipped | ${SKIPPED} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Total** | **${TOTAL}** |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Show pass rate if tests ran
+          if [ "$TOTAL" -gt 0 ]; then
+            PASS_RATE=$((PASSED * 100 / TOTAL))
+            echo "**Pass Rate:** ${PASS_RATE}% (${PASSED}/${TOTAL})" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "### 🔧 Environment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Minecraft Version | ${{ env.MC_VERSION }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Plugin Version | ${{ needs.build.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Run ID | ${{ steps.info.outputs.run_id }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| RCON Port | ${RCON_PORT:-N/A} |" >> $GITHUB_STEP_SUMMARY
+          echo "| API Port | ${API_PORT:-N/A} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dashboard Port | ${DASHBOARD_PORT:-N/A} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Show failed tests if any
+          if [ "$FAILED" -gt 0 ] && [ -n "$FAILED_TESTS" ] && [ "$FAILED_TESTS" != "[]" ]; then
+            echo "### ❌ Failed Tests" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>Click to expand (${FAILED} failures)</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "$FAILED_TESTS" | jq -r '.[]' 2>/dev/null >> $GITHUB_STEP_SUMMARY || echo "$FAILED_TESTS" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Show passed tests
+          if [ "$PASSED" -gt 0 ] && [ -n "$PASSED_TESTS" ] && [ "$PASSED_TESTS" != "[]" ]; then
+            echo "### ✅ Passed Tests" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>Click to expand (${PASSED} tests)</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "$PASSED_TESTS" | jq -r '.[]' 2>/dev/null >> $GITHUB_STEP_SUMMARY || echo "$PASSED_TESTS" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "### 📋 Test Categories" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Category | Description |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------------|" >> $GITHUB_STEP_SUMMARY
-          echo "| 🎮 RCON Commands | Plugin commands via server console |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🌐 HTTP API | RESTful API endpoint validation |" >> $GITHUB_STEP_SUMMARY
-          echo "| 📊 Dashboard | Web dashboard and admin panel |" >> $GITHUB_STEP_SUMMARY
-          echo "| 💾 Database | Data structure and consistency |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🔗 Integration | Cross-component consistency |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Infrastructure" >> $GITHUB_STEP_SUMMARY
-          echo "- Dynamic Docker container with unique ports" >> $GITHUB_STEP_SUMMARY
-          echo "- Parallel test runs supported" >> $GITHUB_STEP_SUMMARY
-          echo "- Auto-cleanup after test completion" >> $GITHUB_STEP_SUMMARY
+          echo "| 🎮 RCON | Plugin commands via server console |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🌐 API | RESTful HTTP API endpoints |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📊 Dashboard | Web dashboard & admin panel |" >> $GITHUB_STEP_SUMMARY
+          echo "| 💾 Database | SQLite data structure |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔗 Integration | Cross-component validation |" >> $GITHUB_STEP_SUMMARY

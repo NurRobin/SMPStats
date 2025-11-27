@@ -36,6 +36,9 @@ jobs:
         id: filter
         uses: dorny/paths-filter@v3
         with:
+          # Compare against previous commit (HEAD~1), not base branch
+          base: HEAD~1
+          initial_fetch_depth: 2
           filters: |
             relevant:
               - '**.java'
