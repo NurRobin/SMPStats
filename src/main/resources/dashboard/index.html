@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMPStats Dashboard</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand">
+            <span class="logo">⚔️</span>
+            <span class="title">SMPStats</span>
+        </div>
+        <div class="navbar-menu">
+            <a href="#" class="nav-link active" data-section="overview">Overview</a>
+            <a href="#" class="nav-link" data-section="leaderboard">Leaderboard</a>
+            <a href="#" class="nav-link" data-section="moments">Moments</a>
+            <a href="#" class="nav-link admin-only hidden" data-section="admin">Admin</a>
+        </div>
+        <div class="navbar-auth">
+            <button id="admin-login-btn" class="btn btn-secondary">Admin Login</button>
+            <button id="admin-logout-btn" class="btn btn-secondary hidden">Logout</button>
+        </div>
+    </nav>
+
+    <main class="container">
+        <!-- Overview Section -->
+        <section id="overview-section" class="section active">
+            <h1>Server Overview</h1>
+            
+            <div class="stats-grid">
+                <div class="stat-card online-card">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-content">
+                        <div class="stat-value" id="online-count">-</div>
+                        <div class="stat-label">Players Online</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">⏱️</div>
+                    <div class="stat-content">
+                        <div class="stat-value" id="total-playtime">-</div>
+                        <div class="stat-label">Total Playtime</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">💀</div>
+                    <div class="stat-content">
+                        <div class="stat-value" id="total-deaths">-</div>
+                        <div class="stat-label">Total Deaths</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">⚔️</div>
+                    <div class="stat-content">
+                        <div class="stat-value" id="total-kills">-</div>
+                        <div class="stat-label">Total Kills</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col">
+                    <div class="card">
+                        <h2>📊 Server Statistics</h2>
+                        <div class="stats-list">
+                            <div class="stat-row">
+                                <span>Total Players</span>
+                                <span id="total-players">-</span>
+                            </div>
+                            <div class="stat-row">
+                                <span>Blocks Broken</span>
+                                <span id="blocks-broken">-</span>
+                            </div>
+                            <div class="stat-row">
+                                <span>Blocks Placed</span>
+                                <span id="blocks-placed">-</span>
+                            </div>
+                            <div class="stat-row">
+                                <span>Distance Traveled</span>
+                                <span id="distance-traveled">-</span>
+                            </div>
+                            <div class="stat-row">
+                                <span>Biomes Discovered</span>
+                                <span id="biomes-discovered">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card">
+                        <h2>👥 Online Players</h2>
+                        <div id="online-players-list" class="player-list">
+                            <p class="placeholder">Loading...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Leaderboard Section -->
+        <section id="leaderboard-section" class="section">
+            <h1>Leaderboard</h1>
+            
+            <div class="filters">
+                <label>
+                    Time Range:
+                    <select id="leaderboard-days">
+                        <option value="7">Last 7 days</option>
+                        <option value="14">Last 14 days</option>
+                        <option value="30">Last 30 days</option>
+                        <option value="90">Last 90 days</option>
+                        <option value="365">All time</option>
+                    </select>
+                </label>
+                <label>
+                    Show:
+                    <select id="leaderboard-limit">
+                        <option value="10">Top 10</option>
+                        <option value="20">Top 20</option>
+                        <option value="50">Top 50</option>
+                    </select>
+                </label>
+            </div>
+            
+            <div class="card">
+                <table class="leaderboard-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Player</th>
+                            <th>Playtime</th>
+                            <th>Blocks Broken</th>
+                            <th>Deaths</th>
+                            <th>Mob Kills</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboard-body">
+                        <tr><td colspan="6" class="placeholder">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Moments Section -->
+        <section id="moments-section" class="section">
+            <h1>Recent Moments</h1>
+            
+            <div class="filters">
+                <label>
+                    Show:
+                    <select id="moments-limit">
+                        <option value="10">Last 10</option>
+                        <option value="20">Last 20</option>
+                        <option value="50">Last 50</option>
+                    </select>
+                </label>
+            </div>
+            
+            <div id="moments-list" class="moments-grid">
+                <p class="placeholder">Loading...</p>
+            </div>
+        </section>
+
+        <!-- Admin Section -->
+        <section id="admin-section" class="section admin-only hidden">
+            <h1>Admin Panel</h1>
+            
+            <div class="admin-tabs">
+                <button class="admin-tab active" data-tab="health">Server Health</button>
+                <button class="admin-tab" data-tab="heatmaps">Heatmaps</button>
+                <button class="admin-tab" data-tab="social">Social</button>
+                <button class="admin-tab" data-tab="deaths">Death Replays</button>
+                <button class="admin-tab" data-tab="players">All Players</button>
+            </div>
+            
+            <!-- Health Tab -->
+            <div id="admin-health" class="admin-content active">
+                <div class="stats-grid">
+                    <div class="stat-card health-card">
+                        <div class="stat-icon">🖥️</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="health-chunks">-</div>
+                            <div class="stat-label">Loaded Chunks</div>
+                        </div>
+                    </div>
+                    <div class="stat-card health-card">
+                        <div class="stat-icon">🐾</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="health-entities">-</div>
+                            <div class="stat-label">Entities</div>
+                        </div>
+                    </div>
+                    <div class="stat-card health-card">
+                        <div class="stat-icon">📦</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="health-hoppers">-</div>
+                            <div class="stat-label">Hoppers</div>
+                        </div>
+                    </div>
+                    <div class="stat-card health-card">
+                        <div class="stat-icon">⚡</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="health-redstone">-</div>
+                            <div class="stat-label">Redstone</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Cost Index</h3>
+                    <div class="cost-index-bar">
+                        <div id="cost-index-fill" class="cost-index-fill" style="width: 0%"></div>
+                    </div>
+                    <p id="cost-index-value" class="cost-index-value">-</p>
+                </div>
+            </div>
+            
+            <!-- Heatmaps Tab -->
+            <div id="admin-heatmaps" class="admin-content">
+                <div class="filters">
+                    <label>
+                        Type:
+                        <select id="heatmap-type">
+                            <option value="MINING">Mining</option>
+                            <option value="DEATH">Deaths</option>
+                            <option value="POSITION">Movement</option>
+                            <option value="DAMAGE">Damage</option>
+                        </select>
+                    </label>
+                    <label>
+                        World:
+                        <select id="heatmap-world">
+                            <option value="world">Overworld</option>
+                            <option value="world_nether">Nether</option>
+                            <option value="world_the_end">End</option>
+                        </select>
+                    </label>
+                    <button id="load-heatmap" class="btn btn-primary">Load Heatmap</button>
+                </div>
+                <div class="card">
+                    <div id="heatmap-container" class="heatmap-container">
+                        <p class="placeholder">Select options and click "Load Heatmap"</p>
+                    </div>
+                    <div id="heatmap-legend" class="heatmap-legend hidden">
+                        <span>Low</span>
+                        <div class="legend-gradient"></div>
+                        <span>High</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Social Tab -->
+            <div id="admin-social" class="admin-content">
+                <div class="card">
+                    <h3>Top Player Pairs</h3>
+                    <table class="social-table">
+                        <thead>
+                            <tr>
+                                <th>Players</th>
+                                <th>Time Together</th>
+                                <th>Shared Kills</th>
+                            </tr>
+                        </thead>
+                        <tbody id="social-body">
+                            <tr><td colspan="3" class="placeholder">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Deaths Tab -->
+            <div id="admin-deaths" class="admin-content">
+                <div class="card">
+                    <h3>Recent Deaths</h3>
+                    <div id="deaths-list" class="deaths-list">
+                        <p class="placeholder">Loading...</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Players Tab -->
+            <div id="admin-players" class="admin-content">
+                <div class="card">
+                    <h3>All Players</h3>
+                    <input type="text" id="player-search" class="search-input" placeholder="Search players...">
+                    <table class="players-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Playtime</th>
+                                <th>Deaths</th>
+                                <th>Kills</th>
+                                <th>Last Seen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="players-body">
+                            <tr><td colspan="5" class="placeholder">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Admin Login</h2>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required>
+                </div>
+                <div id="login-error" class="error hidden"></div>
+                <div class="form-actions">
+                    <button type="button" id="cancel-login" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Login</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <p>SMPStats Dashboard • Powered by <a href="https://github.com/NurRobin/SMPStats" target="_blank">SMPStats</a></p>
+    </footer>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>

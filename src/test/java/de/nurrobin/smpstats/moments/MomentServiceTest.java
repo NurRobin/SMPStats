@@ -380,12 +380,13 @@ class MomentServiceTest {
                 new SkillWeights.FarmerWeights(0, 0)
         );
         return new Settings(true, true, true, true, true, true, true,
-                false, 0, "KEY", 1, weights,
+                false, "127.0.0.1", 0, "KEY", 1, weights,
                 true, 0L, 1L, true, 1, 1.0, defs, List.of(),
                 false, 1, 1, false,
                 true, true, 1, 1,
                 false, 1, 0, 0, 0, 0, de.nurrobin.smpstats.health.HealthThresholds.defaults(),
-                false, 1, 1, "", 1, 1);
+                false, 1, 1, "", 1, 1,
+                Settings.DashboardSettings.defaults());
     }
     
     private Settings disabledSettings(List<MomentDefinition> defs) {
@@ -398,11 +399,12 @@ class MomentServiceTest {
         );
         // isMomentsEnabled = false (first boolean param)
         return new Settings(true, true, true, true, true, true, true,
-                false, 0, "KEY", 1, weights,
+                false, "127.0.0.1", 0, "KEY", 1, weights,
                 false, 0L, 1L, true, 1, 1.0, defs, List.of(),
                 false, 1, 1, false,
                 true, true, 1, 1,
                 false, 1, 0, 0, 0, 0, de.nurrobin.smpstats.health.HealthThresholds.defaults(),
-                false, 1, 1, "", 1, 1);
+                false, 1, 1, "", 1, 1,
+                Settings.DashboardSettings.defaults());
     }
 }

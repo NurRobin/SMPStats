@@ -184,20 +184,20 @@ Compression:
 
 ---
 
-### 🎨 Milestone 6 — Visualization Platform (Optional External Project)
+### 🎨 Milestone 6 — Visualization Platform
 
 > Web dashboard with world heatmaps, live monitors, and social graph visualization.
 
 | Feature | Priority | Size | Status | Description |
 |---------|----------|------|--------|-------------|
-| Web Dashboard | Medium | XL | Todo | Standalone web application |
+| Web Dashboard | Medium | XL | ✅ Done | Built-in web dashboard with public/admin access |
 | World Heatmap Tiles | Medium | XL | Todo | Leaflet/MapLibre integration |
 | Dynmap Integration | Medium | L | Todo | Overlay on existing Dynmap |
-| Live Trend Monitors | Medium | L | Todo | Real-time activity graphs |
-| Player Timeline View | Medium | M | Todo | Individual player activity history |
+| Live Trend Monitors | Medium | L | Partial | Auto-refresh dashboard with activity counts |
+| Player Timeline View | Medium | M | ✅ Done | Admin timeline endpoint with player history |
 | Social Graph Visualization | Medium | L | Todo | Interactive network diagram |
 | Resource Dashboard | Low | M | Todo | Mining trends, farming patterns |
-| Leaderboard Pages | Low | S | Todo | Web-based ranking displays |
+| Leaderboard Pages | Low | S | ✅ Done | Public leaderboard displays in dashboard |
 | Custom Report Builder | Low | XL | Todo | Drag-and-drop analytics |
 
 **Tech Stack Suggestions:**

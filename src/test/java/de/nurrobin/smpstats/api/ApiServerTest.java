@@ -53,13 +53,13 @@ class ApiServerTest {
         stats = mock(StatsService.class);
         settings = new Settings(
                 true, true, true, true, true, true, true,
-                true, 0, API_KEY, 1, new de.nurrobin.smpstats.skills.SkillWeights(
+                true, "127.0.0.1", 0, API_KEY, 1, new de.nurrobin.smpstats.skills.SkillWeights(
                 new de.nurrobin.smpstats.skills.SkillWeights.MiningWeights(0),
                 new de.nurrobin.smpstats.skills.SkillWeights.CombatWeights(0, 0, 0),
                 new de.nurrobin.smpstats.skills.SkillWeights.ExplorationWeights(0, 0),
                 new de.nurrobin.smpstats.skills.SkillWeights.BuilderWeights(0),
                 new de.nurrobin.smpstats.skills.SkillWeights.FarmerWeights(0, 0)
-        ), true, 0L, 0L, true, 1, 1.0, List.of(), List.of(), true, 1, 1, true, true, true, 1, 1, true, 1, 0, 0, 0, 0, de.nurrobin.smpstats.health.HealthThresholds.defaults(), true, 1, 1, "", 1, 1);
+        ), true, 0L, 0L, true, 1, 1.0, List.of(), List.of(), true, 1, 1, true, true, true, 1, 1, true, 1, 0, 0, 0, 0, de.nurrobin.smpstats.health.HealthThresholds.defaults(), true, 1, 1, "", 1, 1, Settings.DashboardSettings.defaults());
         moments = mock(MomentService.class);
         heatmap = mock(HeatmapService.class);
         timeline = mock(TimelineService.class);
