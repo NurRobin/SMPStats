@@ -159,6 +159,13 @@ public class HotChunksGui implements InventoryGui, InventoryHolder {
     }
     
     private void performTeleport(Player player, HealthSnapshot.HotChunk chunk) {
+        // Check teleport permission
+        if (!player.hasPermission("smpstats.gui.health.manage") && !player.hasPermission("smpstats.admin")) {
+            playErrorSound(player);
+            player.sendMessage(Component.text("You do not have permission to teleport.", NamedTextColor.RED));
+            return;
+        }
+        
         org.bukkit.World world = Bukkit.getWorld(chunk.world());
         if (world != null) {
             // Calculate safe teleport location at center of chunk
