@@ -240,14 +240,30 @@ public class WebDashboardServer {
     
     /**
      * Constant-time password comparison to prevent timing attacks.
+     * Uses SHA-256 hashing before comparison to eliminate length-based timing leaks.
      */
     private boolean constantTimeEquals(String a, String b) {
         if (a == null || b == null) {
-            return false;
+            // Use constant-time comparison even for null checks by comparing dummy hashes
+            byte[] dummyA = a == null ? new byte[32] : hashString(a);
+            byte[] dummyB = b == null ? new byte[32] : hashString(b);
+            boolean result = MessageDigest.isEqual(dummyA, dummyB);
+            // Always return false if either was null
+            return result && a != null && b != null;
         }
-        byte[] aBytes = a.getBytes(StandardCharsets.UTF_8);
-        byte[] bBytes = b.getBytes(StandardCharsets.UTF_8);
-        return MessageDigest.isEqual(aBytes, bBytes);
+        byte[] hashA = hashString(a);
+        byte[] hashB = hashString(b);
+        return MessageDigest.isEqual(hashA, hashB);
+    }
+    
+    private byte[] hashString(String s) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return digest.digest(s.getBytes(StandardCharsets.UTF_8));
+        } catch (java.security.NoSuchAlgorithmException e) {
+            // SHA-256 is always available in Java
+            throw new RuntimeException("SHA-256 algorithm not available", e);
+        }
     }
     
     // ============== Handlers ==============
@@ -458,7 +474,9 @@ public class WebDashboardServer {
             Map<?, ?> data = gson.fromJson(body, Map.class);
             
             String password = data != null ? (String) data.get("password") : null;
-            if (password == null || password.isEmpty() || !constantTimeEquals(password, settings.getDashboardSettings().adminSettings().password())) {
+            // Use only constant-time comparison to avoid timing attacks
+            // The constantTimeEquals method handles null values safely
+            if (!constantTimeEquals(password, settings.getDashboardSettings().adminSettings().password())) {
                 sendJson(exchange, 401, Map.of("error", "Invalid password"));
                 return;
             }
