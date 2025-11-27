@@ -218,6 +218,7 @@ These principles guide every feature and decision:
 | **Movement Heatmaps** | Medium | M | ✅ Done | Visualize player travel and popular zones |
 | **Damage Heatmaps** | Medium | M | ✅ Done | Identify PvP hotspots and mob danger zones |
 | **Resource-Specific Heatmaps** | Medium | M | ✅ Done | Track diamond, iron, gold, ancient debris separately |
+| **OpenAPI-Published API** | High | M | ⚠️ Partial | Machine-readable docs exposed for external tooling |
 | **Time-Range Filters** | Medium | M | ⏳ Todo | Query "last 6h", "today", "this week" |
 | **Biome-Filtered Views** | Low | S | ⏳ Todo | Filter any heatmap by biome type |
 | **In-Game GUI** | High | L | ✅ Done | Rich chest-menu interface with visual insights |

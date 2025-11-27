@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -35,6 +36,7 @@ public class ApiServer {
     private final HeatmapService heatmapService;
     private final de.nurrobin.smpstats.timeline.TimelineService timelineService;
     private final ServerHealthService serverHealthService;
+    private final OpenApiDocument openApiDocument;
     private final Gson gson = new Gson();
     private final TimeRangeParser timeRangeParser = new TimeRangeParser();
 
@@ -48,6 +50,7 @@ public class ApiServer {
         this.heatmapService = heatmapService;
         this.timelineService = timelineService;
         this.serverHealthService = serverHealthService;
+        this.openApiDocument = new OpenApiDocument(settings, plugin.getDescription().getVersion());
     }
 
     public void start() {
@@ -58,6 +61,7 @@ public class ApiServer {
             return;
         }
 
+        server.createContext("/openapi.json", new OpenApiHandler());
         server.createContext("/stats", new StatsHandler());
         server.createContext("/online", new OnlineHandler());
         server.createContext("/moments/recent", new RecentMomentsHandler());
@@ -114,11 +118,28 @@ public class ApiServer {
         }
     }
 
+    private void sendJsonString(HttpExchange exchange, int status, String json) throws IOException {
+        byte[] data = json.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().add("Content-Type", "application/json");
+        exchange.sendResponseHeaders(status, data.length);
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(data);
+        }
+    }
+
     private void sendText(HttpExchange exchange, int status, String text) throws IOException {
         byte[] data = text.getBytes();
         exchange.sendResponseHeaders(status, data.length);
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(data);
+        }
+    }
+
+    private class OpenApiHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            // Documentation should stay reachable without authentication for tool discovery
+            sendJsonString(exchange, 200, openApiDocument.toJson());
         }
     }
 
@@ -462,6 +483,7 @@ public class ApiServer {
     HttpHandler socialTopHandler() { return new SocialTopHandler(); }
     HttpHandler deathReplayHandler() { return new DeathReplayHandler(); }
     HttpHandler healthHandler() { return new HealthHandler(); }
+    HttpHandler openApiHandler() { return new OpenApiHandler(); }
 
     private String resolveName(UUID uuid) {
         return statsService.getStats(uuid)
