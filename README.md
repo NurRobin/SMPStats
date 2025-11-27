@@ -1,174 +1,194 @@
 # SMPStats – Minecraft Analytics Engine
 
 <p align="center">
-  <strong>The first fully dynamic, query-driven analytics system for Minecraft servers</strong>
+  <strong>The first truly modular, query-driven analytics platform for Minecraft servers</strong>
 </p>
 
-SMPStats evolves from a player statistics plugin into a comprehensive **Minecraft Analytics Engine** — inspired by Google Analytics but purpose-built for Minecraft. Store raw event data efficiently and gain on-demand aggregated insights: heatmaps, temporal trends, social dynamics, skill patterns, resource consumption, zone activity, and automated event detection.
+<p align="center">
+  From simple player stats to enterprise-grade server analytics — understand your server like never before.
+</p>
 
 ---
 
-## 🎯 Vision
+## 🎯 The Vision
 
-> Transform your Minecraft server into a data-driven experience. Understand player behavior, optimize gameplay, and discover hidden patterns — all without sacrificing performance.
+**It started simple:** I wanted players on my SMP to see their stats — distance traveled, biomes explored, blocks mined.
 
-**Core Capabilities:**
-- **Server-wide analytics** with per-player drill-down
-- **Trend analysis** over arbitrary time ranges
-- **Dynamic heatmaps** generated at query time with configurable grid sizes
-- **Social graph clustering** — discover who plays with whom, identify groups automatically
-- **Rolling-window event detection** — capture meaningful gameplay moments automatically
-- **Real-time insights** — see who's farming what right now, track live activity
-- **Rich in-game GUI** — chest-menu style interface with meaningful visual insights
-- **Efficient data storage** with SQLite (PostgreSQL/Elasticsearch planned)
-- **REST API** for external dashboards and visualization tools
+**Then I thought:** What if I could show these stats on my website? Player profiles that update automatically?
 
-**Design Philosophy:** Lightweight but expressive — powerful analytics without sacrificing server performance or configuration complexity.
+**Then I wondered:** What if I could see where players hang out? Who plays with whom? Are there social groups forming?
+
+**Then I realized:** Admins need to understand what's happening on their servers. Where's the lag coming from? Which areas are popular? What are players actually doing?
+
+**And so SMPStats evolved** from a simple stats tracker into a comprehensive **Minecraft Analytics Engine** — inspired by Google Analytics, but purpose-built for Minecraft. Store raw event data efficiently and gain on-demand insights: heatmaps, temporal trends, social dynamics, resource patterns, and automated event detection.
 
 ---
 
-## ✅ Milestone 1 — Foundations (Completed)
+## 🎭 Who Is This For?
 
-SMPStats has achieved its first major milestone: a complete event-driven statistics tracking system with baseline listeners, local storage, and an early "moments" logic.
+### 👤 For Players
+**What you want:** See your achievements, compare with friends, track your progress
 
-### Current Features
+**What you get:**
+- Rich in-game stats via `/stats` command
+- Compare your performance over time (daily, weekly, monthly)
+- See how you rank on leaderboards
+- Track skill progression (Mining, Combat, Exploration, Building, Farming)
+- View your own heatmaps and activity patterns
 
-#### 📊 Tracked Metrics
-| Category | Metrics |
-|----------|---------|
-| **Activity** | Playtime, joins/quits, first/last join timestamps |
-| **Combat** | Player kills, mob kills, damage dealt/taken, death count & causes |
-| **Exploration** | Distance traveled (per dimension), biomes visited |
-| **Building** | Blocks placed, blocks broken |
-| **Economy** | Items crafted, items consumed |
-| **Skills** | Mining, Combat, Exploration, Builder, Farmer scores (configurable weights) |
+**Example:** "How far have I traveled this week? Which biomes have I explored? Am I better at mining than my friend?"
 
-#### 🔔 Moments Engine
+---
+
+### 🛠️ For Server Owners & Admins
+**What you want:** Understand what's happening on your server, optimize gameplay, find issues
+
+**What you get:**
+- **Heatmaps:** "Where do players actually hang out?" — Visualize movement, mining, deaths, and damage
+- **Social Dynamics:** "Who plays with whom?" — Automatic group detection and friendship tracking
+- **Lag Detection:** "Who's causing the server to lag?" — Identify hopper-heavy builds, entity farms, redstone contraptions
+- **Death Analysis:** "Where are the dangerous zones?" — Hotspot detection for mob spawns and PvP
+- **Resource Monitoring:** "Are players finding too many diamonds?" — Track resource acquisition patterns
+- **Activity Trends:** "When are players most active?" — Plan events and maintenance windows
+
+**Example:** "Server is lagging — Health Dashboard shows Robin has 847 hoppers at spawn. Time for a conversation."
+
+---
+
+### 💻 For Developers
+**What you want:** Integrate Minecraft data into your own tools and services
+
+**What you get:**
+- **Full REST API:** 14+ endpoints covering stats, heatmaps, moments, social data, and health
+- **Real-time Streams:** SSE (Server-Sent Events) for live event feeds
+- **Webhooks:** Discord bot integration, automated notifications
+- **JSON Exports:** Player timelines, leaderboards, social graphs
+- **Flexible Queries:** Filter by time, player, world, event type, grid size, decay factor
+
+**Example:** Build a React dashboard that shows "Who's mining diamonds right now?" with live updates via SSE.
+
+---
+
+## ✨ Core Capabilities
+
+### 📊 Comprehensive Event Tracking
+Track everything that matters on your server:
+- **Activity:** Playtime, joins/quits, session patterns
+- **Combat:** Player kills, mob kills, damage dealt/taken, death causes
+- **Exploration:** Distance traveled per dimension, biomes discovered
+- **Building:** Blocks placed and broken with material tracking
+- **Economy:** Items crafted, items consumed
+- **Skills:** Dynamic scoring for Mining, Combat, Exploration, Building, Farming
+
+### 🗺️ Dynamic Heatmaps
+Visualize player activity with configurable resolution:
+- **Movement Heatmaps:** Where do players travel?
+- **Mining Heatmaps:** Where are resources being extracted?
+- **Death Heatmaps:** Where are the dangerous zones?
+- **Damage Heatmaps:** Where do PvP fights happen?
+- **Resource-Specific:** Track diamond, iron, gold, ancient debris separately
+- **Exponential Decay:** Weight recent activity higher than old data
+- **Configurable Grids:** From 8×8 (detail) to 64×64 (overview) blocks per cell
+
+### 🤝 Social Dynamics
+Understand how your community interacts:
+- **Proximity Tracking:** Measure time players spend together (16-block radius)
+- **Top Pairs:** Discover the strongest player partnerships
+- **Shared Activity:** Track cooperative kills, builds, and exploration
+- **Group Detection:** *(Future)* Automatic clustering to find social groups
+- **Interaction Matrices:** *(Future)* N×N player relationship strength
+
+### 🔔 Moments Engine
 Automatically detect and record significant gameplay events:
-- **Triggers:** `block_break`, `death`, `death_fall`, `first_death`, `damage_low_hp`, `death_explosion`, `item_gain`, `boss_kill`
-- **Merge Windows:** Combine rapid events (e.g., a "diamond run" merges consecutive diamond ore breaks within 30 seconds)
-- **Configurable:** Define custom moments via YAML with filters (materials, entity types, damage causes)
+- **8 Trigger Types:** Block breaks, deaths, damage, item gains, boss kills, and more
+- **Merge Windows:** Combine rapid events (e.g., "mined 12 diamonds in 30 seconds")
+- **Configurable:** Define custom moments via YAML with material/entity/cause filters
+- **Notifications:** *(Future)* In-game messages, titles, sounds for special achievements
 
-#### 🗺️ Heatmaps & Hotspots
-- **Mining Heatmap:** Track block break locations at chunk resolution
-- **Death Heatmap:** Visualize dangerous areas
-- **Hotspot Regions:** Define named areas (e.g., "Spawn") and track aggregate activity
+### 📈 Timeline & Trends
+Track how things change over time:
+- **Daily Snapshots:** Per-player cumulative stats captured automatically
+- **Period Comparisons:** "How much more active was I this week vs. last week?"
+- **Leaderboards:** Rank players by activity within time windows (7-day, 30-day, custom)
+- **Trend Analysis:** *(Future)* Identify patterns like "farming bursts" or "exploration sprees"
 
-#### 🤝 Social Statistics
-- **Proximity Tracking:** Measure time players spend near each other
-- **Shared Activity:** Track kills performed while teammates are nearby
-- **Pair Leaderboards:** Discover the strongest player partnerships
+### 🖥️ Server Health Monitoring
+Keep your server running smoothly:
+- **Entity Counting:** Track loaded chunks, entities, tile entities
+- **Performance Scoring:** 0-100 cost index indicating server load
+- **Culprit Detection:** "Who placed all these hoppers?"
+- **Per-World Breakdown:** Identify which dimension is causing lag
+- **Historical Tracking:** See how server health evolves over time
 
-#### 📈 Timeline & Trends
-- **Daily Snapshots:** Per-player cumulative stats captured daily
-- **Range Deltas:** Compare activity over 7-day, 30-day, or custom periods
-- **Leaderboards:** Rank players by activity within time windows
+### 💀 Death Replay
+Understand every death in detail:
+- **Full Context:** Cause, position, health, fall distance, killer entity
+- **Nearby Players:** Who was around when it happened?
+- **Nearby Mobs:** What entities were in the area?
+- **Inventory:** *(Optional)* Record what items were lost
 
-#### 🖥️ Server Health
-- **Entity Counting:** Loaded chunks, entities, hoppers, redstone blocks
-- **Cost Index:** Weighted score (0-100) indicating server load
-- **Per-World Breakdown:** Identify which world is causing lag
-
-#### 📖 Story Generator
-- Weekly JSON summaries with top players and recent moments
-- Optional webhook integration for Discord bots or external dashboards
-
-#### 💀 Death Replay
-- Capture death context: cause, position, health, fall distance
-- Record nearby players and mobs
-- Optionally store inventory contents
-
-#### 🌐 HTTP API
-Full REST API with API key authentication:
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /stats/{uuid}` | Player statistics |
-| `GET /stats/all` | All player statistics |
-| `GET /online` | Online player names |
-| `GET /moments/recent` | Recent moments |
-| `GET /moments/query` | Filtered moment search |
-| `GET /moments/stream` | SSE feed for real-time moments |
-| `GET /heatmap/{type}` | Heatmap bins (MINING, DEATH) |
-| `GET /heatmap/hotspots/{type}` | Hotspot counters |
-| `GET /timeline/{uuid}` | Player timeline |
-| `GET /timeline/range/{uuid}` | Delta stats for a period |
-| `GET /timeline/leaderboard` | Period-based leaderboard |
-| `GET /social/top` | Top player pairs by time together |
-| `GET /death/replay` | Death replay entries |
-| `GET /health` | Server health snapshot |
-
-See [docs/API.md](docs/API.md) for full documentation.
-
-### Storage Model (SQLite)
-- **`stats`** — Core player statistics with JSON biomes array
-- **`moments`** — Event records with type, payload, and location
-- **`heatmap`** — Chunk-based activity bins
-- **`social_pairs`** — Player proximity counters
-- **`timeline`** — Daily stat snapshots
-- **`death_replay`** — Death context records
-
-Schema auto-migrates on startup; downgrades are blocked for safety.
-
-### Known Limitations
-- Heatmaps are chunk-resolution only (no sub-chunk grids yet)
-- No exponential decay on heatmap data
-- Social tracking limited to pairs (no group clustering)
-- No external database backends (SQLite only)
-- Event detection is trigger-based, not rolling-window
+### 📖 Story Generator
+Automated weekly summaries:
+- **Top Players:** Most active, most kills, most exploration
+- **Recent Moments:** Highlight interesting events from the week
+- **JSON Format:** Easy integration with Discord bots or websites
+- **Webhook Support:** Push summaries to external services automatically
 
 ---
 
 ## 🚀 Quick Start
 
 ### Installation
+
+**Requirements:**
+- Paper 1.21.1 or higher (Spigot/Bukkit not supported)
+- Java 21+
+
 ```bash
-# Build the plugin
-mvn clean package
+# Download the latest release
+wget https://github.com/NurRobin/SMPStats/releases/latest/download/SMPStats.jar
 
 # Copy to your server
-cp target/SMPStats.jar /path/to/plugins/
+cp SMPStats.jar /path/to/server/plugins/
 
-# Start your Paper 1.21.1+ server
-# config.yml and stats.db are auto-created
+# Start your server
+# config.yml and stats.db are created automatically
 ```
 
-### Configuration
+### Basic Configuration
+
+After first launch, edit `plugins/SMPStats/config.yml`:
+
 ```yaml
+# Enable or disable core features
+tracking:
+  movement: true      # Track player movement for heatmaps
+  blocks: true        # Track block placement/breaking
+  kills: true         # Track kills and deaths
+  biomes: true        # Track biome exploration
+  crafting: true      # Track item crafting
+  damage: true        # Track damage dealt and taken
+  consumption: true   # Track item consumption
+
+# Enable HTTP API for external tools
 api:
   enabled: true
-  bind_address: "127.0.0.1"
+  bind_address: "127.0.0.1"  # Change to "0.0.0.0" for external access
   port: 8765
-  api_key: "YouShouldChangeThisKey"
+  api_key: "CHANGE_THIS_SECRET_KEY"
 
-tracking:
-  movement: true
-  blocks: true
-  kills: true
-  biomes: true
-  crafting: true
-  damage: true
-  consumption: true
-
-moments:
-  enabled: true
-  flush_seconds: 10
-  definitions:
-    diamond_run:
-      type: block_break
-      title: "Diamond Run"
-      detail: "Diamonds found: {count}"
-      merge_seconds: 30
-      materials: [DIAMOND_ORE, DEEPSLATE_DIAMOND_ORE]
-
+# Enable features
 heatmap:
   enabled: true
-
+  
 social:
   enabled: true
-  nearby_radius: 16
+  nearby_radius: 16   # Distance for proximity tracking
 
 timeline:
+  enabled: true
+
+moments:
   enabled: true
 
 death_replay:
@@ -179,156 +199,401 @@ health:
 
 story:
   enabled: true
+  webhook_url: ""     # Optional: Discord webhook for weekly summaries
 ```
 
-### Commands
-| Command | Description |
-|---------|-------------|
-| `/stats` | Show your stats |
-| `/stats <player>` | Show another player's stats |
-| `/stats json` | Export your stats as JSON |
-| `/stats dump` | Dump all stats to console (JSON) |
-| `/sstats` | Plugin info (version, API status) |
-| `/sstats reload` | Reload configuration |
-| `/sstats user <name>` | View/edit player stats |
+### Essential Commands
 
-### Permissions
-| Permission | Default | Description |
-|------------|---------|-------------|
-| `smpstats.use` | true | Use `/stats` and `/sstats` |
-| `smpstats.reload` | op | Reload configuration |
-| `smpstats.edit` | op | Reset/modify player stats |
+| Command | Description | Permission |
+|---------|-------------|------------|
+| `/stats` | Show your own stats | `smpstats.use` |
+| `/stats <player>` | Show another player's stats | `smpstats.use` |
+| `/stats json` | Export your stats as JSON | `smpstats.use` |
+| `/sstats` | Plugin info (version, API status) | `smpstats.use` |
+| `/sstats reload` | Reload configuration | `smpstats.reload` |
+
+### Using the API
+
+The HTTP API provides programmatic access to all data:
+
+```bash
+# Get all player stats
+curl -H "X-API-Key: YOUR_KEY" http://localhost:8765/stats/all
+
+# Get online players
+curl -H "X-API-Key: YOUR_KEY" http://localhost:8765/online
+
+# Get recent moments
+curl -H "X-API-Key: YOUR_KEY" http://localhost:8765/moments/recent?limit=10
+
+# Get mining heatmap
+curl -H "X-API-Key: YOUR_KEY" http://localhost:8765/heatmap/MINING
+
+# Stream live events (SSE)
+curl -H "X-API-Key: YOUR_KEY" http://localhost:8765/moments/stream
+```
+
+**Full API documentation:** See [docs/API.md](docs/API.md)
 
 ---
 
-## 🗺️ Roadmap: The Analytics Engine
+## 💡 Real-World Use Cases
 
-See [Roadmap.md](Roadmap.md) for detailed milestone breakdowns.
+### 🏗️ Planning Your Server Layout
+**Problem:** "Where should I build the spawn market? Where do players naturally gather?"
 
-### Milestone 2 — Analytics Layer
-Dynamic aggregation engine with exponential decay, configurable grid sizes, and multi-layer heatmap queries.
+**Solution:** 
+1. Enable movement heatmaps
+2. Let players explore naturally for a few days
+3. Check heatmap via API or in-game GUI
+4. Build shops and infrastructure in high-traffic areas
 
-### Milestone 3 — Social Dynamics
-Advanced player-proximity tracking, automatic group detection via clustering, and interaction matrices.
-
-### Milestone 4 — Event Engine
-Full JSON-based event definitions with rolling windows, multi-step conditions, and timeout buffers.
-
-### Milestone 5 — Storage & Performance
-Efficient raw-event storage, compression strategies, sharded tables, and optional external backends.
-
-### Milestone 6 — Visualization Platform
-External web dashboard with world heatmaps, live trend monitors, player timelines, and social graph visualization.
+**Result:** Organic player flow leads to more vibrant community spaces.
 
 ---
 
-## 💡 Use Case Examples
+### 🐌 Finding Lag Sources
+**Problem:** "Server TPS is dropping to 15. What's causing it?"
 
-### 🧱 Dynamic Heatmap Query
-```
-GET /heatmap?type=block_break&block=diamond_ore&from=3d&grid=16&decay=0.95h
-```
-- Filter by block type and time range
-- Aggregate to custom grid sizes (16×16 blocks)
-- Apply exponential decay (recent activity weighted higher)
-- Render on-demand for dashboards
+**Solution:**
+1. Check `/sstats health` for cost index
+2. Identify top contributors (e.g., "Robin: 847 hoppers")
+3. Use `/teleport` to inspect the build
+4. Work with player to optimize or relocate
 
-### 🔁 Rolling-Window Event Detection
-```json
-{
-  "id": "diamond_vein",
-  "match": { "type": "block_break", "block": "diamond_ore" },
-  "window_reset_seconds": 30,
-  "finalize_on_timeout": true,
-  "min_events": 2
+**Result:** Targeted lag fixes instead of server-wide hopper limits.
+
+---
+
+### ⚔️ Balancing PvP
+**Problem:** "Players complain about spawn camping. Is it actually happening?"
+
+**Solution:**
+1. Enable damage heatmaps
+2. Check PvP hotspots over 7-day period
+3. Identify if spawn area has unusually high damage events
+4. Adjust spawn protection radius or add safe zones
+
+**Result:** Data-driven decisions instead of anecdotal complaints.
+
+---
+
+### 💎 Anti-Cheat Assistance
+**Problem:** "Did this player find 64 diamonds in 10 minutes legitimately?"
+
+**Solution:** *(Future - Milestone 2)*
+1. Query resource-specific heatmap with time filter
+2. Check mining patterns for suspicious clusters
+3. Review moments for "diamond runs" with high counts
+4. Compare against server average and historical data
+
+**Result:** Flag suspicious activity for manual review.
+
+---
+
+### 🤝 Understanding Your Community
+**Problem:** "Are there cliques forming? Who's playing together?"
+
+**Solution:**
+1. Enable social proximity tracking
+2. Check top player pairs via API
+3. Review who's consistently online together
+4. *(Future)* Use automatic group detection
+
+**Result:** Plan team events, identify mentorship opportunities, understand social dynamics.
+
+---
+
+### 📊 Showcasing Player Achievements
+**Problem:** "I want player profiles on my server website"
+
+**Solution:**
+1. Enable API with secure key
+2. Build website that calls `/stats/{uuid}`
+3. Display stats with charts and leaderboards
+4. Link Minecraft accounts to website accounts
+
+**Result:** Players see their stats outside the game, increasing engagement.
+
+---
+
+## 🔌 HTTP API
+
+SMPStats includes a full REST API with 14+ endpoints. All requests require an API key via `X-API-Key` header.
+
+### Key Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/stats/{uuid}` | GET | Get stats for specific player |
+| `/stats/all` | GET | Get stats for all players |
+| `/online` | GET | List currently online players |
+| `/moments/recent` | GET | Recent moments with filters |
+| `/moments/query` | GET | Advanced moment search |
+| `/moments/stream` | GET | SSE stream of live events |
+| `/heatmap/{type}` | GET | Heatmap bins (MINING, DEATH, MOVEMENT, DAMAGE) |
+| `/heatmap/hotspots/{type}` | GET | Named region activity counters |
+| `/timeline/{uuid}` | GET | Player timeline snapshots |
+| `/timeline/range/{uuid}` | GET | Delta stats over period |
+| `/timeline/leaderboard` | GET | Period-based rankings |
+| `/social/top` | GET | Top player pairs by time together |
+| `/death/replay` | GET | Death replay entries with context |
+| `/health` | GET | Current server health snapshot |
+
+### Example: Building a Discord Bot
+
+```javascript
+const apiKey = 'YOUR_API_KEY';
+const baseUrl = 'http://localhost:8765';
+
+// Get top 5 players by playtime
+async function getTopPlayers() {
+  const res = await fetch(`${baseUrl}/stats/all`, {
+    headers: { 'X-API-Key': apiKey }
+  });
+  const players = await res.json();
+  return players
+    .sort((a, b) => b.playtime_seconds - a.playtime_seconds)
+    .slice(0, 5);
 }
+
+// Stream live moments to Discord channel
+const evtSource = new EventSource(`${baseUrl}/moments/stream`, {
+  headers: { 'X-API-Key': apiKey }
+});
+
+evtSource.onmessage = (event) => {
+  const moment = JSON.parse(event.data);
+  if (moment.type === 'DIAMOND_RUN') {
+    discordChannel.send(`💎 ${moment.player_name} found ${moment.count} diamonds!`);
+  }
+};
 ```
-> When a player breaks diamond ore, a 30-second timer starts. Each new diamond break resets the timer. When the timer expires, the streak finalizes as an event: "Robin mined 12 diamonds near x=114 z=-62".
 
-### 🤝 Social Proximity Analysis
-> Players within 10 blocks for 120+ seconds are recorded as "interaction partners." Over time, clusters emerge revealing social groups. Visualize group hangout zones on heatmaps.
-
-### ⚒️ Resource Trend Dashboard
-> "What are players farming right now?"
-> Query mining activity over the last 1h, 6h, 24h, or 7d. Identify shifts in resource focus and popular farming locations.
+**Full documentation:** [docs/API.md](docs/API.md)
 
 ---
 
-## 🔧 Development
+## 🗺️ Roadmap
 
-### Requirements
-- Java 21
-- Maven 3.8+
-- Paper API 1.21.x
+See [Roadmap.md](Roadmap.md) for the complete development roadmap with detailed milestones, technical specifications, and future plans.
 
-### Project Structure
-```
-src/main/java/de/nurrobin/smpstats/
-├── SMPStats.java          # Plugin entry point
-├── Settings.java          # Configuration wrapper
-├── StatsRecord.java       # Player stats model
-├── StatsService.java      # Stats business logic
-├── api/                   # HTTP API server
-├── commands/              # Command handlers
-├── database/              # SQLite storage
-├── heatmap/               # Heatmap service
-├── health/                # Server health tracking
-├── listeners/             # Bukkit event listeners
-├── moments/               # Moments engine
-├── skills/                # Skill profile calculation
-├── social/                # Social proximity tracking
-├── story/                 # Weekly summary generator
-└── timeline/              # Timeline snapshots
-```
+### Current Status: v0.11.0
 
-### Building
-```bash
-mvn clean package
-# Output: target/SMPStats.jar
-```
+**✅ Milestone 1 Complete — Foundations**
+- Core stats tracking with SQLite storage
+- HTTP API with 14 endpoints
+- Heatmaps (mining, death, movement, damage)
+- Social proximity tracking
+- Moments engine with 8 trigger types
+- Timeline snapshots and leaderboards
+- Server health monitoring
+- Death replay system
+- Story generator with webhook support
 
-### Testing
-```bash
-mvn test
-# Uses MockBukkit for integration testing
-```
+**🔄 Milestone 2 In Progress — Analytics Layer**
+- ✅ Exponential decay model
+- ✅ Configurable grid sizes (8×8 to 64×64)
+- ✅ Multi-layer heatmaps
+- ✅ Dynamic query engine
+- ⏳ Time-range filters
+- ⏳ Biome-filtered views
+- ⏳ Live activity dashboard
+
+**📋 Upcoming Milestones**
+- **M3 — Social Dynamics:** Group detection, interaction matrices, social graphs
+- **M4 — Event Engine:** JSON event definitions, rolling windows, complex triggers
+- **M5 — Storage & Performance:** Raw event storage, compression, sharding, external DBs
+- **M6 — Visualization Platform:** Web dashboard, world map overlays, live monitors
+- **M7 — Platform Modularization:** Split into Core/API/Web plugins for flexible deployment
 
 ---
 
-## 🔒 Security & Verification
+## 🗄️ Storage Architecture
+
+### SQLite Database Schema
+
+**Core Tables:**
+- `stats` — Player statistics with JSON biomes array
+- `moments` — Event records with type, payload, location
+- `heatmap` — Chunk-based activity bins with decay support
+- `social_pairs` — Player proximity time counters
+- `timeline` — Daily stat snapshots for trend analysis
+- `death_replay` — Death context with nearby entities
+
+**Features:**
+- Auto-migration on startup (schema version tracking)
+- WAL mode for better concurrency
+- JSON fields for flexible data structures
+- Downgrade protection to prevent data loss
+
+**Future:**
+- PostgreSQL backend for large servers
+- Elasticsearch integration for advanced queries
+- Time-based sharding (per-month tables)
+- Binary encoding for compression
+
+---
+
+## 🔐 Security & Verification
 
 All releases include cryptographic verification:
 
-| Artifact | Verification |
-|----------|--------------|
+| Artifact | How to Verify |
+|----------|---------------|
 | **SHA256 Checksums** | `sha256sum -c SMPStats-vX.Y.Z.jar.sha256` |
 | **GPG Signatures** | `gpg --verify SMPStats-vX.Y.Z.jar.asc SMPStats-vX.Y.Z.jar` |
 | **Build Provenance** | `gh attestation verify SMPStats-vX.Y.Z.jar --repo NurRobin/SMPStats` |
-| **SBOM** | Software Bill of Materials (`*.sbom.json`) |
-
----
-
-## 📦 Releases
-
-**Automated Release System:**
-1. Set version: `./scripts/set-version.sh X.Y.Z`
-2. Commit & push to `main`
-3. Auto-release creates draft with all artifacts
-4. Publish draft — done! 🚀
-
-- **Stable releases:** `vX.Y.Z`
-- **Pre-releases:** `vX.Y.Z-beta.N`
-
-See [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md) for details.
-
----
-
-## 📜 License
-
-MIT License — see [LICENSE](LICENSE) for details.
+| **SBOM** | Software Bill of Materials in `*.sbom.json` |
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read the issue guidelines and submit PRs against the `main` branch. See [Roadmap.md](Roadmap.md) for planned features and areas where help is needed.
+Contributions are welcome! Here's how to get started:
+
+### Priority Areas
+
+**Milestone 2 (Analytics Layer):**
+- Time-range filters for queries
+- Biome-filtered heatmap views
+- Live activity dashboard components
+- Player comparison views
+
+**Performance:**
+- Query optimization for large datasets
+- Caching strategies for hot queries
+- Async processing improvements
+
+**Documentation:**
+- More use case examples
+- Video tutorials
+- Configuration guides
+
+### Development Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/NurRobin/SMPStats.git
+cd SMPStats
+
+# Build
+mvn clean package
+
+# Run tests
+mvn test
+
+# Output: target/SMPStats.jar
+```
+
+### Guidelines
+
+1. **Discuss First:** Open an issue before starting major work
+2. **Follow Conventions:** Use existing code style and patterns
+3. **Test Thoroughly:** Write MockBukkit tests for new features
+4. **Document:** Update README/Roadmap for user-facing changes
+5. **Submit PR:** Against `dev` branch with clear description
+
+---
+
+## 📋 Permissions
+
+| Permission | Default | Description |
+|------------|---------|-------------|
+| `smpstats.use` | true | Use `/stats` and `/sstats` commands |
+| `smpstats.reload` | op | Reload plugin configuration |
+| `smpstats.edit` | op | Reset or modify player stats |
+| `smpstats.admin` | op | Access admin-level API endpoints |
+
+---
+
+## 📦 Releases
+
+**Current Version:** v0.11.0
+
+**Release Schedule:**
+- **Stable Releases:** `vX.Y.Z` (production-ready)
+- **Pre-Releases:** `vX.Y.Z-beta.N` (testing features)
+- **Automated System:** Set version → commit → auto-release with artifacts
+
+**Each release includes:**
+- Compiled JAR
+- SHA256 checksum
+- GPG signature
+- SBOM (Software Bill of Materials)
+- Build provenance attestation
+
+See [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md) for details.
+
+---
+
+## 🔮 Future Vision
+
+### Where We're Heading
+
+**Short-term (v1.0):**
+- Complete Milestone 2 (Analytics Layer)
+- Polish in-game GUI
+- Comprehensive documentation
+
+**Medium-term (v1.5):**
+- Milestone 3 (Social Dynamics with group detection)
+- Milestone 4 (Advanced event engine)
+
+**Long-term (v2.0+):**
+- **Platform Modularization:** Split into three plugins
+  - `SMPStats-Core.jar` — Always required, tracks events
+  - `SMPStats-API.jar` — Optional, can run standalone
+  - `SMPStats-Web.jar` — Optional, built-in dashboard
+  
+- **Flexible Deployment:**
+  - Simple: All 3 in `plugins/` folder
+  - Developer: Core + API only, build custom frontend
+  - Enterprise: Multi-server network with centralized analytics
+
+- **Advanced Features:**
+  - Anti-cheat pattern detection
+  - Predictive analytics (player retention, churn risk)
+  - Machine learning for anomaly detection
+  - Integration with economy plugins
+
+---
+
+## 📜 License
+
+MIT License — see [LICENSE](LICENSE) for full details.
+
+---
+
+## 🙏 Acknowledgments
+
+Built with:
+- **Paper API** — Modern Minecraft server platform
+- **Javalin** — Lightweight HTTP server
+- **SQLite** — Embedded database
+- **Jackson** — JSON processing
+- **MockBukkit** — Testing framework
+
+Inspired by:
+- Google Analytics (query-driven analytics)
+- Prometheus (time-series data with decay)
+- CoreProtect (efficient Minecraft logging)
+
+---
+
+## 📞 Support
+
+- **Issues:** [GitHub Issues](https://github.com/NurRobin/SMPStats/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/NurRobin/SMPStats/discussions)
+- **Documentation:** [docs/](docs/)
+
+---
+
+<p align="center">
+  <strong>Transform your Minecraft server into a data-driven experience.</strong><br>
+  Understand player behavior. Optimize gameplay. Discover hidden patterns.
+</p>
+
+<p align="center">
+  <em>SMPStats — Because every block tells a story.</em>
+</p>
