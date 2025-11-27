@@ -22,6 +22,7 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -260,7 +261,7 @@ public class WebDashboardServer {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             return digest.digest(s.getBytes(StandardCharsets.UTF_8));
-        } catch (java.security.NoSuchAlgorithmException e) {
+        } catch (NoSuchAlgorithmException e) {
             // SHA-256 is always available in Java
             throw new RuntimeException("SHA-256 algorithm not available", e);
         }
