@@ -20,7 +20,7 @@ It started with a simple idea: let players use `/stats` to see how far they've t
 
 Then I wanted to show player stats on my server website. Create profiles that link Minecraft accounts to web accounts. Display leaderboards, show who's most active.
 
-**Result:** HTTP REST API with 14 endpoints for external tools.
+**Result:** HTTP REST API with 11 endpoints for external tools.
 
 ---
 
@@ -99,7 +99,7 @@ At this point, it became clear: This isn't just a stats plugin anymore. This is 
 - Query historical data flexibly
 
 **What they get:**
-- **Full REST API** with 14+ endpoints
+- **Full REST API** with 11 endpoints
 - **Real-time SSE streams** for live events
 - **Flexible queries** with filters (time, player, world, type, grid size, decay)
 - **JSON exports** for all data types
@@ -160,7 +160,7 @@ These principles guide every feature and decision:
 | **Health** | Chunk/entity/hopper/redstone counting, cost index | ✅ Done |
 | **Death Replay** | Cause, position, nearby entities, inventory | ✅ Done |
 | **Story** | Weekly summaries, webhook integration | ✅ Done |
-| **API** | 14 endpoints with API key auth | ✅ Done |
+| **API** | 11 endpoints with API key auth | ✅ Done |
 | **Storage** | SQLite with schema migrations, WAL mode | ✅ Done |
 
 ### Real-World Impact
@@ -221,7 +221,7 @@ These principles guide every feature and decision:
 | **Time-Range Filters** | Medium | M | ⏳ Todo | Query "last 6h", "today", "this week" |
 | **Biome-Filtered Views** | Low | S | ⏳ Todo | Filter any heatmap by biome type |
 | **In-Game GUI** | High | L | ✅ Done | Rich chest-menu interface with visual insights |
-| **Live Activity Dashboard** | Medium | M | ⏳ Todo | "Who's farming what right now" real-time view |
+| **Live Activity Dashboard** | Medium | M | ⚠️ Partial | "Who's farming what right now" real-time view |
 | **Player Comparison Views** | Medium | M | ⏳ Todo | Side-by-side stat comparisons in GUI |
 
 ### Technical Deep Dive
@@ -267,7 +267,7 @@ Supported grid sizes:
 **Remaining work:**
 - Time-range query syntax (`from=6h`, `to=now`, `range=3d`)
 - Biome filtering for all heatmap types
-- Live activity dashboard (real-time "who's doing what")
+- Complete live activity dashboard (real-time streaming)
 - In-GUI player comparison views
 
 **Target completion:** v0.12.0 (next minor release)

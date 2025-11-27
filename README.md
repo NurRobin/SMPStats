@@ -59,7 +59,7 @@
 **What you want:** Integrate Minecraft data into your own tools and services
 
 **What you get:**
-- **Full REST API:** 14+ endpoints covering stats, heatmaps, moments, social data, and health
+- **Full REST API:** 11 endpoints covering stats, heatmaps, moments, social data, and health
 - **Real-time Streams:** SSE (Server-Sent Events) for live event feeds
 - **Webhooks:** Discord bot integration, automated notifications
 - **JSON Exports:** Player timelines, leaderboards, social graphs
@@ -319,7 +319,7 @@ curl -H "X-API-Key: YOUR_KEY" http://localhost:8765/moments/stream
 
 ## 🔌 HTTP API
 
-SMPStats includes a full REST API with 14+ endpoints. All requests require an API key via `X-API-Key` header.
+SMPStats includes a full REST API with 11 endpoints. All requests require an API key via `X-API-Key` header.
 
 ### Key Endpoints
 
@@ -382,7 +382,7 @@ See [Roadmap.md](Roadmap.md) for the complete development roadmap with detailed 
 
 **✅ Milestone 1 Complete — Foundations**
 - Core stats tracking with SQLite storage
-- HTTP API with 14 endpoints
+- HTTP API with 11 endpoints
 - Heatmaps (mining, death, movement, damage)
 - Social proximity tracking
 - Moments engine with 8 trigger types
