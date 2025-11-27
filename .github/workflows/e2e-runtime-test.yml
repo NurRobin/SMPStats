@@ -34,6 +34,9 @@ concurrency:
   group: e2e-test-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
   JAVA_VERSION: '21'
   MC_VERSION: ${{ inputs.mc_version || '1.21.1' }}
