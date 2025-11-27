@@ -63,6 +63,9 @@ class HotChunksGuiTest {
         );
         when(healthService.getLatest()).thenReturn(snapshot);
 
+        // Grant teleport permission
+        player.addAttachment(plugin, "smpstats.gui.health.manage", true);
+
         HotChunksGui gui = new HotChunksGui(plugin, guiManager, healthService);
         gui.open(player); // Clear pending confirmations
         Inventory inv = gui.getInventory();
@@ -90,6 +93,73 @@ class HotChunksGuiTest {
         // Verify teleport happened
         assertEquals(10 * 16 + 8, player.getLocation().getBlockX());
         assertEquals(10 * 16 + 8, player.getLocation().getBlockZ());
+    }
+    
+    @Test
+    void teleportDeniedWithoutPermission() {
+        World world = server.addSimpleWorld("world");
+        HealthSnapshot.HotChunk hotChunk = new HealthSnapshot.HotChunk("world", 10, 10, 5, 2, "Owner");
+        HealthSnapshot snapshot = new HealthSnapshot(
+            System.currentTimeMillis(), 20.0, 100, 200, 1, 5, 0, 2, 10.0, 
+            Collections.emptyMap(), List.of(hotChunk)
+        );
+        when(healthService.getLatest()).thenReturn(snapshot);
+
+        // Player has no teleport permission
+        
+        HotChunksGui gui = new HotChunksGui(plugin, guiManager, healthService);
+        gui.open(player);
+
+        org.bukkit.Location originalLocation = player.getLocation().clone();
+
+        // First click - asks for confirmation
+        InventoryClickEvent event1 = mock(InventoryClickEvent.class);
+        when(event1.getSlot()).thenReturn(0);
+        when(event1.getWhoClicked()).thenReturn(player);
+        gui.handleClick(event1);
+        
+        // Second click - attempts teleport
+        InventoryClickEvent event2 = mock(InventoryClickEvent.class);
+        when(event2.getSlot()).thenReturn(0);
+        when(event2.getWhoClicked()).thenReturn(player);
+        gui.handleClick(event2);
+        
+        // Verify player was NOT teleported (location should remain the same)
+        assertEquals(originalLocation.getBlockX(), player.getLocation().getBlockX());
+        assertEquals(originalLocation.getBlockZ(), player.getLocation().getBlockZ());
+    }
+    
+    @Test
+    void teleportAllowedWithAdminPermission() {
+        World world = server.addSimpleWorld("world");
+        HealthSnapshot.HotChunk hotChunk = new HealthSnapshot.HotChunk("world", 5, 5, 3, 1, "Owner");
+        HealthSnapshot snapshot = new HealthSnapshot(
+            System.currentTimeMillis(), 20.0, 100, 200, 1, 5, 0, 2, 10.0, 
+            Collections.emptyMap(), List.of(hotChunk)
+        );
+        when(healthService.getLatest()).thenReturn(snapshot);
+
+        // Grant admin permission (alternative to smpstats.gui.health.manage)
+        player.addAttachment(plugin, "smpstats.admin", true);
+
+        HotChunksGui gui = new HotChunksGui(plugin, guiManager, healthService);
+        gui.open(player);
+
+        // First click - asks for confirmation
+        InventoryClickEvent event1 = mock(InventoryClickEvent.class);
+        when(event1.getSlot()).thenReturn(0);
+        when(event1.getWhoClicked()).thenReturn(player);
+        gui.handleClick(event1);
+        
+        // Second click - confirms teleport
+        InventoryClickEvent event2 = mock(InventoryClickEvent.class);
+        when(event2.getSlot()).thenReturn(0);
+        when(event2.getWhoClicked()).thenReturn(player);
+        gui.handleClick(event2);
+        
+        // Verify teleport happened
+        assertEquals(5 * 16 + 8, player.getLocation().getBlockX());
+        assertEquals(5 * 16 + 8, player.getLocation().getBlockZ());
     }
     
     @Test
