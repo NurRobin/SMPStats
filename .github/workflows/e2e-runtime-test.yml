@@ -1,4 +1,4 @@
-name: End-to-End Runtime Tests
+name: End-to-End Runtime Tests (Docker)
 
 on:
   workflow_dispatch:
@@ -30,9 +30,10 @@ on:
       - '.github/workflows/e2e-runtime-test.yml'
       - '.github/test-fixtures/**'
 
+# Allow parallel runs - each gets its own container with unique ports
 concurrency:
-  group: e2e-test-${{ github.ref }}
-  cancel-in-progress: true
+  group: e2e-test-${{ github.ref }}-${{ github.run_id }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -40,11 +41,6 @@ permissions:
 env:
   JAVA_VERSION: '21'
   MC_VERSION: ${{ inputs.mc_version || '1.21.1' }}
-  API_PORT: 8765
-  API_KEY: 'test-api-key-ci'
-  RCON_PORT: 25575
-  RCON_PASSWORD: 'test-rcon-password'
-  SERVER_PORT: 25565
 
 jobs:
   build:
@@ -57,17 +53,12 @@ jobs:
     name: E2E Tests on Paper ${{ inputs.mc_version || '1.21.1' }}
     needs: [build]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    environment: dev-server
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
 
       - name: Download built artifact
         uses: actions/download-artifact@v4
@@ -75,329 +66,276 @@ jobs:
           name: ${{ needs.build.outputs.artifact-name }}
           path: target/
 
-      - name: Create test server directory
+      - name: Prepare test info
+        id: info
         run: |
-          mkdir -p test-server/plugins
-          cp target/SMPStats.jar test-server/plugins/
-
-      - name: Create test configuration
-        run: |
-          mkdir -p test-server/plugins/SMPStats
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          RUN_ID="e2e-${{ github.run_id }}-${SHORT_SHA}"
           
-          # Create test config with known API key and settings
-          cat > test-server/plugins/SMPStats/config.yml << 'EOF'
-          config_version: 5
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "run_id=${RUN_ID}" >> $GITHUB_OUTPUT
 
-          api:
-            enabled: true
-            bind_address: "0.0.0.0"
-            port: ${{ env.API_PORT }}
-            api_key: "${{ env.API_KEY }}"
+      - name: Upload JAR to test server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          source: "target/SMPStats.jar"
+          target: "/home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging/${{ steps.info.outputs.run_id }}/"
+          strip_components: 1
 
-          tracking:
-            movement: true
-            blocks: true
-            kills: true
-            biomes: true
-            crafting: true
-            damage: true
-            consumption: true
+      - name: Start Docker container
+        uses: appleboy/ssh-action@v1.0.3
+        id: start
+        env:
+          RUN_ID: ${{ steps.info.outputs.run_id }}
+          MC_VERSION: ${{ env.MC_VERSION }}
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID,MC_VERSION
+          script: |
+            MANAGER="/home/main/Minecraft-Servers/SMPStats-Dev/manage-test-server.sh"
+            PLUGIN_JAR="/home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging/${RUN_ID}/SMPStats.jar"
+            
+            # Start container and capture connection info
+            ${MANAGER} start "${RUN_ID}" "${PLUGIN_JAR}" "${MC_VERSION}" > /tmp/container-${RUN_ID}.json 2>&1
+            
+            # Extract last JSON block (the connection info)
+            tail -10 /tmp/container-${RUN_ID}.json | grep -A 10 "^{" > /tmp/conn-${RUN_ID}.json || true
+            cat /tmp/conn-${RUN_ID}.json
 
-          autosave_minutes: 1
+      - name: Get container connection info
+        uses: appleboy/ssh-action@v1.0.3
+        id: conn
+        env:
+          RUN_ID: ${{ steps.info.outputs.run_id }}
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID
+          script: |
+            cat /tmp/conn-${RUN_ID}.json
 
-          skills:
-            mining:
-              blocks_broken_weight: 0.05
-            combat:
-              player_kill_weight: 5.0
-              mob_kill_weight: 2.0
-              damage_dealt_weight: 0.02
-            exploration:
-              distance_weight: 0.01
-              biomes_weight: 8.0
-            builder:
-              blocks_placed_weight: 0.05
-            farmer:
-              items_crafted_weight: 0.02
-              items_consumed_weight: 0.01
-
-          moments:
-            enabled: true
-            flush_seconds: 10
-            definitions:
-              diamond_run:
-                type: block_break
-                title: "Diamond Run"
-                detail: "Diamonds found: {count}"
-                merge_seconds: 30
-                materials: [DIAMOND_ORE, DEEPSLATE_DIAMOND_ORE]
-
-          heatmap:
-            enabled: true
-            flush_minutes: 5
-            decay_half_life_hours: 0.0
-
-          social:
-            enabled: true
-            sample_seconds: 5
-            nearby_radius: 16
-
-          timeline:
-            enabled: true
-
-          death_replay:
-            enabled: true
-            include_inventory_items: true
-            nearby_radius: 16
-            limit: 50
-
-          health:
-            enabled: true
-            sample_minutes: 5
-          EOF
-
-      - name: Create server.properties
-        run: |
-          cat > test-server/server.properties << EOF
-          server-port=${{ env.SERVER_PORT }}
-          enable-rcon=true
-          rcon.port=${{ env.RCON_PORT }}
-          rcon.password=${{ env.RCON_PASSWORD }}
-          online-mode=false
-          spawn-protection=0
-          max-players=5
-          view-distance=4
-          simulation-distance=4
-          level-name=world
-          motd=SMPStats E2E Test Server
-          EOF
-
-      - name: Accept EULA
-        run: echo "eula=true" > test-server/eula.txt
-
-      - name: Download Paper server
-        run: |
-          cd test-server
-          
-          # Get the latest build for the specified version
-          BUILD_INFO=$(curl -s "https://api.papermc.io/v2/projects/paper/versions/${{ env.MC_VERSION }}/builds" | jq -r '.builds[-1]')
-          BUILD_NUM=$(echo "$BUILD_INFO" | jq -r '.build')
-          DOWNLOAD_NAME=$(echo "$BUILD_INFO" | jq -r '.downloads.application.name')
-          
-          echo "Downloading Paper ${{ env.MC_VERSION }} build ${BUILD_NUM}..."
-          curl -L -o paper.jar \
-            "https://api.papermc.io/v2/projects/paper/versions/${{ env.MC_VERSION }}/builds/${BUILD_NUM}/downloads/${DOWNLOAD_NAME}"
-          
-          echo "Paper server downloaded successfully"
-
-      - name: Install mcrcon
-        run: |
-          git clone https://github.com/Tiiffi/mcrcon.git /tmp/mcrcon
-          cd /tmp/mcrcon
-          make
-          sudo cp mcrcon /usr/local/bin/
-
-      - name: Start Minecraft server
-        id: start-server
-        run: |
-          cd test-server
-          
-          echo "Starting Paper server..."
-          java -Xms512M -Xmx1G -jar paper.jar nogui &
-          SERVER_PID=$!
-          echo "server_pid=${SERVER_PID}" >> $GITHUB_OUTPUT
-          
-          # Wait for server to be ready (check for "Done" message)
-          echo "Waiting for server to start..."
-          TIMEOUT=180
-          ELAPSED=0
-          
-          while [ $ELAPSED -lt $TIMEOUT ]; do
-            if [ -f logs/latest.log ] && grep -q "Done" logs/latest.log; then
-              echo "✅ Server started successfully!"
-              break
-            fi
-            sleep 5
-            ELAPSED=$((ELAPSED + 5))
-            echo "Waiting... (${ELAPSED}s / ${TIMEOUT}s)"
-          done
-          
-          if [ $ELAPSED -ge $TIMEOUT ]; then
-            echo "❌ Server failed to start within timeout"
-            if [ -f logs/latest.log ]; then
-              echo "=== Server Log ==="
-              cat logs/latest.log
-            fi
-            exit 1
-          fi
-          
-          # Additional wait for plugins to fully initialize
-          sleep 10
-          
-          # Verify SMPStats loaded
-          if grep -q "\[SMPStats\] Enabling SMPStats" logs/latest.log; then
-            echo "✅ SMPStats plugin loaded successfully!"
-          else
-            echo "❌ SMPStats plugin failed to load!"
-            grep -i "smpstats\|error\|exception" logs/latest.log || true
-            exit 1
-          fi
+      - name: Wait for server startup
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          RUN_ID: ${{ steps.info.outputs.run_id }}
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID
+          script: |
+            CONTAINER="smpstats-test-${RUN_ID}"
+            
+            echo "Waiting for SMPStats to fully initialize..."
+            sleep 15
+            
+            echo "=== SMPStats Log Messages ==="
+            docker logs "${CONTAINER}" 2>&1 | grep -i "SMPStats" || echo "No SMPStats messages yet"
 
       - name: Run RCON command tests
         if: ${{ inputs.run_rcon_tests != false }}
-        run: |
-          echo "=== Running RCON Command Tests ==="
-          
-          # Wait a moment for RCON to be ready
-          sleep 5
-          
-          # Test basic connectivity
-          echo "Testing RCON connectivity..."
-          RESULT=$(mcrcon -H localhost -P ${{ env.RCON_PORT }} -p "${{ env.RCON_PASSWORD }}" "list" 2>&1) || true
-          echo "List result: $RESULT"
-          
-          # Test SMPStats info command
-          echo ""
-          echo "Testing /smpstats info..."
-          RESULT=$(mcrcon -H localhost -P ${{ env.RCON_PORT }} -p "${{ env.RCON_PASSWORD }}" "smpstats info" 2>&1) || true
-          echo "Result: $RESULT"
-          
-          if echo "$RESULT" | grep -qi "smpstats\|version\|aktiv"; then
-            echo "✅ /smpstats info command works!"
-          else
-            echo "⚠️ Unexpected response from /smpstats info"
-          fi
-          
-          # Test stats command (should work even without players)
-          echo ""
-          echo "Testing /stats..."
-          RESULT=$(mcrcon -H localhost -P ${{ env.RCON_PORT }} -p "${{ env.RCON_PASSWORD }}" "stats" 2>&1) || true
-          echo "Result: $RESULT"
-          
-          echo ""
-          echo "=== RCON Command Tests Complete ==="
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          RUN_ID: ${{ steps.info.outputs.run_id }}
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID
+          script: |
+            # Load connection info
+            CONN_FILE="/tmp/conn-${RUN_ID}.json"
+            RCON_PORT=$(cat "${CONN_FILE}" | grep rcon_port | grep -oP '\d+')
+            RCON_PASS=$(cat "${CONN_FILE}" | grep rcon_password | grep -oP '": "\K[^"]+')
+            
+            echo "=== Running RCON Command Tests ==="
+            echo "RCON Port: ${RCON_PORT}"
+            
+            FAILED=0
+            
+            # Test basic connectivity
+            echo ""
+            echo "Test 1: RCON Connectivity (/list)"
+            RESULT=$(mcrcon -H localhost -P "${RCON_PORT}" -p "${RCON_PASS}" "list" 2>&1) || true
+            echo "Result: $RESULT"
+            if echo "$RESULT" | grep -qi "players"; then
+              echo "✅ PASS"
+            else
+              echo "❌ FAIL"
+              FAILED=$((FAILED + 1))
+            fi
+            
+            # Test SMPStats info command
+            echo ""
+            echo "Test 2: /smpstats info"
+            RESULT=$(mcrcon -H localhost -P "${RCON_PORT}" -p "${RCON_PASS}" "smpstats info" 2>&1) || true
+            echo "Result: $RESULT"
+            if echo "$RESULT" | grep -qi "smpstats\|version\|aktiv\|enabled"; then
+              echo "✅ PASS"
+            else
+              echo "⚠️ Unexpected response"
+            fi
+            
+            # Test stats command
+            echo ""
+            echo "Test 3: /stats"
+            RESULT=$(mcrcon -H localhost -P "${RCON_PORT}" -p "${RCON_PASS}" "stats" 2>&1) || true
+            echo "Result: $RESULT"
+            
+            echo ""
+            echo "=== RCON Tests Complete (${FAILED} failures) ==="
+            
+            if [ $FAILED -gt 0 ]; then
+              exit 1
+            fi
 
       - name: Run HTTP API tests
         if: ${{ inputs.run_api_tests != false }}
-        run: |
-          echo "=== Running HTTP API Tests ==="
-          
-          # Wait for API to be ready
-          sleep 5
-          
-          API_URL="http://localhost:${{ env.API_PORT }}"
-          API_KEY="${{ env.API_KEY }}"
-          FAILED=0
-          
-          test_endpoint() {
-            local name="$1"
-            local endpoint="$2"
-            local expected_status="$3"
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          RUN_ID: ${{ steps.info.outputs.run_id }}
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID
+          script: |
+            # Load connection info
+            CONN_FILE="/tmp/conn-${RUN_ID}.json"
+            API_PORT=$(cat "${CONN_FILE}" | grep api_port | grep -oP '\d+')
+            API_KEY=$(cat "${CONN_FILE}" | grep api_key | grep -oP '": "\K[^"]+')
             
-            echo ""
-            echo "Testing: $name ($endpoint)"
+            echo "=== Running HTTP API Tests ==="
+            echo "API Port: ${API_PORT}"
             
-            RESPONSE=$(curl -s -w "\n%{http_code}" -H "X-API-Key: ${API_KEY}" "${API_URL}${endpoint}" 2>&1)
-            STATUS=$(echo "$RESPONSE" | tail -1)
-            BODY=$(echo "$RESPONSE" | sed '$d')
+            API_URL="http://localhost:${API_PORT}"
+            FAILED=0
             
-            echo "Status: $STATUS"
-            
-            if [ "$STATUS" = "$expected_status" ]; then
-              echo "✅ PASS - Expected status $expected_status"
-              # Validate JSON if 200
-              if [ "$STATUS" = "200" ]; then
-                if echo "$BODY" | jq empty 2>/dev/null; then
-                  echo "   Valid JSON response"
-                else
-                  echo "   ⚠️ Response is not valid JSON: $BODY"
+            test_endpoint() {
+              local name="$1"
+              local endpoint="$2"
+              local expected_status="$3"
+              
+              echo ""
+              echo "Testing: $name"
+              
+              RESPONSE=$(curl -s -w "\n%{http_code}" -H "X-API-Key: ${API_KEY}" "${API_URL}${endpoint}" 2>&1)
+              STATUS=$(echo "$RESPONSE" | tail -1)
+              BODY=$(echo "$RESPONSE" | sed '$d')
+              
+              if [ "$STATUS" = "$expected_status" ]; then
+                echo "✅ PASS - Status $STATUS"
+                if [ "$STATUS" = "200" ]; then
+                  if echo "$BODY" | jq empty 2>/dev/null; then
+                    echo "   Valid JSON"
+                  else
+                    echo "   ⚠️ Not valid JSON"
+                  fi
                 fi
+              else
+                echo "❌ FAIL - Expected $expected_status, got $STATUS"
+                FAILED=$((FAILED + 1))
               fi
+            }
+            
+            # Test authentication (should fail without key)
+            echo ""
+            echo "Testing: Auth rejection (no key)"
+            RESPONSE=$(curl -s -w "\n%{http_code}" "${API_URL}/stats/all" 2>&1)
+            STATUS=$(echo "$RESPONSE" | tail -1)
+            if [ "$STATUS" = "401" ]; then
+              echo "✅ PASS - Correctly rejected"
             else
-              echo "❌ FAIL - Expected $expected_status, got $STATUS"
-              echo "   Response: $BODY"
+              echo "❌ FAIL - Expected 401, got $STATUS"
               FAILED=$((FAILED + 1))
             fi
-          }
-          
-          # Test authentication (should fail without key)
-          echo ""
-          echo "Testing: Authentication (no key)"
-          RESPONSE=$(curl -s -w "\n%{http_code}" "${API_URL}/stats/all" 2>&1)
-          STATUS=$(echo "$RESPONSE" | tail -1)
-          if [ "$STATUS" = "401" ]; then
-            echo "✅ PASS - Correctly rejected unauthenticated request"
-          else
-            echo "❌ FAIL - Expected 401, got $STATUS"
-            FAILED=$((FAILED + 1))
-          fi
-          
-          # Test valid endpoints
-          test_endpoint "GET /stats/all" "/stats/all" "200"
-          test_endpoint "GET /online" "/online" "200"
-          test_endpoint "GET /moments/recent" "/moments/recent?limit=10" "200"
-          test_endpoint "GET /health" "/health" "200"
-          
-          # Test invalid UUID (should be 400 or 404)
-          echo ""
-          echo "Testing: Invalid UUID"
-          RESPONSE=$(curl -s -w "\n%{http_code}" -H "X-API-Key: ${API_KEY}" "${API_URL}/stats/invalid-uuid" 2>&1)
-          STATUS=$(echo "$RESPONSE" | tail -1)
-          if [ "$STATUS" = "400" ] || [ "$STATUS" = "404" ]; then
-            echo "✅ PASS - Correctly handled invalid UUID (status $STATUS)"
-          else
-            echo "❌ FAIL - Expected 400 or 404, got $STATUS"
-            FAILED=$((FAILED + 1))
-          fi
-          
-          # Test heatmap endpoint
-          test_endpoint "GET /heatmap/MINING" "/heatmap/MINING" "200"
-          
-          echo ""
-          echo "=== HTTP API Tests Complete ==="
-          
-          if [ $FAILED -gt 0 ]; then
-            echo "❌ $FAILED test(s) failed!"
-            exit 1
-          else
-            echo "✅ All API tests passed!"
-          fi
+            
+            # Test valid endpoints
+            test_endpoint "GET /stats/all" "/stats/all" "200"
+            test_endpoint "GET /online" "/online" "200"
+            test_endpoint "GET /moments/recent" "/moments/recent?limit=10" "200"
+            test_endpoint "GET /health" "/health" "200"
+            test_endpoint "GET /heatmap/MINING" "/heatmap/MINING" "200"
+            
+            # Test invalid UUID
+            echo ""
+            echo "Testing: Invalid UUID"
+            RESPONSE=$(curl -s -w "\n%{http_code}" -H "X-API-Key: ${API_KEY}" "${API_URL}/stats/invalid-uuid" 2>&1)
+            STATUS=$(echo "$RESPONSE" | tail -1)
+            if [ "$STATUS" = "400" ] || [ "$STATUS" = "404" ]; then
+              echo "✅ PASS - Status $STATUS"
+            else
+              echo "❌ FAIL - Expected 400/404, got $STATUS"
+              FAILED=$((FAILED + 1))
+            fi
+            
+            echo ""
+            echo "=== API Tests Complete (${FAILED} failures) ==="
+            
+            if [ $FAILED -gt 0 ]; then
+              exit 1
+            fi
 
-      - name: Capture server logs
+      - name: Collect server logs
         if: always()
-        run: |
-          echo "=== Server Logs (SMPStats messages) ==="
-          if [ -f test-server/logs/latest.log ]; then
-            grep -i "SMPStats" test-server/logs/latest.log || echo "No SMPStats messages found"
-          else
-            echo "Log file not found"
-          fi
-
-      - name: Stop Minecraft server
-        if: always()
-        run: |
-          echo "Stopping server..."
-          
-          # Try graceful shutdown via RCON
-          mcrcon -H localhost -P ${{ env.RCON_PORT }} -p "${{ env.RCON_PASSWORD }}" "stop" 2>/dev/null || true
-          
-          sleep 10
-          
-          # Force kill if still running
-          pkill -f "paper.jar" || true
-          
-          echo "Server stopped"
-
-      - name: Upload server logs
-        if: always()
-        uses: actions/upload-artifact@v4
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          RUN_ID: ${{ steps.info.outputs.run_id }}
         with:
-          name: e2e-server-logs-${{ github.run_id }}
-          path: |
-            test-server/logs/
-            test-server/plugins/SMPStats/
-          retention-days: 3
-          if-no-files-found: warn
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID
+          script: |
+            CONTAINER="smpstats-test-${RUN_ID}"
+            LOG_DIR="/tmp/e2e-logs-${RUN_ID}"
+            
+            mkdir -p "${LOG_DIR}"
+            
+            echo "=== Full Server Log ==="
+            docker logs "${CONTAINER}" > "${LOG_DIR}/server.log" 2>&1
+            
+            echo "=== SMPStats Messages ==="
+            grep -i "SMPStats" "${LOG_DIR}/server.log" || echo "No SMPStats messages"
+            
+            echo ""
+            echo "Logs saved to ${LOG_DIR}"
+
+      - name: Stop and cleanup container
+        if: always()
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          RUN_ID: ${{ steps.info.outputs.run_id }}
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID
+          script: |
+            MANAGER="/home/main/Minecraft-Servers/SMPStats-Dev/manage-test-server.sh"
+            
+            echo "Stopping container..."
+            ${MANAGER} stop "${RUN_ID}"
+            
+            # Cleanup staging files
+            rm -rf "/home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging/${RUN_ID}"
+            rm -f "/tmp/container-${RUN_ID}.json" "/tmp/conn-${RUN_ID}.json"
+            
+            echo "Cleanup complete"
 
       - name: Test summary
         if: always()
@@ -406,5 +344,11 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Minecraft Version:** ${{ env.MC_VERSION }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Plugin Version:** ${{ needs.build.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run ID:** ${{ steps.info.outputs.run_id }}" >> $GITHUB_STEP_SUMMARY
           echo "- **RCON Tests:** ${{ inputs.run_rcon_tests != false && '✅ Enabled' || '⏭️ Skipped' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **API Tests:** ${{ inputs.run_api_tests != false && '✅ Enabled' || '⏭️ Skipped' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Infrastructure" >> $GITHUB_STEP_SUMMARY
+          echo "- Dynamic Docker container with unique ports" >> $GITHUB_STEP_SUMMARY
+          echo "- Parallel test runs supported" >> $GITHUB_STEP_SUMMARY
+          echo "- Auto-cleanup after test completion" >> $GITHUB_STEP_SUMMARY

@@ -1,4 +1,4 @@
-name: Deploy to Dev Server
+name: Deploy to Dev Server (Docker)
 
 on:
   push:
@@ -18,6 +18,11 @@ on:
         required: false
         type: boolean
         default: false
+      mc_version:
+        description: 'Minecraft version'
+        required: false
+        type: string
+        default: '1.21.1'
 
 concurrency:
   group: deploy-dev-${{ github.ref }}
@@ -34,7 +39,7 @@ jobs:
       upload-coverage: false
 
   deploy:
-    name: Deploy to Dev Server
+    name: Deploy to Docker Dev Server
     needs: [build]
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
@@ -52,53 +57,47 @@ jobs:
         run: |
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           BRANCH_NAME=$(echo "${{ github.ref_name }}" | sed 's/\//-/g')
-          TIMESTAMP=$(date -u +"%Y-%m-%d_%H-%M-%S")
+          RUN_ID="${{ github.run_id }}-${SHORT_SHA}"
           
           echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
           echo "branch_safe=${BRANCH_NAME}" >> $GITHUB_OUTPUT
-          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
-          echo "backup_name=SMPStats-${SHORT_SHA}-${TIMESTAMP}.jar" >> $GITHUB_OUTPUT
+          echo "run_id=${RUN_ID}" >> $GITHUB_OUTPUT
           
           echo "## Deployment Info" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** ${SHORT_SHA}" >> $GITHUB_STEP_SUMMARY
           echo "- **Version:** ${{ needs.build.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run ID:** ${RUN_ID}" >> $GITHUB_STEP_SUMMARY
 
-      - name: Deploy to dev server via SSH
+      - name: Deploy and start Docker container
         uses: appleboy/ssh-action@v1.0.3
+        id: deploy
         env:
-          BACKUP_NAME: ${{ steps.info.outputs.backup_name }}
+          RUN_ID: ${{ steps.info.outputs.run_id }}
           SHORT_SHA: ${{ steps.info.outputs.short_sha }}
           VERSION: ${{ needs.build.outputs.version }}
+          MC_VERSION: ${{ inputs.mc_version || '1.21.1' }}
         with:
           host: ${{ secrets.DEV_SERVER_HOST }}
           username: ${{ secrets.DEV_SERVER_USER }}
           key: ${{ secrets.DEV_SERVER_SSH_KEY }}
-          port: ${{ secrets.DEV_SERVER_SSH_PORT || 22 }}
-          envs: BACKUP_NAME,SHORT_SHA,VERSION
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID,SHORT_SHA,VERSION,MC_VERSION
           script: |
-            # Configuration (can be customized via secrets/env)
-            PLUGINS_DIR="${DEV_PLUGINS_DIR:-/opt/minecraft/paper-dev/plugins}"
-            BACKUP_DIR="${PLUGINS_DIR}/backups"
+            MANAGER="/home/main/Minecraft-Servers/SMPStats-Dev/manage-test-server.sh"
+            PLUGIN_DIR="/home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging"
             
-            echo "=== SMPStats Deployment ==="
+            echo "=== SMPStats Docker Deployment ==="
             echo "Version: ${VERSION}"
             echo "Commit: ${SHORT_SHA}"
-            echo "Target: ${PLUGINS_DIR}"
+            echo "Run ID: ${RUN_ID}"
+            echo "MC Version: ${MC_VERSION}"
             
-            # Create backup directory if needed
-            mkdir -p "${BACKUP_DIR}"
+            # Create staging directory for plugin
+            mkdir -p "${PLUGIN_DIR}/${RUN_ID}"
             
-            # Backup existing plugin if present
-            if [ -f "${PLUGINS_DIR}/SMPStats.jar" ]; then
-              echo "Creating backup: ${BACKUP_NAME}"
-              cp "${PLUGINS_DIR}/SMPStats.jar" "${BACKUP_DIR}/${BACKUP_NAME}"
-              
-              # Keep only last 10 backups
-              ls -t "${BACKUP_DIR}"/SMPStats-*.jar 2>/dev/null | tail -n +11 | xargs -r rm --
-            fi
-            
-            echo "Deployment prepared. Waiting for JAR upload..."
+            # Stop any existing container with same run ID
+            ${MANAGER} stop "${RUN_ID}" 2>/dev/null || true
 
       - name: Upload JAR to dev server
         uses: appleboy/scp-action@v0.1.7
@@ -106,90 +105,115 @@ jobs:
           host: ${{ secrets.DEV_SERVER_HOST }}
           username: ${{ secrets.DEV_SERVER_USER }}
           key: ${{ secrets.DEV_SERVER_SSH_KEY }}
-          port: ${{ secrets.DEV_SERVER_SSH_PORT || 22 }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
           source: "target/SMPStats.jar"
-          target: "${{ secrets.DEV_PLUGINS_DIR || '/opt/minecraft/paper-dev/plugins' }}"
+          target: "/home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging/${{ steps.info.outputs.run_id }}/"
           strip_components: 1
 
-      - name: Reload plugin via RCON
+      - name: Start Docker container and get connection info
+        uses: appleboy/ssh-action@v1.0.3
+        id: start
+        env:
+          RUN_ID: ${{ steps.info.outputs.run_id }}
+          MC_VERSION: ${{ inputs.mc_version || '1.21.1' }}
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID,MC_VERSION
+          script: |
+            MANAGER="/home/main/Minecraft-Servers/SMPStats-Dev/manage-test-server.sh"
+            PLUGIN_JAR="/home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging/${RUN_ID}/SMPStats.jar"
+            
+            # Start the container with the plugin
+            ${MANAGER} start "${RUN_ID}" "${PLUGIN_JAR}" "${MC_VERSION}"
+
+      - name: Wait and verify SMPStats loaded
         uses: appleboy/ssh-action@v1.0.3
         env:
-          SHORT_SHA: ${{ steps.info.outputs.short_sha }}
-          VERSION: ${{ needs.build.outputs.version }}
-          RCON_HOST: ${{ secrets.DEV_RCON_HOST || 'localhost' }}
-          RCON_PORT: ${{ secrets.DEV_RCON_PORT || '25575' }}
-          RCON_PASSWORD: ${{ secrets.DEV_RCON_PASSWORD }}
+          RUN_ID: ${{ steps.info.outputs.run_id }}
         with:
           host: ${{ secrets.DEV_SERVER_HOST }}
           username: ${{ secrets.DEV_SERVER_USER }}
           key: ${{ secrets.DEV_SERVER_SSH_KEY }}
-          port: ${{ secrets.DEV_SERVER_SSH_PORT || 22 }}
-          envs: SHORT_SHA,VERSION,RCON_HOST,RCON_PORT,RCON_PASSWORD
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID
           script: |
-            # Check if mcrcon is available
-            if ! command -v mcrcon &> /dev/null; then
-              echo "⚠️  mcrcon not installed, skipping RCON reload"
-              echo "Install: apt install mcrcon or https://github.com/Tiiffi/mcrcon"
-              exit 0
-            fi
+            CONTAINER="smpstats-test-${RUN_ID}"
             
-            echo "=== RCON Reload ==="
+            echo "Waiting for SMPStats to load..."
+            sleep 10
             
-            # Announce deployment
-            mcrcon -H "${RCON_HOST}" -P "${RCON_PORT}" -p "${RCON_PASSWORD}" \
-              "say [CI] Deploying SMPStats v${VERSION} (${SHORT_SHA})..." 2>/dev/null || true
-            
-            # Wait a moment for any pending operations
-            sleep 2
-            
-            # Reload the plugin (using PlugMan or reload command)
-            # Try PlugMan first (safer), fall back to reload confirm
-            if mcrcon -H "${RCON_HOST}" -P "${RCON_PORT}" -p "${RCON_PASSWORD}" \
-              "plugman reload SMPStats" 2>/dev/null; then
-              echo "✅ Plugin reloaded via PlugMan"
+            if docker logs "${CONTAINER}" 2>&1 | grep -q "\[SMPStats\].*Enabling"; then
+              echo "✅ SMPStats plugin loaded successfully!"
+              docker logs "${CONTAINER}" 2>&1 | grep -i "SMPStats" | tail -10
             else
-              echo "⚠️  PlugMan not available, using standard reload"
-              mcrcon -H "${RCON_HOST}" -P "${RCON_PORT}" -p "${RCON_PASSWORD}" \
-                "reload confirm" 2>/dev/null || true
+              echo "⚠️ SMPStats load status unclear"
+              docker logs "${CONTAINER}" --tail 30
             fi
             
-            sleep 2
-            
-            # Announce completion
-            mcrcon -H "${RCON_HOST}" -P "${RCON_PORT}" -p "${RCON_PASSWORD}" \
-              "say [CI] SMPStats v${VERSION} deployed successfully!" 2>/dev/null || true
-            
-            echo "=== Deployment complete ==="
-
-      - name: Capture recent logs
-        uses: appleboy/ssh-action@v1.0.3
-        continue-on-error: true
-        with:
-          host: ${{ secrets.DEV_SERVER_HOST }}
-          username: ${{ secrets.DEV_SERVER_USER }}
-          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
-          port: ${{ secrets.DEV_SERVER_SSH_PORT || 22 }}
-          script: |
-            LOGS_DIR="${DEV_SERVER_DIR:-/opt/minecraft/paper-dev}/logs"
-            LOG_FILE="${LOGS_DIR}/latest.log"
-            
-            echo "=== Recent SMPStats Log Messages ==="
-            
-            if [ -f "${LOG_FILE}" ]; then
-              # Get last 50 lines mentioning SMPStats
-              grep -i "SMPStats" "${LOG_FILE}" | tail -50 || echo "No SMPStats messages found"
-            else
-              echo "Log file not found at ${LOG_FILE}"
-            fi
+            echo ""
+            echo "=== Container Status ==="
+            docker ps --filter "name=${CONTAINER}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
       - name: Deployment summary
         run: |
           echo "## ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "SMPStats v${{ needs.build.outputs.version }} (${{ steps.info.outputs.short_sha }}) has been deployed to the dev server." >> $GITHUB_STEP_SUMMARY
+          echo "SMPStats v${{ needs.build.outputs.version }} (${{ steps.info.outputs.short_sha }}) deployed to Docker container." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Container Info" >> $GITHUB_STEP_SUMMARY
+          echo "- **Container:** smpstats-test-${{ steps.info.outputs.run_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **MC Version:** ${{ inputs.mc_version || '1.21.1' }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Actions Performed" >> $GITHUB_STEP_SUMMARY
           echo "1. ✅ Built plugin JAR" >> $GITHUB_STEP_SUMMARY
-          echo "2. ✅ Created backup of previous version" >> $GITHUB_STEP_SUMMARY
-          echo "3. ✅ Uploaded new JAR to server" >> $GITHUB_STEP_SUMMARY
-          echo "4. ✅ Reloaded plugin via RCON" >> $GITHUB_STEP_SUMMARY
+          echo "2. ✅ Uploaded to server" >> $GITHUB_STEP_SUMMARY
+          echo "3. ✅ Started Docker container with dynamic ports" >> $GITHUB_STEP_SUMMARY
+          echo "4. ✅ SMPStats plugin loaded" >> $GITHUB_STEP_SUMMARY
+
+  cleanup-old:
+    name: Cleanup Old Containers
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    environment: dev-server
+    continue-on-error: true
+
+    steps:
+      - name: Cleanup containers older than 2 hours
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          script: |
+            echo "Cleaning up old containers..."
+            
+            # Find and remove containers older than 2 hours
+            docker ps -a --filter "name=smpstats-test-" --format "{{.ID}} {{.Names}} {{.Status}}" | while read line; do
+              id=$(echo "$line" | awk '{print $1}')
+              name=$(echo "$line" | awk '{print $2}')
+              
+              # Check if container is running for more than 2 hours
+              created=$(docker inspect --format='{{.Created}}' "$id" 2>/dev/null || echo "")
+              if [ -n "$created" ]; then
+                created_ts=$(date -d "$created" +%s 2>/dev/null || echo 0)
+                now_ts=$(date +%s)
+                age=$((now_ts - created_ts))
+                
+                # 7200 seconds = 2 hours
+                if [ $age -gt 7200 ]; then
+                  echo "Removing old container: ${name} (age: ${age}s)"
+                  docker stop "${id}" 2>/dev/null || true
+                  docker rm "${id}" 2>/dev/null || true
+                fi
+              fi
+            done
+            
+            # Cleanup staging files older than 1 day
+            find /home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging -mindepth 1 -maxdepth 1 -mtime +1 -exec rm -rf {} \; 2>/dev/null || true
+            
+            echo "Cleanup complete"
