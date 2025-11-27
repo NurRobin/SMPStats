@@ -50,8 +50,16 @@ public class WebDashboardServer {
     private final Map<String, AdminSession> sessions = new ConcurrentHashMap<>();
     private final SecureRandom secureRandom = new SecureRandom();
     
+    // Rate limiting for login attempts
+    private final Map<String, LoginAttemptTracker> loginAttempts = new ConcurrentHashMap<>();
+    
     private static final String SESSION_COOKIE_NAME = "smpstats_session";
     private static final long SESSION_CLEANUP_INTERVAL_MINUTES = 10;
+    
+    // Rate limiting configuration
+    private static final int MAX_FAILED_ATTEMPTS = 5;
+    private static final long LOCKOUT_DURATION_MS = 60_000; // 1 minute lockout after max failed attempts
+    private static final long ATTEMPT_WINDOW_MS = 60_000; // Track attempts within 1 minute window
     
     public WebDashboardServer(SMPStats plugin, StatsService statsService, Settings settings,
                               MomentService momentService, HeatmapService heatmapService,
@@ -130,6 +138,7 @@ public class WebDashboardServer {
     
     private void cleanupExpiredSessions() {
         sessions.entrySet().removeIf(entry -> entry.getValue().isExpired());
+        cleanupLoginAttempts();
     }
     
     // ============== Helper Methods ==============
@@ -237,6 +246,106 @@ public class WebDashboardServer {
         boolean isExpired() {
             return System.currentTimeMillis() > expiresAt;
         }
+    }
+    
+    /**
+     * Tracks login attempts for rate limiting purposes.
+     */
+    private static class LoginAttemptTracker {
+        private int failedAttempts;
+        private long firstAttemptTime;
+        private long lockoutUntil;
+        
+        LoginAttemptTracker() {
+            this.failedAttempts = 0;
+            this.firstAttemptTime = System.currentTimeMillis();
+            this.lockoutUntil = 0;
+        }
+        
+        boolean isLockedOut() {
+            return System.currentTimeMillis() < lockoutUntil;
+        }
+        
+        long getRemainingLockoutMs() {
+            return Math.max(0, lockoutUntil - System.currentTimeMillis());
+        }
+        
+        void recordFailedAttempt(int maxAttempts, long lockoutDurationMs, long windowMs) {
+            long now = System.currentTimeMillis();
+            
+            // Reset if outside the attempt window
+            if (now - firstAttemptTime > windowMs) {
+                failedAttempts = 0;
+                firstAttemptTime = now;
+            }
+            
+            failedAttempts++;
+            
+            // Apply lockout if max attempts exceeded
+            if (failedAttempts >= maxAttempts) {
+                lockoutUntil = now + lockoutDurationMs;
+            }
+        }
+        
+        void reset() {
+            failedAttempts = 0;
+            lockoutUntil = 0;
+        }
+        
+        boolean isStale(long windowMs) {
+            long now = System.currentTimeMillis();
+            return now - firstAttemptTime > windowMs && !isLockedOut();
+        }
+    }
+    
+    /**
+     * Gets the client IP address from the exchange.
+     */
+    private String getClientIp(HttpExchange exchange) {
+        // Check for X-Forwarded-For header (for reverse proxy setups)
+        String forwardedFor = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isEmpty()) {
+            // Use the first IP in the chain (original client)
+            return forwardedFor.split(",")[0].trim();
+        }
+        return exchange.getRemoteAddress().getAddress().getHostAddress();
+    }
+    
+    /**
+     * Checks if the given IP is currently rate limited for login attempts.
+     * Returns the remaining lockout time in seconds, or 0 if not locked out.
+     */
+    private long checkRateLimit(String ip) {
+        LoginAttemptTracker tracker = loginAttempts.get(ip);
+        if (tracker != null && tracker.isLockedOut()) {
+            return (tracker.getRemainingLockoutMs() + 999) / 1000; // Round up to seconds
+        }
+        return 0;
+    }
+    
+    /**
+     * Records a failed login attempt for the given IP.
+     */
+    private void recordFailedLogin(String ip) {
+        loginAttempts.computeIfAbsent(ip, k -> new LoginAttemptTracker())
+                .recordFailedAttempt(MAX_FAILED_ATTEMPTS, LOCKOUT_DURATION_MS, ATTEMPT_WINDOW_MS);
+    }
+    
+    /**
+     * Resets the login attempt counter for the given IP after a successful login.
+     */
+    private void resetLoginAttempts(String ip) {
+        LoginAttemptTracker tracker = loginAttempts.get(ip);
+        if (tracker != null) {
+            tracker.reset();
+        }
+    }
+    
+    /**
+     * Cleans up stale login attempt trackers.
+     */
+    private void cleanupLoginAttempts() {
+        loginAttempts.entrySet().removeIf(entry -> entry.getValue().isStale(ATTEMPT_WINDOW_MS));
     }
     
     /**
@@ -465,6 +574,18 @@ public class WebDashboardServer {
                 return;
             }
             
+            // Rate limiting check
+            String clientIp = getClientIp(exchange);
+            long lockoutSeconds = checkRateLimit(clientIp);
+            if (lockoutSeconds > 0) {
+                plugin.getLogger().warning("Rate-limited login attempt from IP: " + clientIp);
+                sendJson(exchange, 429, Map.of(
+                    "error", "Too many failed login attempts. Please try again later.",
+                    "retryAfter", lockoutSeconds
+                ));
+                return;
+            }
+            
             // Read POST body
             String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             Map<?, ?> data = gson.fromJson(body, Map.class);
@@ -473,9 +594,15 @@ public class WebDashboardServer {
             // Use only constant-time comparison to avoid timing attacks
             // The constantTimeEquals method handles null values safely
             if (!constantTimeEquals(password, settings.getDashboardSettings().adminSettings().password())) {
+                // Record failed attempt and log it
+                recordFailedLogin(clientIp);
+                plugin.getLogger().warning("Failed admin login attempt from IP: " + clientIp);
                 sendJson(exchange, 401, Map.of("error", "Invalid password"));
                 return;
             }
+            
+            // Successful login - reset rate limiter for this IP
+            resetLoginAttempts(clientIp);
             
             // Create session
             String sessionId = generateSessionId();
@@ -487,6 +614,7 @@ public class WebDashboardServer {
             // Set cookie
             setSessionCookie(exchange, sessionId, timeoutMinutes * 60);
             
+            plugin.getLogger().info("Successful admin login from IP: " + clientIp);
             sendJson(exchange, 200, Map.of("success", true, "expiresIn", timeoutMinutes * 60));
         }
     }

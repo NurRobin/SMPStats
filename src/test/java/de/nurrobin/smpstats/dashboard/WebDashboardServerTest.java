@@ -249,6 +249,49 @@ class WebDashboardServerTest {
         assertTrue(exchange.body().contains("\"success\""));
         assertTrue(exchange.responseHeaders.containsKey("Set-Cookie"));
     }
+    
+    @Test
+    void adminLoginHandlerRateLimitsAfterFailedAttempts() throws Exception {
+        var handler = dashboard.adminLoginHandler();
+        
+        // Make 5 failed login attempts (max allowed)
+        for (int i = 0; i < 5; i++) {
+            String body = "{\"password\": \"wrongPassword\"}";
+            FakeExchange exchange = new FakeExchange("/api/admin/login", null, body, "POST");
+            handler.handle(exchange);
+            assertEquals(401, exchange.status);
+        }
+        
+        // 6th attempt should be rate limited
+        String body = "{\"password\": \"wrongPassword\"}";
+        FakeExchange exchange = new FakeExchange("/api/admin/login", null, body, "POST");
+        handler.handle(exchange);
+        
+        assertEquals(429, exchange.status);
+        assertTrue(exchange.body().contains("Too many failed login attempts"));
+        assertTrue(exchange.body().contains("retryAfter"));
+    }
+    
+    @Test
+    void adminLoginHandlerAllowsValidLoginAfterFailedAttempts() throws Exception {
+        var handler = dashboard.adminLoginHandler();
+        
+        // Make 3 failed login attempts (below max)
+        for (int i = 0; i < 3; i++) {
+            String body = "{\"password\": \"wrongPassword\"}";
+            FakeExchange exchange = new FakeExchange("/api/admin/login", null, body, "POST");
+            handler.handle(exchange);
+            assertEquals(401, exchange.status);
+        }
+        
+        // Valid login should still work
+        String body = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange exchange = new FakeExchange("/api/admin/login", null, body, "POST");
+        handler.handle(exchange);
+        
+        assertEquals(200, exchange.status);
+        assertTrue(exchange.body().contains("\"success\""));
+    }
 
     // ============== Admin Check Handler Tests ==============
     
