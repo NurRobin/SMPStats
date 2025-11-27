@@ -315,8 +315,26 @@ class SStatsCommandTest {
     
     @Test
     void testGuiCommandWithPermission() {
-        // This test requires MockBukkit to work properly
-        // Skip in unit test environment where server is null
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService statsService = mock(StatsService.class);
+        GuiManager guiManager = mock(GuiManager.class);
+        ServerHealthService healthService = mock(ServerHealthService.class);
+        SStatsCommand cmd = new SStatsCommand(plugin, statsService, guiManager, healthService);
+        Player player = mock(Player.class);
+        when(player.hasPermission("smpstats.gui")).thenReturn(true);
+        Command command = mock(Command.class);
+
+        // MainMenuGui constructor calls Bukkit.createInventory(), so we need to mock Bukkit
+        try (MockedStatic<org.bukkit.Bukkit> bukkit = mockStatic(org.bukkit.Bukkit.class)) {
+            org.bukkit.inventory.Inventory mockInventory = mock(org.bukkit.inventory.Inventory.class);
+            bukkit.when(() -> org.bukkit.Bukkit.createInventory(any(), anyInt(), any(net.kyori.adventure.text.Component.class)))
+                    .thenReturn(mockInventory);
+            
+            cmd.onCommand(player, command, "sstats", new String[]{"gui"});
+
+            // Verify openGui was called with the player and a MainMenuGui instance
+            verify(guiManager).openGui(eq(player), any(MainMenuGui.class));
+        }
     }
     
     @Test
