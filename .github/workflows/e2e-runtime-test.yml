@@ -232,15 +232,30 @@ jobs:
           envs: RUN_ID
           script: |
             MANAGER="/home/main/Minecraft-Servers/SMPStats-Dev/manage-test-server.sh"
+            CONTAINER="smpstats-test-${RUN_ID}"
             
-            echo "Stopping container..."
+            echo "=== Stopping and removing container ==="
             ${MANAGER} stop "${RUN_ID}"
             
-            # Cleanup staging files
+            # Double-check container is removed (--rm flag should handle this)
+            if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
+              echo "Container still exists, force removing..."
+              docker rm -f "${CONTAINER}" 2>/dev/null || true
+            fi
+            
+            # Verify container is gone
+            if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
+              echo "⚠️ WARNING: Container may not be fully removed"
+            else
+              echo "✅ Container successfully removed"
+            fi
+            
+            # Cleanup all staging and temp files
             rm -rf "/home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging/${RUN_ID}"
             rm -f "/tmp/container-${RUN_ID}.json" "/tmp/conn-${RUN_ID}.json"
+            rm -rf "/tmp/e2e-logs-${RUN_ID}"
             
-            echo "Cleanup complete"
+            echo "✅ Cleanup complete"
 
       - name: Test summary
         if: always()
