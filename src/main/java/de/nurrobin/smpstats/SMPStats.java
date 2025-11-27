@@ -407,10 +407,14 @@ public class SMPStats extends JavaPlugin {
     }
 
     private void registerCommands() {
-        Objects.requireNonNull(getCommand("stats")).setExecutor(new StatsCommand(this, statsService));
+        StatsCommand statsCommand = new StatsCommand(this, statsService);
+        Objects.requireNonNull(getCommand("stats")).setExecutor(statsCommand);
+        Objects.requireNonNull(getCommand("stats")).setTabCompleter(statsCommand);
         SStatsCommand adminCommand = new SStatsCommand(this, statsService, guiManager, serverHealthService);
         Objects.requireNonNull(getCommand("sstats")).setExecutor(adminCommand);
         Objects.requireNonNull(getCommand("sstats")).setTabCompleter(adminCommand);
+        Objects.requireNonNull(getCommand("smpstats")).setExecutor(adminCommand);
+        Objects.requireNonNull(getCommand("smpstats")).setTabCompleter(adminCommand);
     }
 
     private void startAutosave() {

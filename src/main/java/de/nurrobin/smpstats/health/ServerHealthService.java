@@ -166,7 +166,7 @@ public class ServerHealthService {
             if (!cs.ownerCounts.isEmpty()) {
                 UUID topUuid = Collections.max(cs.ownerCounts.entrySet(), Map.Entry.comparingByValue()).getKey();
                 topOwner = Bukkit.getOfflinePlayer(topUuid).getName();
-                if (topOwner == null) topOwner = "Unknown (" + topUuid.toString().substring(0, 8) + ")";
+                if (topOwner == null) topOwner = "Unknown (" + topUuid.toString() + ")";
             }
             
             hotChunks.add(new HealthSnapshot.HotChunk(cs.worldName, cs.chunkX, cs.chunkZ, cs.entities, cs.tileEntities, topOwner));
