@@ -7,7 +7,7 @@ on:
         description: 'Minecraft server version'
         required: false
         type: string
-        default: '1.21.1'
+        default: '1.21.10'
       run_api_tests:
         description: 'Run HTTP API tests'
         required: false
@@ -50,7 +50,7 @@ permissions:
 
 env:
   JAVA_VERSION: '21'
-  MC_VERSION: ${{ inputs.mc_version || '1.21.1' }}
+  MC_VERSION: ${{ inputs.mc_version || '1.21.10' }}
 
 jobs:
   changes:

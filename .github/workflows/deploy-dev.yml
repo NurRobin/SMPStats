@@ -22,7 +22,7 @@ on:
         description: 'Minecraft version'
         required: false
         type: string
-        default: '1.21.1'
+        default: '1.21.10'
 
 concurrency:
   group: deploy-dev-${{ github.ref }}
@@ -112,7 +112,7 @@ jobs:
           RUN_ID: ${{ steps.info.outputs.run_id }}
           SHORT_SHA: ${{ steps.info.outputs.short_sha }}
           VERSION: ${{ needs.build.outputs.version }}
-          MC_VERSION: ${{ inputs.mc_version || '1.21.1' }}
+          MC_VERSION: ${{ inputs.mc_version || '1.21.10' }}
         with:
           host: ${{ secrets.DEV_SERVER_HOST }}
           username: ${{ secrets.DEV_SERVER_USER }}
@@ -153,7 +153,7 @@ jobs:
         id: start
         env:
           RUN_ID: ${{ steps.info.outputs.run_id }}
-          MC_VERSION: ${{ inputs.mc_version || '1.21.1' }}
+          MC_VERSION: ${{ inputs.mc_version || '1.21.10' }}
         with:
           host: ${{ secrets.DEV_SERVER_HOST }}
           username: ${{ secrets.DEV_SERVER_USER }}
@@ -205,7 +205,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Container Info" >> $GITHUB_STEP_SUMMARY
           echo "- **Container:** smpstats-test-${{ steps.info.outputs.run_id }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **MC Version:** ${{ inputs.mc_version || '1.21.1' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **MC Version:** ${{ inputs.mc_version || '1.21.10' }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Actions Performed" >> $GITHUB_STEP_SUMMARY
           echo "1. ✅ Built plugin JAR" >> $GITHUB_STEP_SUMMARY

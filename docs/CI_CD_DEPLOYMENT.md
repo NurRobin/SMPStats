@@ -109,7 +109,7 @@ When triggering manually, you can configure:
 
 | Input | Description | Default |
 |-------|-------------|---------|
-| `mc_version` | Minecraft server version | `1.21.1` |
+| `mc_version` | Minecraft server version | `1.21.10` |
 | `run_api_tests` | Run HTTP API tests | `true` |
 | `run_rcon_tests` | Run RCON command tests | `true` |
 
