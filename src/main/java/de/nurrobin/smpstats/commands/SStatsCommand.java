@@ -3,6 +3,9 @@ package de.nurrobin.smpstats.commands;
 import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.StatsRecord;
 import de.nurrobin.smpstats.StatsService;
+import de.nurrobin.smpstats.gui.GuiManager;
+import de.nurrobin.smpstats.gui.MainMenuGui;
+import de.nurrobin.smpstats.health.ServerHealthService;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -19,10 +22,14 @@ import java.util.UUID;
 public class SStatsCommand implements CommandExecutor, TabCompleter {
     private final SMPStats plugin;
     private final StatsService statsService;
+    private final GuiManager guiManager;
+    private final ServerHealthService healthService;
 
-    public SStatsCommand(SMPStats plugin, StatsService statsService) {
+    public SStatsCommand(SMPStats plugin, StatsService statsService, GuiManager guiManager, ServerHealthService healthService) {
         this.plugin = plugin;
         this.statsService = statsService;
+        this.guiManager = guiManager;
+        this.healthService = healthService;
     }
 
     @Override
@@ -32,12 +39,25 @@ public class SStatsCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(ChatColor.RED + "Konsole: /sstats user <player>");
                 return true;
             }
+            // Show text stats by default when no arguments are provided
             StatsFormatter.render(sender, plugin, statsService, player.getUniqueId(), player.getName());
             return true;
         }
 
         String sub = args[0].toLowerCase();
         switch (sub) {
+            case "gui" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(ChatColor.RED + "Only players can use the GUI.");
+                    return true;
+                }
+                if (!player.hasPermission("smpstats.gui")) {
+                    player.sendMessage(ChatColor.RED + "Dir fehlt die Berechtigung smpstats.gui");
+                    return true;
+                }
+                guiManager.openGui(player, new MainMenuGui(plugin, guiManager, statsService, healthService));
+                return true;
+            }
             case "info" -> {
                 showInfo(sender);
                 return true;
@@ -167,6 +187,7 @@ public class SStatsCommand implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
             List<String> base = new ArrayList<>();
+            base.add("gui");
             base.add("info");
             base.add("reload");
             base.add("user");

@@ -1,10 +1,33 @@
-config_version: 4
+config_version: 6
 
 api:
   enabled: true            # Enable HTTP API
   bind_address: "127.0.0.1"  # Bind address, usually 127.0.0.1 for local access (discord bots, etc), if you need external access use 0.0.0.0 or your server IP
   port: 8765               # API port
   api_key: "YouShouldChangeThisKey" # Set a secret key
+
+dashboard:
+  enabled: true            # Enable web dashboard
+  bind_address: "0.0.0.0"  # Bind address for dashboard (0.0.0.0 for all interfaces)
+  port: 8080               # Dashboard port (separate from API)
+  
+  # Public section - accessible without authentication
+  public:
+    enabled: true          # Allow public access to basic stats
+    show_online_players: true
+    show_leaderboards: true
+    show_recent_moments: true
+    show_server_stats: true
+    
+  # Admin section - requires authentication
+  admin:
+    enabled: true          # Enable admin panel
+    password: "ChangeThisAdminPassword"  # Admin password
+    session_timeout_minutes: 60
+    show_health_metrics: true
+    show_heatmaps: true
+    show_social_data: true
+    show_death_replays: true
 
 tracking:
   movement: true      # Distance tracking (dimensions)
@@ -103,6 +126,44 @@ health:
     entity: 0.005
     hopper: 0.2
     redstone: 0.1
+  # Thresholds for chart color coding (green/yellow/orange/red)
+  # For TPS: higher is better. For others: lower is better.
+  thresholds:
+    tps:
+      good: 19.0        # Green: >= 19 TPS
+      acceptable: 18.0  # Light green: >= 18 TPS
+      warning: 15.0     # Yellow/Orange: >= 15 TPS
+      critical: 10.0    # Red: < 10 TPS
+    memory_percent:
+      good: 50          # Green: <= 50%
+      acceptable: 70    # Light green: <= 70%
+      warning: 85       # Yellow/Orange: <= 85%
+      critical: 95      # Red: > 95%
+    chunks:
+      good: 500         # Green: <= 500 chunks
+      acceptable: 1000
+      warning: 2000
+      critical: 4000    # Red: > 4000 chunks
+    entities:
+      good: 500         # Green: <= 500 entities
+      acceptable: 1500
+      warning: 3000
+      critical: 5000    # Red: > 5000 entities
+    hoppers:
+      good: 200         # Green: <= 200 hoppers
+      acceptable: 500
+      warning: 1000
+      critical: 2000    # Red: > 2000 hoppers
+    redstone:
+      good: 500         # Green: <= 500 redstone
+      acceptable: 1000
+      warning: 2000
+      critical: 5000    # Red: > 5000 redstone
+    cost_index:
+      good: 25          # Green: <= 25
+      acceptable: 50
+      warning: 75
+      critical: 90      # Red: > 90
 
 story:
   enabled: true

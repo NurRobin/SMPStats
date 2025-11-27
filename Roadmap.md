@@ -43,16 +43,16 @@
 
 | Feature | Priority | Size | Status | Description |
 |---------|----------|------|--------|-------------|
-| Exponential Decay Model | High | M | Todo | `weight = exp(-Δt / τ)` for time-weighted aggregation |
-| Configurable Grid Sizes | High | M | Todo | Chunk (16×16), 8×8, 32×32, 64×64 cell options |
-| Multi-Layer Heatmaps | High | L | Todo | Movement, mining, deaths, damage as separate queryable layers |
-| Dynamic Query Engine | High | L | Todo | On-demand aggregation at query time |
-| Movement Heatmaps | Medium | M | Todo | Player presence and travel patterns |
-| Damage Heatmaps | Medium | M | Todo | PvP hotspots, mob damage zones |
-| Resource-Specific Heatmaps | Medium | M | Todo | Diamond, iron, gold mining patterns |
+| Exponential Decay Model | High | M | ✅ Done | `weight = exp(-Δt / τ)` for time-weighted aggregation |
+| Configurable Grid Sizes | High | M | ✅ Done | Chunk (16×16), 8×8, 32×32, 64×64 cell options |
+| Multi-Layer Heatmaps | High | L | ✅ Done | Movement, mining, deaths, damage as separate queryable layers |
+| Dynamic Query Engine | High | L | ✅ Done | On-demand aggregation at query time |
+| Movement Heatmaps | Medium | M | ✅ Done | Player presence and travel patterns |
+| Damage Heatmaps | Medium | M | ✅ Done | PvP hotspots, mob damage zones |
+| Resource-Specific Heatmaps | Medium | M | ✅ Done | Diamond, iron, gold mining patterns |
 | Biome-Filtered Views | Low | S | Todo | Filter any heatmap by biome type |
 | Time-Range Filters | Medium | M | Todo | `from=3d`, `from=1w`, arbitrary ranges |
-| In-Game GUI (Chest Menu) | High | L | Todo | Rich chest-menu style interface with visual insights |
+| In-Game GUI (Chest Menu) | High | L | ✅ Done | Rich chest-menu style interface with visual insights |
 | Live Activity Dashboard | Medium | M | Todo | "Who's farming what right now" real-time view |
 | Player Comparison Views | Medium | M | Todo | Side-by-side stat comparisons in GUI |
 
@@ -184,20 +184,20 @@ Compression:
 
 ---
 
-### 🎨 Milestone 6 — Visualization Platform (Optional External Project)
+### 🎨 Milestone 6 — Visualization Platform
 
 > Web dashboard with world heatmaps, live monitors, and social graph visualization.
 
 | Feature | Priority | Size | Status | Description |
 |---------|----------|------|--------|-------------|
-| Web Dashboard | Medium | XL | Todo | Standalone web application |
+| Web Dashboard | Medium | XL | ✅ Done | Built-in web dashboard with public/admin access |
 | World Heatmap Tiles | Medium | XL | Todo | Leaflet/MapLibre integration |
 | Dynmap Integration | Medium | L | Todo | Overlay on existing Dynmap |
-| Live Trend Monitors | Medium | L | Todo | Real-time activity graphs |
-| Player Timeline View | Medium | M | Todo | Individual player activity history |
+| Live Trend Monitors | Medium | L | Partial | Auto-refresh dashboard with activity counts |
+| Player Timeline View | Medium | M | ✅ Done | Admin timeline endpoint with player history |
 | Social Graph Visualization | Medium | L | Todo | Interactive network diagram |
 | Resource Dashboard | Low | M | Todo | Mining trends, farming patterns |
-| Leaderboard Pages | Low | S | Todo | Web-based ranking displays |
+| Leaderboard Pages | Low | S | ✅ Done | Public leaderboard displays in dashboard |
 | Custom Report Builder | Low | XL | Todo | Drag-and-drop analytics |
 
 **Tech Stack Suggestions:**
