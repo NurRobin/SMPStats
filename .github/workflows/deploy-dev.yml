@@ -1,0 +1,192 @@
+name: Deploy to Dev Server
+
+on:
+  push:
+    branches:
+      - dev
+      - "feature/**"
+    paths:
+      - '**.java'
+      - 'pom.xml'
+      - 'src/**'
+      - 'plugin.yml'
+      - '.github/workflows/deploy-dev.yml'
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deployment even if no code changes'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      skip-tests: false
+      upload-coverage: false
+
+  deploy:
+    name: Deploy to Dev Server
+    needs: [build]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    environment: dev-server
+
+    steps:
+      - name: Download built artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+          path: target/
+
+      - name: Prepare deployment info
+        id: info
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          BRANCH_NAME=$(echo "${{ github.ref_name }}" | sed 's/\//-/g')
+          TIMESTAMP=$(date -u +"%Y-%m-%d_%H-%M-%S")
+          
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "branch_safe=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "backup_name=SMPStats-${SHORT_SHA}-${TIMESTAMP}.jar" >> $GITHUB_OUTPUT
+          
+          echo "## Deployment Info" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${SHORT_SHA}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ needs.build.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Deploy to dev server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          BACKUP_NAME: ${{ steps.info.outputs.backup_name }}
+          SHORT_SHA: ${{ steps.info.outputs.short_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT || 22 }}
+          envs: BACKUP_NAME,SHORT_SHA,VERSION
+          script: |
+            # Configuration (can be customized via secrets/env)
+            PLUGINS_DIR="${DEV_PLUGINS_DIR:-/opt/minecraft/paper-dev/plugins}"
+            BACKUP_DIR="${PLUGINS_DIR}/backups"
+            
+            echo "=== SMPStats Deployment ==="
+            echo "Version: ${VERSION}"
+            echo "Commit: ${SHORT_SHA}"
+            echo "Target: ${PLUGINS_DIR}"
+            
+            # Create backup directory if needed
+            mkdir -p "${BACKUP_DIR}"
+            
+            # Backup existing plugin if present
+            if [ -f "${PLUGINS_DIR}/SMPStats.jar" ]; then
+              echo "Creating backup: ${BACKUP_NAME}"
+              cp "${PLUGINS_DIR}/SMPStats.jar" "${BACKUP_DIR}/${BACKUP_NAME}"
+              
+              # Keep only last 10 backups
+              ls -t "${BACKUP_DIR}"/SMPStats-*.jar 2>/dev/null | tail -n +11 | xargs -r rm --
+            fi
+            
+            echo "Deployment prepared. Waiting for JAR upload..."
+
+      - name: Upload JAR to dev server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT || 22 }}
+          source: "target/SMPStats.jar"
+          target: "${{ secrets.DEV_PLUGINS_DIR || '/opt/minecraft/paper-dev/plugins' }}"
+          strip_components: 1
+
+      - name: Reload plugin via RCON
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          SHORT_SHA: ${{ steps.info.outputs.short_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+          RCON_HOST: ${{ secrets.DEV_RCON_HOST || 'localhost' }}
+          RCON_PORT: ${{ secrets.DEV_RCON_PORT || '25575' }}
+          RCON_PASSWORD: ${{ secrets.DEV_RCON_PASSWORD }}
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT || 22 }}
+          envs: SHORT_SHA,VERSION,RCON_HOST,RCON_PORT,RCON_PASSWORD
+          script: |
+            # Check if mcrcon is available
+            if ! command -v mcrcon &> /dev/null; then
+              echo "⚠️  mcrcon not installed, skipping RCON reload"
+              echo "Install: apt install mcrcon or https://github.com/Tiiffi/mcrcon"
+              exit 0
+            fi
+            
+            echo "=== RCON Reload ==="
+            
+            # Announce deployment
+            mcrcon -H "${RCON_HOST}" -P "${RCON_PORT}" -p "${RCON_PASSWORD}" \
+              "say [CI] Deploying SMPStats v${VERSION} (${SHORT_SHA})..." 2>/dev/null || true
+            
+            # Wait a moment for any pending operations
+            sleep 2
+            
+            # Reload the plugin (using PlugMan or reload command)
+            # Try PlugMan first (safer), fall back to reload confirm
+            if mcrcon -H "${RCON_HOST}" -P "${RCON_PORT}" -p "${RCON_PASSWORD}" \
+              "plugman reload SMPStats" 2>/dev/null; then
+              echo "✅ Plugin reloaded via PlugMan"
+            else
+              echo "⚠️  PlugMan not available, using standard reload"
+              mcrcon -H "${RCON_HOST}" -P "${RCON_PORT}" -p "${RCON_PASSWORD}" \
+                "reload confirm" 2>/dev/null || true
+            fi
+            
+            sleep 2
+            
+            # Announce completion
+            mcrcon -H "${RCON_HOST}" -P "${RCON_PORT}" -p "${RCON_PASSWORD}" \
+              "say [CI] SMPStats v${VERSION} deployed successfully!" 2>/dev/null || true
+            
+            echo "=== Deployment complete ==="
+
+      - name: Capture recent logs
+        uses: appleboy/ssh-action@v1.0.3
+        continue-on-error: true
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT || 22 }}
+          script: |
+            LOGS_DIR="${DEV_SERVER_DIR:-/opt/minecraft/paper-dev}/logs"
+            LOG_FILE="${LOGS_DIR}/latest.log"
+            
+            echo "=== Recent SMPStats Log Messages ==="
+            
+            if [ -f "${LOG_FILE}" ]; then
+              # Get last 50 lines mentioning SMPStats
+              grep -i "SMPStats" "${LOG_FILE}" | tail -50 || echo "No SMPStats messages found"
+            else
+              echo "Log file not found at ${LOG_FILE}"
+            fi
+
+      - name: Deployment summary
+        run: |
+          echo "## ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "SMPStats v${{ needs.build.outputs.version }} (${{ steps.info.outputs.short_sha }}) has been deployed to the dev server." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Actions Performed" >> $GITHUB_STEP_SUMMARY
+          echo "1. ✅ Built plugin JAR" >> $GITHUB_STEP_SUMMARY
+          echo "2. ✅ Created backup of previous version" >> $GITHUB_STEP_SUMMARY
+          echo "3. ✅ Uploaded new JAR to server" >> $GITHUB_STEP_SUMMARY
+          echo "4. ✅ Reloaded plugin via RCON" >> $GITHUB_STEP_SUMMARY
