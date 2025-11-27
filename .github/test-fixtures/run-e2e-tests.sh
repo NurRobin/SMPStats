@@ -154,10 +154,12 @@ run_api_tests() {
     status=$(echo "$result" | cut -d'|' -f1)
     body=$(echo "$result" | cut -d'|' -f2-)
     if [ "$status" = "200" ]; then
-        if echo "$body" | jq -e '.count' &>/dev/null; then
-            log_pass "GET /online returns player count"
+        # /online returns an array of online players
+        if echo "$body" | jq -e 'type == "array"' &>/dev/null; then
+            player_count=$(echo "$body" | jq 'length')
+            log_pass "GET /online returns player array (count: ${player_count})"
         else
-            log_fail "GET /online missing 'count' field"
+            log_fail "GET /online should return array"
         fi
     else
         log_fail "GET /online failed with status: $status"
@@ -505,7 +507,8 @@ run_integration_tests() {
         rcon_count=$(echo "$rcon_list" | grep -oP '\d+(?= of a max)' || echo "0")
         
         api_online=$(curl -s -H "X-API-Key: ${API_KEY}" "${API_URL}/online" 2>&1)
-        api_count=$(echo "$api_online" | jq -r '.count // 0' 2>/dev/null || echo "0")
+        # /online returns array of players, count is array length
+        api_count=$(echo "$api_online" | jq 'length' 2>/dev/null || echo "0")
         
         if [ "$rcon_count" = "$api_count" ]; then
             log_pass "Player count consistent: RCON=$rcon_count, API=$api_count"
