@@ -176,6 +176,7 @@ jobs:
           key: ${{ secrets.DEV_SERVER_SSH_KEY }}
           port: ${{ secrets.DEV_SERVER_SSH_PORT }}
           envs: RUN_ID,RUN_RCON,RUN_API
+          command_timeout: 5m
           script: |
             # Load connection info with debug output
             CONN_FILE="/tmp/conn-${RUN_ID}.json"
