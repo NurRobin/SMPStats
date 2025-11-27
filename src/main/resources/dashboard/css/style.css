@@ -661,3 +661,56 @@ body {
         font-size: 1.25rem;
     }
 }
+
+/* Biomes List */
+.biomes-row {
+    flex-wrap: wrap;
+}
+
+.biomes-count-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.biomes-toggle {
+    background: var(--accent);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.biomes-toggle:hover {
+    background: var(--accent-light);
+    color: var(--text-primary);
+}
+
+.biomes-list {
+    width: 100%;
+    margin-top: 0.5rem;
+    padding: 0.75rem;
+    background: var(--bg-dark);
+    border-radius: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.biomes-list.hidden {
+    display: none;
+}
+
+.biome-tag {
+    background: var(--accent);
+    color: var(--text-primary);
+    padding: 0.25rem 0.6rem;
+    border-radius: 0.25rem;
+    font-size: 0.8rem;
+    border: 1px solid var(--border);
+}

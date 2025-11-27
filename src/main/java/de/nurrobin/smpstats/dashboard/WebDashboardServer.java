@@ -555,6 +555,11 @@ public class WebDashboardServer {
             stats.put("totalDistanceKm", totalDistance / 1000.0);
             stats.put("uniqueBiomesDiscovered", allBiomes.size());
             
+            // Sort biomes alphabetically for display
+            List<String> sortedBiomes = new ArrayList<>(allBiomes);
+            Collections.sort(sortedBiomes);
+            stats.put("biomesList", sortedBiomes);
+            
             sendJson(exchange, 200, stats);
         }
     }

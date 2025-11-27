@@ -215,6 +215,11 @@ class SMPStatsDashboard {
                 this.hideLoginModal();
             }
         });
+        
+        // Biomes list toggle
+        document.getElementById('biomes-toggle')?.addEventListener('click', () => {
+            this.toggleBiomesList();
+        });
     }
     
     showLoginModal() {
@@ -288,9 +293,45 @@ class SMPStatsDashboard {
             document.getElementById('blocks-placed').textContent = this.formatNumber(data.totalBlocksPlaced);
             document.getElementById('distance-traveled').textContent = `${this.formatNumber(Math.round(data.totalDistanceKm))} km`;
             document.getElementById('biomes-discovered').textContent = this.formatNumber(data.uniqueBiomesDiscovered);
+            
+            // Update biomes list
+            this.updateBiomesList(data.biomesList || []);
         } catch (error) {
             console.error('Failed to load server stats:', error);
         }
+    }
+    
+    updateBiomesList(biomes) {
+        const listEl = document.getElementById('biomes-list');
+        if (!listEl) return;
+        
+        if (biomes.length === 0) {
+            listEl.innerHTML = '<p class="placeholder">No biomes discovered yet</p>';
+        } else {
+            listEl.innerHTML = biomes
+                .map(biome => `<span class="biome-tag">${this.formatBiomeName(biome)}</span>`)
+                .join('');
+        }
+    }
+    
+    toggleBiomesList() {
+        const listEl = document.getElementById('biomes-list');
+        const toggleBtn = document.getElementById('biomes-toggle');
+        if (!listEl || !toggleBtn) return;
+        
+        const isHidden = listEl.classList.contains('hidden');
+        listEl.classList.toggle('hidden');
+        toggleBtn.textContent = isHidden ? '▲' : '▼';
+        toggleBtn.title = isHidden ? 'Hide biomes list' : 'Show biomes list';
+    }
+    
+    formatBiomeName(biome) {
+        // Convert minecraft:plains -> Plains, minecraft:dark_forest -> Dark Forest
+        let name = biome.replace(/^minecraft:/, '');
+        return name
+            .split('_')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
     }
     
     async loadLeaderboard() {
