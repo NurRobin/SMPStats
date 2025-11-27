@@ -22,11 +22,12 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Web dashboard server providing a user-friendly interface for SMPStats data.
@@ -42,12 +43,14 @@ public class WebDashboardServer {
     private final Gson gson;
     
     private HttpServer server;
+    private ScheduledExecutorService sessionCleanupExecutor;
     
     // Session management for admin panel
     private final Map<String, AdminSession> sessions = new ConcurrentHashMap<>();
     private final SecureRandom secureRandom = new SecureRandom();
     
     private static final String SESSION_COOKIE_NAME = "smpstats_session";
+    private static final long SESSION_CLEANUP_INTERVAL_MINUTES = 10;
     
     public WebDashboardServer(SMPStats plugin, StatsService statsService, Settings settings,
                               MomentService momentService, HeatmapService heatmapService,
@@ -102,14 +105,30 @@ public class WebDashboardServer {
         server.setExecutor(Executors.newCachedThreadPool());
         server.start();
         
+        // Start session cleanup task
+        sessionCleanupExecutor = Executors.newSingleThreadScheduledExecutor();
+        sessionCleanupExecutor.scheduleAtFixedRate(
+            this::cleanupExpiredSessions,
+            SESSION_CLEANUP_INTERVAL_MINUTES,
+            SESSION_CLEANUP_INTERVAL_MINUTES,
+            TimeUnit.MINUTES
+        );
+        
         plugin.getLogger().info("Web Dashboard running on " + dashSettings.bindAddress() + ":" + dashSettings.port());
     }
     
     public void stop() {
+        if (sessionCleanupExecutor != null) {
+            sessionCleanupExecutor.shutdownNow();
+        }
         if (server != null) {
             server.stop(0);
             sessions.clear();
         }
+    }
+    
+    private void cleanupExpiredSessions() {
+        sessions.entrySet().removeIf(entry -> entry.getValue().isExpired());
     }
     
     // ============== Helper Methods ==============
@@ -202,12 +221,12 @@ public class WebDashboardServer {
     }
     
     private void setSessionCookie(HttpExchange exchange, String sessionId, int maxAgeSeconds) {
-        String cookie = SESSION_COOKIE_NAME + "=" + sessionId + "; Path=/; HttpOnly; SameSite=Strict; Max-Age=" + maxAgeSeconds;
+        String cookie = SESSION_COOKIE_NAME + "=" + sessionId + "; Path=/; HttpOnly; SameSite=Strict; Secure; Max-Age=" + maxAgeSeconds;
         exchange.getResponseHeaders().add("Set-Cookie", cookie);
     }
     
     private void clearSessionCookie(HttpExchange exchange) {
-        String cookie = SESSION_COOKIE_NAME + "=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0";
+        String cookie = SESSION_COOKIE_NAME + "=; Path=/; HttpOnly; SameSite=Strict; Secure; Max-Age=0";
         exchange.getResponseHeaders().add("Set-Cookie", cookie);
     }
     
@@ -217,6 +236,18 @@ public class WebDashboardServer {
         boolean isExpired() {
             return System.currentTimeMillis() > expiresAt;
         }
+    }
+    
+    /**
+     * Constant-time password comparison to prevent timing attacks.
+     */
+    private boolean constantTimeEquals(String a, String b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        byte[] aBytes = a.getBytes(StandardCharsets.UTF_8);
+        byte[] bBytes = b.getBytes(StandardCharsets.UTF_8);
+        return MessageDigest.isEqual(aBytes, bBytes);
     }
     
     // ============== Handlers ==============
@@ -298,8 +329,15 @@ public class WebDashboardServer {
                 return;
             }
             
-            int limit = queryParam(exchange, "limit").map(Integer::parseInt).orElse(10);
-            int days = queryParam(exchange, "days").map(Integer::parseInt).orElse(7);
+            int limit;
+            int days;
+            try {
+                limit = queryParam(exchange, "limit").map(Integer::parseInt).orElse(10);
+                days = queryParam(exchange, "days").map(Integer::parseInt).orElse(7);
+            } catch (NumberFormatException e) {
+                sendJson(exchange, 400, Map.of("error", "Invalid parameter format"));
+                return;
+            }
             String sort = queryParam(exchange, "sort").orElse("playtime");
             
             limit = Math.min(50, Math.max(1, limit));
@@ -338,7 +376,13 @@ public class WebDashboardServer {
                 return;
             }
             
-            int limit = queryParam(exchange, "limit").map(Integer::parseInt).orElse(20);
+            int limit;
+            try {
+                limit = queryParam(exchange, "limit").map(Integer::parseInt).orElse(20);
+            } catch (NumberFormatException e) {
+                sendJson(exchange, 400, Map.of("error", "Invalid parameter format"));
+                return;
+            }
             limit = Math.min(100, Math.max(1, limit));
             
             List<?> moments = momentService.getRecentMoments(limit);
@@ -414,7 +458,7 @@ public class WebDashboardServer {
             Map<?, ?> data = gson.fromJson(body, Map.class);
             
             String password = data != null ? (String) data.get("password") : null;
-            if (password == null || !password.equals(settings.getDashboardSettings().adminSettings().password())) {
+            if (password == null || password.isEmpty() || !constantTimeEquals(password, settings.getDashboardSettings().adminSettings().password())) {
                 sendJson(exchange, 401, Map.of("error", "Invalid password"));
                 return;
             }
@@ -499,10 +543,19 @@ public class WebDashboardServer {
             
             String type = queryParam(exchange, "type").orElse("MINING");
             String world = queryParam(exchange, "world").orElse("world");
-            long since = queryParam(exchange, "since").map(Long::parseLong).orElse(System.currentTimeMillis() - 7L * 24 * 3600 * 1000);
-            long until = queryParam(exchange, "until").map(Long::parseLong).orElse(System.currentTimeMillis());
-            double decay = queryParam(exchange, "decay").map(Double::parseDouble).orElse(settings.getHeatmapDecayHalfLifeHours());
-            int gridSize = queryParam(exchange, "grid").map(Integer::parseInt).orElse(16);
+            long since;
+            long until;
+            double decay;
+            int gridSize;
+            try {
+                since = queryParam(exchange, "since").map(Long::parseLong).orElse(System.currentTimeMillis() - 7L * 24 * 3600 * 1000);
+                until = queryParam(exchange, "until").map(Long::parseLong).orElse(System.currentTimeMillis());
+                decay = queryParam(exchange, "decay").map(Double::parseDouble).orElse(settings.getHeatmapDecayHalfLifeHours());
+                gridSize = queryParam(exchange, "grid").map(Integer::parseInt).orElse(16);
+            } catch (NumberFormatException e) {
+                sendJson(exchange, 400, Map.of("error", "Invalid numeric parameter: " + e.getMessage()));
+                return;
+            }
             
             try {
                 var heatmap = heatmapService.generateHeatmap(type.toUpperCase(), world, since, until, decay, gridSize);
@@ -531,7 +584,13 @@ public class WebDashboardServer {
                 return;
             }
             
-            int limit = queryParam(exchange, "limit").map(Integer::parseInt).orElse(20);
+            int limit;
+            try {
+                limit = queryParam(exchange, "limit").map(Integer::parseInt).orElse(20);
+            } catch (NumberFormatException e) {
+                sendJson(exchange, 400, Map.of("error", "Invalid parameter format"));
+                return;
+            }
             limit = Math.min(100, Math.max(1, limit));
             
             try {
@@ -573,7 +632,13 @@ public class WebDashboardServer {
                 return;
             }
             
-            int limit = queryParam(exchange, "limit").map(Integer::parseInt).orElse(20);
+            int limit;
+            try {
+                limit = queryParam(exchange, "limit").map(Integer::parseInt).orElse(20);
+            } catch (NumberFormatException e) {
+                sendJson(exchange, 400, Map.of("error", "Invalid parameter format"));
+                return;
+            }
             limit = Math.min(100, Math.max(1, limit));
             
             try {
