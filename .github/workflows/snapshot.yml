@@ -31,14 +31,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Check for code changes
         id: filter
         uses: dorny/paths-filter@v3
         with:
-          # Compare against previous commit (HEAD~1), not base branch
-          base: HEAD~1
-          initial_fetch_depth: 2
+          # Compare against previous commit for push events
+          base: ${{ github.event.before }}
           filters: |
             relevant:
               - '**.java'

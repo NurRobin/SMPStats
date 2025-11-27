@@ -100,7 +100,7 @@ run_rcon_tests() {
         return
     fi
     
-    rcon() { timeout 10 mcrcon -H "$HOST" -P "$RCON_PORT" -p "$RCON_PASS" "$1" 2>&1 || echo "RCON_ERROR"; }
+    rcon() { timeout 5 mcrcon -H "$HOST" -P "$RCON_PORT" -p "$RCON_PASS" "$1" 2>&1 || echo "RCON_TIMEOUT_OR_ERROR"; }
     
     # Test: Server connectivity
     echo -e "  ${D}Testing server connectivity...${N}"
@@ -167,17 +167,19 @@ run_api_tests() {
     
     API="http://${HOST}:${API_PORT}"
     
-    # Helper: make API call, return "status|time|body"
+    # Helper: make API call with timeout, return "status|time|body"
     api() {
         local method="$1" path="$2" auth="${3:-true}"
         local resp
         if [ "$auth" = "true" ]; then
-            resp=$(curl -s -w "\n%{http_code}\n%{time_total}" -X "$method" \
+            resp=$(timeout 10 curl -s -w "\n%{http_code}\n%{time_total}" -X "$method" \
+                --connect-timeout 5 --max-time 8 \
                 -H "Content-Type: application/json" -H "X-API-Key: ${API_KEY}" \
-                "${API}${path}" 2>&1)
+                "${API}${path}" 2>&1) || resp=$'\n000\n0'
         else
-            resp=$(curl -s -w "\n%{http_code}\n%{time_total}" -X "$method" \
-                -H "Content-Type: application/json" "${API}${path}" 2>&1)
+            resp=$(timeout 10 curl -s -w "\n%{http_code}\n%{time_total}" -X "$method" \
+                --connect-timeout 5 --max-time 8 \
+                -H "Content-Type: application/json" "${API}${path}" 2>&1) || resp=$'\n000\n0'
         fi
         
         local body=$(echo "$resp" | head -n -2)
@@ -299,7 +301,8 @@ run_api_tests() {
     fi
     
     # Test: Method enforcement
-    r=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "X-API-Key: ${API_KEY}" "${API}/stats/all")
+    r=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 --max-time 4 \
+        -X POST -H "X-API-Key: ${API_KEY}" "${API}/stats/all" 2>&1 || echo "000")
     if [ "$r" = "405" ]; then
         log_result "API" "Method Enforcement" "passed" "" "POST /stats/all" "HTTP 405" "Rejects wrong method"
     else
@@ -316,15 +319,15 @@ run_dashboard_tests() {
     
     DASH="http://${HOST}:${DASH_PORT}"
     
-    # Check availability
-    check=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "$DASH/" 2>&1 || echo "000")
+    # Check availability with strict timeout
+    check=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 --max-time 4 "$DASH/" 2>&1 || echo "000")
     if [ "$check" = "000" ]; then
         log_result "Dashboard" "Dashboard Availability" "skipped" "" "GET /" "Not reachable" "Port ${DASH_PORT}"
         return
     fi
     
     # Test: Index page
-    r=$(curl -s -w "\n%{http_code}" "$DASH/" 2>&1)
+    r=$(timeout 8 curl -s -w "\n%{http_code}" --connect-timeout 3 --max-time 6 "$DASH/" 2>&1) || r=$'\n000'
     code=$(echo "$r" | tail -1)
     body=$(echo "$r" | head -n -1)
     if [ "$code" = "200" ] && echo "$body" | grep -qi "smpstats"; then
@@ -334,7 +337,7 @@ run_dashboard_tests() {
     fi
     
     # Test: CSS
-    code=$(curl -s -o /dev/null -w "%{http_code}" "$DASH/css/style.css")
+    code=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 --max-time 4 "$DASH/css/style.css" 2>&1 || echo "000")
     if [ "$code" = "200" ]; then
         log_result "Dashboard" "CSS Assets" "passed" "" "GET /css/style.css" "HTTP 200" ""
     else
@@ -342,7 +345,7 @@ run_dashboard_tests() {
     fi
     
     # Test: JS
-    code=$(curl -s -o /dev/null -w "%{http_code}" "$DASH/js/app.js")
+    code=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 --max-time 4 "$DASH/js/app.js" 2>&1 || echo "000")
     if [ "$code" = "200" ]; then
         log_result "Dashboard" "JavaScript Assets" "passed" "" "GET /js/app.js" "HTTP 200" ""
     else
@@ -350,7 +353,7 @@ run_dashboard_tests() {
     fi
     
     # Test: Public config
-    r=$(curl -s -w "\n%{http_code}" "$DASH/api/public/config" 2>&1)
+    r=$(timeout 8 curl -s -w "\n%{http_code}" --connect-timeout 3 --max-time 6 "$DASH/api/public/config" 2>&1) || r=$'\n000'
     code=$(echo "$r" | tail -1)
     body=$(echo "$r" | head -n -1)
     if [ "$code" = "200" ] && echo "$body" | jq -e '.publicEnabled' &>/dev/null; then
@@ -362,7 +365,7 @@ run_dashboard_tests() {
     
     # Test: Public endpoints (200 or 403 both valid)
     for ep in "online" "leaderboard" "moments" "stats"; do
-        code=$(curl -s -o /dev/null -w "%{http_code}" "$DASH/api/public/$ep")
+        code=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 --max-time 4 "$DASH/api/public/$ep" 2>&1 || echo "000")
         if [ "$code" = "200" ] || [ "$code" = "403" ]; then
             log_result "Dashboard" "Public /$ep" "passed" "" "GET /api/public/$ep" "HTTP $code" ""
         else
@@ -371,8 +374,9 @@ run_dashboard_tests() {
     done
     
     # Test: Admin auth rejection
-    code=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" \
-        -d '{"password":"wrong"}' "$DASH/api/admin/login")
+    code=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 --max-time 4 \
+        -X POST -H "Content-Type: application/json" \
+        -d '{"password":"wrong"}' "$DASH/api/admin/login" 2>&1 || echo "000")
     if [ "$code" = "401" ]; then
         log_result "Dashboard" "Admin Auth Security" "passed" "" "POST /api/admin/login" "HTTP 401" "Rejects bad password"
     else
@@ -380,7 +384,7 @@ run_dashboard_tests() {
     fi
     
     # Test: Admin endpoint protection
-    code=$(curl -s -o /dev/null -w "%{http_code}" "$DASH/api/admin/health")
+    code=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 --max-time 4 "$DASH/api/admin/health" 2>&1 || echo "000")
     if [ "$code" = "401" ]; then
         log_result "Dashboard" "Admin Endpoint Protection" "passed" "" "GET /api/admin/health" "HTTP 401" "Requires auth"
     else
@@ -396,7 +400,7 @@ run_db_tests() {
     section "💾 Database Validation Tests"
     
     API="http://${HOST}:${API_PORT}"
-    get() { curl -s -H "X-API-Key: ${API_KEY}" "${API}$1" 2>&1; }
+    get() { timeout 8 curl -s --connect-timeout 3 --max-time 6 -H "X-API-Key: ${API_KEY}" "${API}$1" 2>&1 || echo "{}"; }
     
     # Test: Stats structure
     echo -e "  ${D}Validating data structures...${N}"
@@ -467,10 +471,10 @@ run_integration_tests() {
     # Test: RCON/API consistency
     if command -v mcrcon &>/dev/null; then
         echo -e "  ${D}Checking cross-component consistency...${N}"
-        rcon_out=$(timeout 10 mcrcon -H "$HOST" -P "$RCON_PORT" -p "$RCON_PASS" "list" 2>&1 || echo "")
+        rcon_out=$(timeout 5 mcrcon -H "$HOST" -P "$RCON_PORT" -p "$RCON_PASS" "list" 2>&1 || echo "")
         rcon_count=$(echo "$rcon_out" | grep -oP '\d+(?= of)' || echo "0")
         
-        api_out=$(curl -s -H "X-API-Key: ${API_KEY}" "${API}/online" 2>&1)
+        api_out=$(timeout 8 curl -s --connect-timeout 3 --max-time 6 -H "X-API-Key: ${API_KEY}" "${API}/online" 2>&1 || echo "[]")
         api_count=$(echo "$api_out" | jq 'length' 2>/dev/null || echo "0")
         
         if [ "$rcon_count" = "$api_count" ]; then
@@ -496,7 +500,8 @@ run_integration_tests() {
     
     for ep in "${endpoints[@]}"; do
         start=$(date +%s%N)
-        code=$(curl -s -o /dev/null -w "%{http_code}" -m 5 -H "X-API-Key: ${API_KEY}" "${API}${ep}" 2>&1 || echo "000")
+        code=$(timeout 6 curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 --max-time 5 \
+            -H "X-API-Key: ${API_KEY}" "${API}${ep}" 2>&1 || echo "000")
         end=$(date +%s%N)
         
         ms=$(( (end - start) / 1000000 ))
@@ -529,9 +534,9 @@ run_integration_tests() {
     
     # Test: Dashboard-API sync
     DASH="http://${HOST}:${DASH_PORT}"
-    check=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 "$DASH/" 2>&1 || echo "000")
+    check=$(timeout 4 curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 --max-time 3 "$DASH/" 2>&1 || echo "000")
     if [ "$check" != "000" ]; then
-        cfg=$(curl -s "$DASH/api/public/config" 2>&1)
+        cfg=$(timeout 5 curl -s --connect-timeout 2 --max-time 4 "$DASH/api/public/config" 2>&1 || echo "{}")
         if echo "$cfg" | jq -e '.publicEnabled' &>/dev/null; then
             mode=$(echo "$cfg" | jq -r '.publicEnabled')
             log_result "Integration" "Dashboard-API Sync" "passed" "" "" "Config accessible" "publicEnabled=$mode"
