@@ -191,7 +191,6 @@ dashboard:
   enabled: true
   bind_address: "0.0.0.0"
   port: 8080
-  admin_key: "change-me-admin-key"
   public:
     enabled: true
     show_online_players: true
@@ -200,6 +199,8 @@ dashboard:
     show_server_stats: true
   admin:
     enabled: true
+    password: "ChangeThisAdminPassword"
+    session_timeout_minutes: 60
 ```
 
 | Key | Type | Default | Description |
@@ -207,17 +208,18 @@ dashboard:
 | `enabled` | boolean | `true` | Enable/disable the dashboard server |
 | `bind_address` | string | `"0.0.0.0"` | Network interface to bind to |
 | `port` | int | `8080` | Port number for the dashboard |
-| `admin_key` | string | `"change-me-admin-key"` | API key for admin endpoints |
 | `public.enabled` | boolean | `true` | Enable public (unauthenticated) access |
 | `public.show_online_players` | boolean | `true` | Show online players on public dashboard |
 | `public.show_leaderboards` | boolean | `true` | Show leaderboards on public dashboard |
 | `public.show_recent_moments` | boolean | `true` | Show recent moments on public dashboard |
 | `public.show_server_stats` | boolean | `true` | Show aggregated server stats |
-| `admin.enabled` | boolean | `true` | Enable admin endpoints (requires `admin_key`) |
+| `admin.enabled` | boolean | `true` | Enable admin endpoints |
+| `admin.password` | string | `"ChangeThisAdminPassword"` | Password for admin login |
+| `admin.session_timeout_minutes` | int | `60` | Admin session timeout in minutes |
 
 ## Dashboard Endpoints
 
-The dashboard server provides both public and admin-protected endpoints. Admin endpoints require the `X-API-Key` header matching `dashboard.admin_key`.
+The dashboard server provides both public and admin-protected endpoints. Admin endpoints require session-based authentication (login via `/api/admin/login` with password).
 
 ### Static Files
 
@@ -325,7 +327,18 @@ Returns aggregated server statistics.
 
 ### Admin API Endpoints
 
-These endpoints require the `X-API-Key` header matching `dashboard.admin_key`.
+These endpoints require session-based authentication:
+
+1. **Login:** Send a `POST` request to `/api/admin/login` with the password in the JSON body:
+   ```json
+   { "password": "<dashboard.admin.password>" }
+   ```
+   On success, the server responds with a session cookie (`Set-Cookie: smpstats_session=...; HttpOnly; SameSite=Strict; Secure`).
+
+2. **Authenticated requests:** Include the session cookie in the `Cookie` header for all subsequent admin API requests.
+   - Requests without a valid session cookie will receive `401 Unauthorized`.
+
+3. **Logout:** Send a request to `/api/admin/logout` to invalidate your session.
 
 #### GET `/api/admin/stats`
 Returns all player statistics (same data as `/stats/all` on the main API).
