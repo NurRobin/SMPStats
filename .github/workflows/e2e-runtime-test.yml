@@ -44,7 +44,41 @@ env:
   MC_VERSION: ${{ inputs.mc_version || '1.21.1' }}
 
 jobs:
+  # Early skip detection - runs in <10s and saves expensive Docker/SSH operations
+  changes:
+    name: Check for relevant changes
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    outputs:
+      should_run: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for code changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            relevant:
+              - '**.java'
+              - 'pom.xml'
+              - 'src/**'
+              - 'plugin.yml'
+              - '.github/workflows/e2e-runtime-test.yml'
+              - '.github/test-fixtures/**'
+
+      - name: Skip notification
+        if: steps.filter.outputs.relevant == 'false'
+        run: |
+          echo "## ⏭️ E2E Tests Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "No changes to code, build files, or test fixtures detected." >> $GITHUB_STEP_SUMMARY
+          echo "Skipping expensive Docker-based E2E tests." >> $GITHUB_STEP_SUMMARY
+
   build:
+    needs: [changes]
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.should_run == 'true' || needs.changes.result == 'skipped')
     uses: ./.github/workflows/build.yml
     with:
       skip-tests: true
@@ -52,7 +86,8 @@ jobs:
 
   e2e-test:
     name: E2E Tests on Paper ${{ inputs.mc_version || '1.21.1' }}
-    needs: [build]
+    needs: [changes, build]
+    if: always() && needs.build.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: dev-server

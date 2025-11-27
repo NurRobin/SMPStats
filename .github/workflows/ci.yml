@@ -22,7 +22,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Early skip detection
+  changes:
+    name: Check for relevant changes
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    outputs:
+      should_run: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for code changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            relevant:
+              - '**.java'
+              - 'pom.xml'
+              - 'src/**'
+              - '.github/workflows/ci.yml'
+
+      - name: Skip notification
+        if: steps.filter.outputs.relevant == 'false'
+        run: |
+          echo "## ⏭️ CI Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "No changes to code or build files detected." >> $GITHUB_STEP_SUMMARY
+
   build:
+    needs: [changes]
+    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.should_run == 'true' || needs.changes.result == 'skipped')
     uses: ./.github/workflows/build.yml
     with:
       upload-coverage: true
