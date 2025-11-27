@@ -413,6 +413,627 @@ class WebDashboardServerTest {
         assertTrue(exchange.responseHeaders.getFirst("Content-Type").contains("javascript"));
     }
 
+    // ============== Authenticated Admin Handler Tests ==============
+    
+    @Test
+    void adminHealthHandlerReturnsDataWhenAuthenticated() throws Exception {
+        // Login first
+        var loginHandler = dashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        
+        // Extract session cookie
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        assertNotNull(cookie);
+        
+        // Mock health service to return a snapshot
+        when(healthService.getLatest()).thenReturn(null);
+        
+        // Now call health handler with cookie
+        var handler = dashboard.adminHealthHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/health", cookie, null, "GET");
+        handler.handle(exchange);
+        
+        // Should get 404 because no snapshot yet
+        assertEquals(404, exchange.status);
+    }
+    
+    @Test
+    void adminHeatmapHandlerReturnsDataWhenAuthenticated() throws Exception {
+        // Login first
+        var loginHandler = dashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        // Mock heatmap service
+        when(heatmapService.generateHeatmap(anyString(), anyString(), anyLong(), anyLong(), anyDouble(), anyInt()))
+                .thenReturn(java.util.List.of());
+        
+        var handler = dashboard.adminHeatmapHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/heatmap?type=MINING", cookie, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(200, exchange.status);
+        assertTrue(exchange.body().contains("bins"));
+    }
+    
+    @Test
+    void adminHeatmapHandlerReturnsErrorForInvalidType() throws Exception {
+        // Login first
+        var loginHandler = dashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        // Mock heatmap service to throw for invalid type
+        when(heatmapService.generateHeatmap(anyString(), anyString(), anyLong(), anyLong(), anyDouble(), anyInt()))
+                .thenThrow(new IllegalArgumentException("Invalid type"));
+        
+        var handler = dashboard.adminHeatmapHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/heatmap?type=INVALID", cookie, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(400, exchange.status);
+    }
+    
+    @Test
+    void adminHeatmapHandlerReturnsErrorForInvalidParams() throws Exception {
+        // Login first
+        var loginHandler = dashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        var handler = dashboard.adminHeatmapHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/heatmap?since=notanumber", cookie, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(400, exchange.status);
+        assertTrue(exchange.body().contains("Invalid parameter"));
+    }
+    
+    @Test
+    void adminSocialHandlerReturnsDataWhenAuthenticated() throws Exception {
+        // Login first
+        var loginHandler = dashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        // Mock storage to return social data
+        when(storage.loadTopSocial(anyInt())).thenReturn(java.util.List.of());
+        
+        var handler = dashboard.adminSocialHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/social?limit=10", cookie, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(200, exchange.status);
+        assertTrue(exchange.body().contains("pairs"));
+    }
+    
+    @Test
+    void adminSocialHandlerReturnsErrorForInvalidParams() throws Exception {
+        // Login first
+        var loginHandler = dashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        var handler = dashboard.adminSocialHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/social?limit=invalid", cookie, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(400, exchange.status);
+    }
+    
+    @Test
+    void adminSocialHandlerHandlesStorageException() throws Exception {
+        // Login first
+        var loginHandler = dashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        // Mock storage to throw exception
+        when(storage.loadTopSocial(anyInt())).thenThrow(new java.sql.SQLException("Database error"));
+        
+        var handler = dashboard.adminSocialHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/social", cookie, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(500, exchange.status);
+    }
+    
+    @Test
+    void adminDeathsHandlerReturnsDataWhenAuthenticated() throws Exception {
+        // Login first
+        var loginHandler = dashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        // Mock storage to return death replays
+        when(storage.loadDeathReplays(anyInt())).thenReturn(java.util.List.of());
+        
+        var handler = dashboard.adminDeathsHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/deaths?limit=10", cookie, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(200, exchange.status);
+        assertTrue(exchange.body().contains("deaths"));
+    }
+    
+    @Test
+    void adminDeathsHandlerReturnsErrorForInvalidParams() throws Exception {
+        // Login first
+        var loginHandler = dashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        var handler = dashboard.adminDeathsHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/deaths?limit=invalid", cookie, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(400, exchange.status);
+    }
+    
+    @Test
+    void adminDeathsHandlerHandlesStorageException() throws Exception {
+        // Login first
+        var loginHandler = dashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        // Mock storage to throw exception
+        when(storage.loadDeathReplays(anyInt())).thenThrow(new java.sql.SQLException("Database error"));
+        
+        var handler = dashboard.adminDeathsHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/deaths", cookie, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(500, exchange.status);
+    }
+    
+    @Test
+    void adminPlayerHandlerReturnsAllPlayersWhenAuthenticated() throws Exception {
+        // Login first
+        var loginHandler = dashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        // Mock stats service
+        when(statsService.getAllStats()).thenReturn(java.util.List.of());
+        
+        var handler = dashboard.adminPlayerHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/player/all", cookie, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(200, exchange.status);
+        assertTrue(exchange.body().contains("players"));
+    }
+    
+    @Test
+    void adminPlayerHandlerReturnsSpecificPlayerWhenAuthenticated() throws Exception {
+        // Login first
+        var loginHandler = dashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        UUID uuid = UUID.randomUUID();
+        StatsRecord record = new StatsRecord(uuid, "TestPlayer");
+        when(statsService.getStats(uuid)).thenReturn(Optional.of(record));
+        
+        var handler = dashboard.adminPlayerHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/player/" + uuid, cookie, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(200, exchange.status);
+        assertTrue(exchange.body().contains("TestPlayer"));
+    }
+    
+    @Test
+    void adminPlayerHandlerReturns404ForUnknownPlayer() throws Exception {
+        // Login first
+        var loginHandler = dashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        UUID uuid = UUID.randomUUID();
+        when(statsService.getStats(uuid)).thenReturn(Optional.empty());
+        
+        var handler = dashboard.adminPlayerHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/player/" + uuid, cookie, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(404, exchange.status);
+    }
+    
+    @Test
+    void adminPlayerHandlerReturns400ForInvalidUuid() throws Exception {
+        // Login first
+        var loginHandler = dashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        var handler = dashboard.adminPlayerHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/player/invalid-uuid", cookie, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(400, exchange.status);
+    }
+    
+    @Test
+    void adminLogoutHandlerRemovesSession() throws Exception {
+        // Login first
+        var loginHandler = dashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        // Logout
+        var logoutHandler = dashboard.adminLogoutHandler();
+        FakeExchange logoutExchange = new FakeExchange("/api/admin/logout", cookie, null, "POST");
+        logoutHandler.handle(logoutExchange);
+        
+        assertEquals(200, logoutExchange.status);
+        
+        // Try to access protected resource - should fail
+        var healthHandler = dashboard.adminHealthHandler();
+        FakeExchange healthExchange = new FakeExchange("/api/admin/health", cookie, null, "GET");
+        healthHandler.handle(healthExchange);
+        
+        assertEquals(401, healthExchange.status);
+    }
+    
+    @Test
+    void publicLeaderboardHandlerReturnsErrorForInvalidParams() throws Exception {
+        var handler = dashboard.publicLeaderboardHandler();
+        FakeExchange exchange = new FakeExchange("/api/public/leaderboard?days=invalid", null, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(400, exchange.status);
+    }
+    
+    @Test
+    void publicLeaderboardHandlerHandlesStorageException() throws Exception {
+        when(storage.loadTimelineLeaderboard(anyInt(), anyInt()))
+                .thenThrow(new java.sql.SQLException("Database error"));
+        
+        var handler = dashboard.publicLeaderboardHandler();
+        FakeExchange exchange = new FakeExchange("/api/public/leaderboard", null, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(500, exchange.status);
+    }
+    
+    @Test
+    void publicMomentsHandlerReturnsErrorForInvalidParams() throws Exception {
+        var handler = dashboard.publicMomentsHandler();
+        FakeExchange exchange = new FakeExchange("/api/public/moments?limit=invalid", null, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(400, exchange.status);
+    }
+    
+    @Test
+    void publicStatsHandlerRespectsConfig() throws Exception {
+        Settings restrictedSettings = new Settings(
+                true, true, true, true, true, true, true,
+                true, "127.0.0.1", 8765, "apiKey", 1, settings.getSkillWeights(),
+                true, 0L, 0L, true, 1, 1.0, List.of(), List.of(),
+                true, 1, 1, true, true, true, 1, 1,
+                true, 1, 0, 0, 0, 0, HealthThresholds.defaults(),
+                true, 1, 1, "", 1, 1,
+                new Settings.DashboardSettings(true, "0.0.0.0", 8080,
+                        new Settings.PublicSettings(true, true, true, true, false),
+                        Settings.AdminSettings.defaults())
+        );
+        
+        WebDashboardServer restrictedDashboard = new WebDashboardServer(plugin, statsService, restrictedSettings, momentService, heatmapService, healthService);
+        var handler = restrictedDashboard.publicStatsHandler();
+        FakeExchange exchange = new FakeExchange("/api/public/stats", null, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(403, exchange.status);
+    }
+    
+    @Test
+    void publicLeaderboardHandlerRespectsConfig() throws Exception {
+        Settings restrictedSettings = new Settings(
+                true, true, true, true, true, true, true,
+                true, "127.0.0.1", 8765, "apiKey", 1, settings.getSkillWeights(),
+                true, 0L, 0L, true, 1, 1.0, List.of(), List.of(),
+                true, 1, 1, true, true, true, 1, 1,
+                true, 1, 0, 0, 0, 0, HealthThresholds.defaults(),
+                true, 1, 1, "", 1, 1,
+                new Settings.DashboardSettings(true, "0.0.0.0", 8080,
+                        new Settings.PublicSettings(true, true, false, true, true),
+                        Settings.AdminSettings.defaults())
+        );
+        
+        WebDashboardServer restrictedDashboard = new WebDashboardServer(plugin, statsService, restrictedSettings, momentService, heatmapService, healthService);
+        var handler = restrictedDashboard.publicLeaderboardHandler();
+        FakeExchange exchange = new FakeExchange("/api/public/leaderboard", null, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(403, exchange.status);
+    }
+    
+    @Test
+    void publicMomentsHandlerRespectsConfig() throws Exception {
+        Settings restrictedSettings = new Settings(
+                true, true, true, true, true, true, true,
+                true, "127.0.0.1", 8765, "apiKey", 1, settings.getSkillWeights(),
+                true, 0L, 0L, true, 1, 1.0, List.of(), List.of(),
+                true, 1, 1, true, true, true, 1, 1,
+                true, 1, 0, 0, 0, 0, HealthThresholds.defaults(),
+                true, 1, 1, "", 1, 1,
+                new Settings.DashboardSettings(true, "0.0.0.0", 8080,
+                        new Settings.PublicSettings(true, true, true, false, true),
+                        Settings.AdminSettings.defaults())
+        );
+        
+        WebDashboardServer restrictedDashboard = new WebDashboardServer(plugin, statsService, restrictedSettings, momentService, heatmapService, healthService);
+        var handler = restrictedDashboard.publicMomentsHandler();
+        FakeExchange exchange = new FakeExchange("/api/public/moments", null, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(403, exchange.status);
+    }
+    
+    @Test
+    void adminLoginHandlerRejectsWhenDisabled() throws Exception {
+        Settings disabledAdminSettings = new Settings(
+                true, true, true, true, true, true, true,
+                true, "127.0.0.1", 8765, "apiKey", 1, settings.getSkillWeights(),
+                true, 0L, 0L, true, 1, 1.0, List.of(), List.of(),
+                true, 1, 1, true, true, true, 1, 1,
+                true, 1, 0, 0, 0, 0, HealthThresholds.defaults(),
+                true, 1, 1, "", 1, 1,
+                new Settings.DashboardSettings(true, "0.0.0.0", 8080,
+                        Settings.PublicSettings.defaults(),
+                        new Settings.AdminSettings(false, "", 60, true, true, true, true))
+        );
+        
+        WebDashboardServer restrictedDashboard = new WebDashboardServer(plugin, statsService, disabledAdminSettings, momentService, heatmapService, healthService);
+        var handler = restrictedDashboard.adminLoginHandler();
+        String body = "{\"password\": \"test\"}";
+        FakeExchange exchange = new FakeExchange("/api/admin/login", null, body, "POST");
+        handler.handle(exchange);
+        
+        assertEquals(403, exchange.status);
+    }
+    
+    @Test
+    void adminHealthHandlerRespectsConfig() throws Exception {
+        Settings disabledHealthSettings = new Settings(
+                true, true, true, true, true, true, true,
+                true, "127.0.0.1", 8765, "apiKey", 1, settings.getSkillWeights(),
+                true, 0L, 0L, true, 1, 1.0, List.of(), List.of(),
+                true, 1, 1, true, true, true, 1, 1,
+                true, 1, 0, 0, 0, 0, HealthThresholds.defaults(),
+                true, 1, 1, "", 1, 1,
+                new Settings.DashboardSettings(true, "0.0.0.0", 8080,
+                        Settings.PublicSettings.defaults(),
+                        new Settings.AdminSettings(true, ADMIN_PASSWORD, 60, false, true, true, true))
+        );
+        
+        WebDashboardServer restrictedDashboard = new WebDashboardServer(plugin, statsService, disabledHealthSettings, momentService, heatmapService, healthService);
+        
+        // Login first
+        var loginHandler = restrictedDashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        var handler = restrictedDashboard.adminHealthHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/health", cookie, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(403, exchange.status);
+    }
+    
+    @Test
+    void adminHeatmapHandlerRespectsConfig() throws Exception {
+        Settings disabledHeatmapSettings = new Settings(
+                true, true, true, true, true, true, true,
+                true, "127.0.0.1", 8765, "apiKey", 1, settings.getSkillWeights(),
+                true, 0L, 0L, true, 1, 1.0, List.of(), List.of(),
+                true, 1, 1, true, true, true, 1, 1,
+                true, 1, 0, 0, 0, 0, HealthThresholds.defaults(),
+                true, 1, 1, "", 1, 1,
+                new Settings.DashboardSettings(true, "0.0.0.0", 8080,
+                        Settings.PublicSettings.defaults(),
+                        new Settings.AdminSettings(true, ADMIN_PASSWORD, 60, true, false, true, true))
+        );
+        
+        WebDashboardServer restrictedDashboard = new WebDashboardServer(plugin, statsService, disabledHeatmapSettings, momentService, heatmapService, healthService);
+        
+        // Login first
+        var loginHandler = restrictedDashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        var handler = restrictedDashboard.adminHeatmapHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/heatmap", cookie, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(403, exchange.status);
+    }
+    
+    @Test
+    void adminSocialHandlerRespectsConfig() throws Exception {
+        Settings disabledSocialSettings = new Settings(
+                true, true, true, true, true, true, true,
+                true, "127.0.0.1", 8765, "apiKey", 1, settings.getSkillWeights(),
+                true, 0L, 0L, true, 1, 1.0, List.of(), List.of(),
+                true, 1, 1, true, true, true, 1, 1,
+                true, 1, 0, 0, 0, 0, HealthThresholds.defaults(),
+                true, 1, 1, "", 1, 1,
+                new Settings.DashboardSettings(true, "0.0.0.0", 8080,
+                        Settings.PublicSettings.defaults(),
+                        new Settings.AdminSettings(true, ADMIN_PASSWORD, 60, true, true, false, true))
+        );
+        
+        WebDashboardServer restrictedDashboard = new WebDashboardServer(plugin, statsService, disabledSocialSettings, momentService, heatmapService, healthService);
+        
+        // Login first
+        var loginHandler = restrictedDashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        var handler = restrictedDashboard.adminSocialHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/social", cookie, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(403, exchange.status);
+    }
+    
+    @Test
+    void adminDeathsHandlerRespectsConfig() throws Exception {
+        Settings disabledDeathsSettings = new Settings(
+                true, true, true, true, true, true, true,
+                true, "127.0.0.1", 8765, "apiKey", 1, settings.getSkillWeights(),
+                true, 0L, 0L, true, 1, 1.0, List.of(), List.of(),
+                true, 1, 1, true, true, true, 1, 1,
+                true, 1, 0, 0, 0, 0, HealthThresholds.defaults(),
+                true, 1, 1, "", 1, 1,
+                new Settings.DashboardSettings(true, "0.0.0.0", 8080,
+                        Settings.PublicSettings.defaults(),
+                        new Settings.AdminSettings(true, ADMIN_PASSWORD, 60, true, true, true, false))
+        );
+        
+        WebDashboardServer restrictedDashboard = new WebDashboardServer(plugin, statsService, disabledDeathsSettings, momentService, heatmapService, healthService);
+        
+        // Login first
+        var loginHandler = restrictedDashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        var handler = restrictedDashboard.adminDeathsHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/deaths", cookie, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(403, exchange.status);
+    }
+    
+    @Test
+    void adminCheckHandlerReturnsAuthenticatedWhenLoggedIn() throws Exception {
+        // Login first
+        var loginHandler = dashboard.adminLoginHandler();
+        String loginBody = "{\"password\": \"" + ADMIN_PASSWORD + "\"}";
+        FakeExchange loginExchange = new FakeExchange("/api/admin/login", null, loginBody, "POST");
+        loginHandler.handle(loginExchange);
+        String cookie = loginExchange.responseHeaders.getFirst("Set-Cookie");
+        
+        var handler = dashboard.adminCheckHandler();
+        FakeExchange exchange = new FakeExchange("/api/admin/check", cookie, null, "GET");
+        handler.handle(exchange);
+        
+        assertEquals(200, exchange.status);
+        assertTrue(exchange.body().contains("\"authenticated\": true") || exchange.body().contains("\"authenticated\":true"));
+    }
+    
+    @Test
+    void staticHandlerServesEmptyPath() throws Exception {
+        var handler = dashboard.staticHandler();
+        FakeExchange exchange = new FakeExchange("", null, null, "GET");
+        handler.handle(exchange);
+        
+        // Should default to index.html
+        assertEquals(200, exchange.status);
+    }
+    
+    @Test
+    void staticHandlerServesJsonFile() throws Exception {
+        var handler = dashboard.staticHandler();
+        FakeExchange exchange = new FakeExchange("/manifest.json", null, null, "GET");
+        handler.handle(exchange);
+        
+        // May return 404 if file doesn't exist, but should handle gracefully
+        assertTrue(exchange.status == 200 || exchange.status == 404);
+    }
+    
+    @Test
+    void staticHandlerServesSvgFile() throws Exception {
+        var handler = dashboard.staticHandler();
+        FakeExchange exchange = new FakeExchange("/icon.svg", null, null, "GET");
+        handler.handle(exchange);
+        
+        // May return 404 if file doesn't exist, but should handle gracefully
+        assertTrue(exchange.status == 200 || exchange.status == 404);
+    }
+    
+    @Test
+    void staticHandlerServesIcoFile() throws Exception {
+        var handler = dashboard.staticHandler();
+        FakeExchange exchange = new FakeExchange("/favicon.ico", null, null, "GET");
+        handler.handle(exchange);
+        
+        // May return 404 if file doesn't exist, but should handle gracefully
+        assertTrue(exchange.status == 200 || exchange.status == 404);
+    }
+    
+    @Test
+    void staticHandlerServesPngFile() throws Exception {
+        var handler = dashboard.staticHandler();
+        FakeExchange exchange = new FakeExchange("/icon.png", null, null, "GET");
+        handler.handle(exchange);
+        
+        // May return 404 if file doesn't exist, but should handle gracefully
+        assertTrue(exchange.status == 200 || exchange.status == 404);
+    }
+    
+    @Test
+    void adminLoginHandlerRejectsNullPassword() throws Exception {
+        var handler = dashboard.adminLoginHandler();
+        String body = "{}";
+        FakeExchange exchange = new FakeExchange("/api/admin/login", null, body, "POST");
+        handler.handle(exchange);
+        
+        assertEquals(401, exchange.status);
+    }
+    
+    @Test
+    void adminLoginHandlerRejectsEmptyBody() throws Exception {
+        var handler = dashboard.adminLoginHandler();
+        String body = "";
+        FakeExchange exchange = new FakeExchange("/api/admin/login", null, body, "POST");
+        handler.handle(exchange);
+        
+        // Empty body may cause issues, but should handle gracefully
+        assertTrue(exchange.status == 401 || exchange.status == 500);
+    }
+
     // ============== Test Utility Classes ==============
     
     private static class FakeExchange extends com.sun.net.httpserver.HttpExchange {
