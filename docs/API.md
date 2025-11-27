@@ -6,6 +6,7 @@ HTTP API served by the plugin’s built-in Java `HttpServer` (no TLS/HTTP2). It 
 - Auth: every endpoint requires header `X-API-Key: <api.api_key>`; missing/invalid → `401 Unauthorized` (plain text).
 - Methods: only `GET` is implemented.
 - Content types: JSON responses use `application/json`; `/moments/stream` uses `text/event-stream`; error strings are plain text.
+- OpenAPI: `GET /openapi.json` returns the machine-readable OpenAPI 3.1 document (no auth required).
 - Time fields: epoch milliseconds unless noted. Coordinates are block coordinates unless noted. Query numbers must be valid integers; otherwise the server throws and you’ll get a 500.
 - HTTPS: terminate TLS in a reverse proxy if you expose the API publicly.
 
@@ -59,8 +60,14 @@ Returned by `/heatmap/*`.
 | --- | --- | --- |
 | `type` | string | Heatmap type (e.g. `MINING`, `DEATH`) |
 | `world` | string | World name |
-| `chunkX`,`chunkZ` | int | Chunk coordinates |
-| `count` | long | Hits recorded in the bin |
+| `x`,`z` | int | Grid indices (chunk-aligned when `grid=16`, otherwise scaled to the requested grid size) |
+| `gridSize` | int | Bin size in blocks (8, 16, 32, 64) |
+| `count` | number | Weighted hits recorded in the bin (decay applied when configured) |
+
+### Heatmap hotspots map
+Returned by `/heatmap/hotspots/*`.
+
+`{ "<hotspotName>": <weightedCount>, ... }`
 
 ### Timeline day entry
 Returned by `/timeline/*`. Each entry is a map with keys:
@@ -83,12 +90,16 @@ Returned by `/health`.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `timestamp` | long | Capture time (ms since epoch) |
+| `tps` | double | Server TPS (first bucket returned by Paper) |
+| `memoryUsed` | long | Used memory (bytes) |
+| `memoryMax` | long | Max JVM memory (bytes) |
 | `chunks` | int | Loaded chunks (all worlds) |
 | `entities` | int | Loaded entities (all worlds) |
 | `hoppers` | int | Loaded hoppers (all worlds) |
 | `redstone` | int | Count of redstone-ish block entities (droppers/dispensers/observers/pistons/etc., excluding hoppers) |
 | `costIndex` | double | Weighted cost score (0-100) based on counts and config weights |
 | `worlds` | object | Per-world breakdown `{ "<world>": { chunks, entities, hoppers, redstone } }` |
+| `hotChunks` | array | Top chunk samples: `{ world, x, z, entityCount, tileEntityCount, topOwner }` |
 
 ### Timeline range delta
 Returned by `/timeline/range/*`. Same numeric keys as timeline entries but represent deltas over the requested range, plus `from`/`to` day strings.
@@ -138,6 +149,10 @@ curl -H "X-API-Key: $API_KEY" "http://localhost:8765/heatmap/MINING?from=3d&to=y
 The original `since`/`until` (epoch milliseconds) and `days` (integer) parameters still work. If both the new (`from`/`to`) and legacy parameters are provided, the new parameters take precedence.
 
 ## Endpoints
+
+### GET `/openapi.json`
+- Purpose: machine-readable OpenAPI 3.1 document for the HTTP API.
+- Auth: none (public for tooling).
 
 ### GET `/stats/{uuid}`
 - Returns the latest stats for the given player UUID.

@@ -1,5 +1,7 @@
 package de.nurrobin.smpstats.api;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpPrincipal;
 import de.nurrobin.smpstats.SMPStats;
@@ -12,6 +14,7 @@ import de.nurrobin.smpstats.heatmap.HeatmapService;
 import de.nurrobin.smpstats.moments.MomentService;
 import de.nurrobin.smpstats.social.SocialPairRow;
 import de.nurrobin.smpstats.timeline.TimelineService;
+import org.bukkit.plugin.PluginDescriptionFile;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -51,6 +54,8 @@ class ApiServerTest {
     void setup() {
         plugin = mock(SMPStats.class);
         when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        PluginDescriptionFile pdf = new PluginDescriptionFile("SMPStats", "1.2.3", "de.nurrobin.smpstats.SMPStats");
+        when(plugin.getDescription()).thenReturn(pdf);
         stats = mock(StatsService.class);
         settings = new Settings(
                 true, true, true, true, true, true, true,
@@ -236,6 +241,20 @@ class ApiServerTest {
                 anyDouble(), 
                 anyInt()
         );
+    }
+
+    @Test
+    void openApiEndpointIsPublicAndWellFormed() throws Exception {
+        var handler = server.openApiHandler();
+        FakeExchange exchange = new FakeExchange("/openapi.json", null); // no auth required
+        handler.handle(exchange);
+
+        assertEquals(200, exchange.status);
+        JsonObject json = JsonParser.parseString(exchange.body()).getAsJsonObject();
+        assertEquals("3.1.0", json.get("openapi").getAsString());
+        assertTrue(json.getAsJsonObject("info").get("version").getAsString().contains("1.2.3"));
+        assertTrue(json.getAsJsonObject("paths").has("/stats/{playerId}"));
+        assertTrue(json.getAsJsonObject("components").getAsJsonObject("schemas").has("HeatmapBin"));
     }
 
     @Test
