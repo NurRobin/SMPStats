@@ -1,10 +1,33 @@
-config_version: 5
+config_version: 6
 
 api:
   enabled: true            # Enable HTTP API
   bind_address: "127.0.0.1"  # Bind address, usually 127.0.0.1 for local access (discord bots, etc), if you need external access use 0.0.0.0 or your server IP
   port: 8765               # API port
   api_key: "YouShouldChangeThisKey" # Set a secret key
+
+dashboard:
+  enabled: true            # Enable web dashboard
+  bind_address: "0.0.0.0"  # Bind address for dashboard (0.0.0.0 for all interfaces)
+  port: 8080               # Dashboard port (separate from API)
+  
+  # Public section - accessible without authentication
+  public:
+    enabled: true          # Allow public access to basic stats
+    show_online_players: true
+    show_leaderboards: true
+    show_recent_moments: true
+    show_server_stats: true
+    
+  # Admin section - requires authentication
+  admin:
+    enabled: true          # Enable admin panel
+    password: "ChangeThisAdminPassword"  # Admin password
+    session_timeout_minutes: 60
+    show_health_metrics: true
+    show_heatmaps: true
+    show_social_data: true
+    show_death_replays: true
 
 tracking:
   movement: true      # Distance tracking (dimensions)

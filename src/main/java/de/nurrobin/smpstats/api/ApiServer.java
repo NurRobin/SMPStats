@@ -51,7 +51,7 @@ public class ApiServer {
 
     public void start() {
         try {
-            server = HttpServer.create(new InetSocketAddress(settings.getApiPort()), 0);
+            server = HttpServer.create(new InetSocketAddress(settings.getApiBindAddress(), settings.getApiPort()), 0);
         } catch (IOException e) {
             plugin.getLogger().severe("HTTP API konnte nicht gestartet werden: " + e.getMessage());
             return;

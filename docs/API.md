@@ -175,3 +175,237 @@ curl -H "X-API-Key: $API_KEY" http://localhost:8765/stats/all
 curl -H "X-API-Key: $API_KEY" "http://localhost:8765/moments/recent?limit=20"
 curl -H "X-API-Key: $API_KEY" "http://localhost:8765/heatmap/MINING"
 ```
+
+---
+
+# Web Dashboard
+
+The web dashboard is a separate HTTP server that provides a browser-based UI for viewing SMPStats data. It serves static HTML/CSS/JS files and exposes a mix of public and admin-only API endpoints.
+
+## Configuration
+
+Dashboard settings are in `config.yml` under the `dashboard` section:
+
+```yaml
+dashboard:
+  enabled: true
+  bind_address: "0.0.0.0"
+  port: 8080
+  admin_key: "change-me-admin-key"
+  public:
+    enabled: true
+    show_online_players: true
+    show_leaderboards: true
+    show_recent_moments: true
+    show_server_stats: true
+  admin:
+    enabled: true
+```
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enabled` | boolean | `true` | Enable/disable the dashboard server |
+| `bind_address` | string | `"0.0.0.0"` | Network interface to bind to |
+| `port` | int | `8080` | Port number for the dashboard |
+| `admin_key` | string | `"change-me-admin-key"` | API key for admin endpoints |
+| `public.enabled` | boolean | `true` | Enable public (unauthenticated) access |
+| `public.show_online_players` | boolean | `true` | Show online players on public dashboard |
+| `public.show_leaderboards` | boolean | `true` | Show leaderboards on public dashboard |
+| `public.show_recent_moments` | boolean | `true` | Show recent moments on public dashboard |
+| `public.show_server_stats` | boolean | `true` | Show aggregated server stats |
+| `admin.enabled` | boolean | `true` | Enable admin endpoints (requires `admin_key`) |
+
+## Dashboard Endpoints
+
+The dashboard server provides both public and admin-protected endpoints. Admin endpoints require the `X-API-Key` header matching `dashboard.admin_key`.
+
+### Static Files
+
+| Path | Description |
+| --- | --- |
+| `/` | Dashboard HTML page (redirects to `/index.html`) |
+| `/index.html` | Main dashboard interface |
+| `/css/style.css` | Dashboard stylesheet |
+| `/js/app.js` | Dashboard JavaScript application |
+
+### Public API Endpoints
+
+These endpoints do not require authentication (when `public.enabled: true`).
+
+#### GET `/api/config`
+Returns the public dashboard configuration (what features are enabled).
+
+**Response:**
+```json
+{
+  "public": {
+    "enabled": true,
+    "showOnlinePlayers": true,
+    "showLeaderboards": true,
+    "showRecentMoments": true,
+    "showServerStats": true
+  },
+  "adminEnabled": true
+}
+```
+
+#### GET `/api/public/online`
+Returns currently online players.
+
+**Response:**
+```json
+{
+  "count": 5,
+  "players": ["Player1", "Player2", "Player3", "Player4", "Player5"]
+}
+```
+
+#### GET `/api/public/leaderboards`
+Returns leaderboards for various statistics.
+
+**Query Parameters:**
+- `limit` (int, default 10): Maximum players per leaderboard
+
+**Response:**
+```json
+{
+  "playtime": [
+    {"uuid": "...", "name": "Player1", "value": 3600000}
+  ],
+  "blocks_broken": [...],
+  "blocks_placed": [...],
+  "mob_kills": [...],
+  "player_kills": [...],
+  "deaths": [...],
+  "distance": [...]
+}
+```
+
+#### GET `/api/public/moments`
+Returns recent moments.
+
+**Query Parameters:**
+- `limit` (int, default 20): Maximum moments to return
+
+**Response:**
+```json
+{
+  "moments": [
+    {
+      "id": 1,
+      "playerId": "uuid",
+      "type": "KILL_STREAK",
+      "title": "Player1 achieved a 5-kill streak!",
+      "detail": "5 kills in 30 seconds",
+      "world": "world",
+      "x": 100,
+      "y": 64,
+      "z": -200,
+      "startedAt": 1234567890000,
+      "endedAt": 1234567920000
+    }
+  ]
+}
+```
+
+#### GET `/api/public/server-stats`
+Returns aggregated server statistics.
+
+**Response:**
+```json
+{
+  "totalPlayers": 150,
+  "totalPlaytime": 54000000000,
+  "totalBlocksBroken": 1234567,
+  "totalBlocksPlaced": 987654,
+  "totalMobKills": 45678,
+  "totalDeaths": 1234
+}
+```
+
+### Admin API Endpoints
+
+These endpoints require the `X-API-Key` header matching `dashboard.admin_key`.
+
+#### GET `/api/admin/stats`
+Returns all player statistics (same data as `/stats/all` on the main API).
+
+**Response:** Array of `StatsRecord` objects.
+
+#### GET `/api/admin/heatmap/{type}`
+Returns heatmap data for the specified type.
+
+**Path Parameters:**
+- `type`: Heatmap type (`MINING`, `DEATH`, `POSITION`)
+
+**Query Parameters:**
+- `world` (string, default "world"): World name to filter
+- `since` (long, default 7 days ago): Start timestamp (ms)
+- `until` (long, default now): End timestamp (ms)
+- `limit` (int, default 100): Maximum bins to return
+
+**Response:**
+```json
+{
+  "type": "MINING",
+  "world": "world",
+  "bins": [
+    {"chunkX": 10, "chunkZ": -5, "count": 1234}
+  ]
+}
+```
+
+#### GET `/api/admin/timeline/{uuid}`
+Returns timeline data for a specific player.
+
+**Path Parameters:**
+- `uuid`: Player UUID
+
+**Query Parameters:**
+- `limit` (int, default 30): Maximum days to return
+
+**Response:**
+```json
+{
+  "uuid": "...",
+  "name": "Player1",
+  "timeline": [
+    {
+      "day": "2024-01-15",
+      "playtime_ms": 3600000,
+      "blocks_broken": 500,
+      ...
+    }
+  ]
+}
+```
+
+#### GET `/api/admin/social`
+Returns social interaction data (players who played together).
+
+**Query Parameters:**
+- `limit` (int, default 50): Maximum pairs to return
+
+**Response:**
+```json
+{
+  "pairs": [
+    {
+      "a": "uuid1",
+      "b": "uuid2",
+      "name_a": "Player1",
+      "name_b": "Player2",
+      "seconds": 7200,
+      "shared_kills": 15,
+      "shared_player_kills": 2,
+      "shared_mob_kills": 13
+    }
+  ]
+}
+```
+
+## Dashboard Access
+
+- **Public access:** `http://<host>:<dashboard.port>/` — No authentication required (if `public.enabled: true`)
+- **Admin features:** Enter the admin key in the dashboard UI to unlock admin-only views
+- **Security:** Use a reverse proxy with TLS for production deployments

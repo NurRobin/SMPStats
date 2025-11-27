@@ -12,6 +12,7 @@ public class Settings {
     private final boolean trackDamage;
     private final boolean trackConsumption;
     private final boolean apiEnabled;
+    private final String apiBindAddress;
     private final int apiPort;
     private final String apiKey;
     private final int autosaveMinutes;
@@ -45,6 +46,62 @@ public class Settings {
     private final String storyWebhookUrl;
     private final int storyTopLimit;
     private final int storyRecentMoments;
+    
+    // Dashboard settings
+    private final DashboardSettings dashboardSettings;
+    
+    /**
+     * Holds all dashboard-related configuration.
+     */
+    public record DashboardSettings(
+            boolean enabled,
+            String bindAddress,
+            int port,
+            PublicSettings publicSettings,
+            AdminSettings adminSettings
+    ) {
+        public static DashboardSettings defaults() {
+            return new DashboardSettings(
+                    true,
+                    "0.0.0.0",
+                    8080,
+                    PublicSettings.defaults(),
+                    AdminSettings.defaults()
+            );
+        }
+    }
+    
+    /**
+     * Configuration for the public (unauthenticated) section of the dashboard.
+     */
+    public record PublicSettings(
+            boolean enabled,
+            boolean showOnlinePlayers,
+            boolean showLeaderboards,
+            boolean showRecentMoments,
+            boolean showServerStats
+    ) {
+        public static PublicSettings defaults() {
+            return new PublicSettings(true, true, true, true, true);
+        }
+    }
+    
+    /**
+     * Configuration for the admin (authenticated) section of the dashboard.
+     */
+    public record AdminSettings(
+            boolean enabled,
+            String password,
+            int sessionTimeoutMinutes,
+            boolean showHealthMetrics,
+            boolean showHeatmaps,
+            boolean showSocialData,
+            boolean showDeathReplays
+    ) {
+        public static AdminSettings defaults() {
+            return new AdminSettings(true, "ChangeThisAdminPassword", 60, true, true, true, true);
+        }
+    }
 
     public Settings(boolean trackMovement,
                     boolean trackBlocks,
@@ -54,6 +111,7 @@ public class Settings {
                     boolean trackDamage,
                     boolean trackConsumption,
                     boolean apiEnabled,
+                    String apiBindAddress,
                     int apiPort,
                     String apiKey,
                     int autosaveMinutes,
@@ -86,7 +144,8 @@ public class Settings {
                     int storySummaryHour,
                     String storyWebhookUrl,
                     int storyTopLimit,
-                    int storyRecentMoments) {
+                    int storyRecentMoments,
+                    DashboardSettings dashboardSettings) {
         this.trackMovement = trackMovement;
         this.trackBlocks = trackBlocks;
         this.trackKills = trackKills;
@@ -95,6 +154,7 @@ public class Settings {
         this.trackDamage = trackDamage;
         this.trackConsumption = trackConsumption;
         this.apiEnabled = apiEnabled;
+        this.apiBindAddress = apiBindAddress;
         this.apiPort = apiPort;
         this.apiKey = apiKey;
         this.autosaveMinutes = autosaveMinutes;
@@ -128,6 +188,7 @@ public class Settings {
         this.storyWebhookUrl = storyWebhookUrl;
         this.storyTopLimit = storyTopLimit;
         this.storyRecentMoments = storyRecentMoments;
+        this.dashboardSettings = dashboardSettings;
     }
 
     public boolean isTrackMovement() {
@@ -292,5 +353,13 @@ public class Settings {
 
     public int getStoryRecentMoments() {
         return storyRecentMoments;
+    }
+    
+    public String getApiBindAddress() {
+        return apiBindAddress;
+    }
+    
+    public DashboardSettings getDashboardSettings() {
+        return dashboardSettings;
     }
 }

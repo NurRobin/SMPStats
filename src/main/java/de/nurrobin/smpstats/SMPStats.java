@@ -3,6 +3,7 @@ package de.nurrobin.smpstats;
 import de.nurrobin.smpstats.api.ApiServer;
 import de.nurrobin.smpstats.commands.StatsCommand;
 import de.nurrobin.smpstats.commands.SStatsCommand;
+import de.nurrobin.smpstats.dashboard.WebDashboardServer;
 import de.nurrobin.smpstats.database.StatsStorage;
 import de.nurrobin.smpstats.listeners.BlockListener;
 import de.nurrobin.smpstats.listeners.CombatListener;
@@ -37,11 +38,12 @@ import java.sql.SQLException;
 import java.util.Objects;
 
 public class SMPStats extends JavaPlugin {
-    private static final int CONFIG_VERSION = 5;
+    private static final int CONFIG_VERSION = 6;
     private StatsStorage storage;
     private StatsService statsService;
     private Settings settings;
     private ApiServer apiServer;
+    private WebDashboardServer dashboardServer;
     private MomentService momentService;
     private HeatmapService heatmapService;
     private SocialStatsService socialStatsService;
@@ -96,6 +98,7 @@ public class SMPStats extends JavaPlugin {
             storyService.start();
         }
         startApiServer();
+        startDashboardServer();
         logStartupBanner("Aktiv");
     }
 
@@ -125,6 +128,9 @@ public class SMPStats extends JavaPlugin {
         }
         if (apiServer != null) {
             apiServer.stop();
+        }
+        if (dashboardServer != null) {
+            dashboardServer.stop();
         }
         if (storage != null) {
             try {
@@ -203,6 +209,7 @@ public class SMPStats extends JavaPlugin {
         }
         startAutosave();
         restartApiServer();
+        restartDashboardServer();
         logStartupBanner("Reload");
         sender.sendMessage(ChatColor.GREEN + "SMPStats Konfiguration neu geladen.");
     }
@@ -218,6 +225,7 @@ public class SMPStats extends JavaPlugin {
         boolean consumption = config.getBoolean("tracking.consumption", true);
 
         boolean apiEnabled = config.getBoolean("api.enabled", false);
+        String apiBindAddress = config.getString("api.bind_address", "127.0.0.1");
         int apiPort = config.getInt("api.port", 8765);
         String apiKey = config.getString("api.api_key", "CHANGEME123");
         int autosaveMinutes = Math.max(1, config.getInt("autosave_minutes", 5));
@@ -281,14 +289,44 @@ public class SMPStats extends JavaPlugin {
         String storyWebhookUrl = config.getString("story.webhook_url", "");
         int storyTopLimit = Math.max(1, config.getInt("story.top_limit", 5));
         int storyRecentMoments = Math.max(0, config.getInt("story.recent_moments", 10));
+        
+        // Parse dashboard settings
+        Settings.DashboardSettings dashboardSettings = parseDashboardSettings(config);
 
         return new Settings(movement, blocks, kills, biomes, crafting, damage, consumption,
-                apiEnabled, apiPort, apiKey, autosaveMinutes, skillWeights,
+                apiEnabled, apiBindAddress, apiPort, apiKey, autosaveMinutes, skillWeights,
                 momentsEnabled, diamondWindowSeconds, momentsFlushSeconds, heatmapEnabled, heatmapFlushMinutes, heatmapDecayHalfLifeHours, momentDefinitions, hotspots,
                 socialEnabled, socialSampleSeconds, socialNearbyRadius, timelineEnabled,
                 deathReplayEnabled, deathReplayInventoryItems, deathReplayNearbyRadius, deathReplayLimit,
                 healthEnabled, healthSampleMinutes, healthChunkWeight, healthEntityWeight, healthHopperWeight, healthRedstoneWeight, healthThresholds,
-                storyEnabled, storyIntervalDays, storySummaryHour, storyWebhookUrl, storyTopLimit, storyRecentMoments);
+                storyEnabled, storyIntervalDays, storySummaryHour, storyWebhookUrl, storyTopLimit, storyRecentMoments,
+                dashboardSettings);
+    }
+    
+    private Settings.DashboardSettings parseDashboardSettings(FileConfiguration config) {
+        boolean enabled = config.getBoolean("dashboard.enabled", true);
+        String bindAddress = config.getString("dashboard.bind_address", "0.0.0.0");
+        int port = config.getInt("dashboard.port", 8080);
+        
+        Settings.PublicSettings publicSettings = new Settings.PublicSettings(
+                config.getBoolean("dashboard.public.enabled", true),
+                config.getBoolean("dashboard.public.show_online_players", true),
+                config.getBoolean("dashboard.public.show_leaderboards", true),
+                config.getBoolean("dashboard.public.show_recent_moments", true),
+                config.getBoolean("dashboard.public.show_server_stats", true)
+        );
+        
+        Settings.AdminSettings adminSettings = new Settings.AdminSettings(
+                config.getBoolean("dashboard.admin.enabled", true),
+                config.getString("dashboard.admin.password", "ChangeThisAdminPassword"),
+                config.getInt("dashboard.admin.session_timeout_minutes", 60),
+                config.getBoolean("dashboard.admin.show_health_metrics", true),
+                config.getBoolean("dashboard.admin.show_heatmaps", true),
+                config.getBoolean("dashboard.admin.show_social_data", true),
+                config.getBoolean("dashboard.admin.show_death_replays", true)
+        );
+        
+        return new Settings.DashboardSettings(enabled, bindAddress, port, publicSettings, adminSettings);
     }
     
     private HealthThresholds parseHealthThresholds(FileConfiguration config) {
@@ -447,6 +485,24 @@ public class SMPStats extends JavaPlugin {
         }
         startApiServer();
     }
+    
+    private void startDashboardServer() {
+        Settings.DashboardSettings dashSettings = settings.getDashboardSettings();
+        if (!dashSettings.enabled()) {
+            getLogger().info("Web Dashboard disabled in config.yml");
+            dashboardServer = null;
+            return;
+        }
+        dashboardServer = new WebDashboardServer(this, statsService, settings, momentService, heatmapService, serverHealthService);
+        dashboardServer.start();
+    }
+    
+    private void restartDashboardServer() {
+        if (dashboardServer != null) {
+            dashboardServer.stop();
+        }
+        startDashboardServer();
+    }
 
     private void logStartupBanner(String action) {
         String version = getDescription().getVersion();
@@ -456,6 +512,12 @@ public class SMPStats extends JavaPlugin {
             getLogger().info(" API: enabled on port " + settings.getApiPort());
         } else {
             getLogger().info(" API: disabled");
+        }
+        Settings.DashboardSettings dashSettings = settings.getDashboardSettings();
+        if (dashSettings.enabled()) {
+            getLogger().info(" Dashboard: enabled on port " + dashSettings.port());
+        } else {
+            getLogger().info(" Dashboard: disabled");
         }
         getLogger().info(" Autosave: " + settings.getAutosaveMinutes() + " minute(s)");
         getLogger().info("====================================");

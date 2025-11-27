@@ -170,11 +170,12 @@ class StoryServiceTest {
                 new SkillWeights.FarmerWeights(0, 0)
         );
         return new Settings(true, true, true, true, true, true, true,
-                false, 0, "KEY", 1, weights,
+                false, "127.0.0.1", 0, "KEY", 1, weights,
                 true, 0L, 1L, true, 1, 1.0, List.of(), List.of(),
                 false, 1, 1, false,
                 true, true, 1, 1,
                 true, 1, 0.1, 0.1, 0.1, 0.1, de.nurrobin.smpstats.health.HealthThresholds.defaults(),
-                enabled, 1, 0, "", 2, 3);
+                enabled, 1, 0, "", 2, 3,
+                Settings.DashboardSettings.defaults());
     }
 }
