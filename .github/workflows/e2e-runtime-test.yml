@@ -142,151 +142,56 @@ jobs:
             echo "=== SMPStats Log Messages ==="
             docker logs "${CONTAINER}" 2>&1 | grep -i "SMPStats" || echo "No SMPStats messages yet"
 
-      - name: Run RCON command tests
-        if: ${{ inputs.run_rcon_tests != false }}
-        uses: appleboy/ssh-action@v1.0.3
-        env:
-          RUN_ID: ${{ steps.info.outputs.run_id }}
+      - name: Upload E2E test script
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DEV_SERVER_HOST }}
           username: ${{ secrets.DEV_SERVER_USER }}
           key: ${{ secrets.DEV_SERVER_SSH_KEY }}
           port: ${{ secrets.DEV_SERVER_SSH_PORT }}
-          envs: RUN_ID
-          script: |
-            # Load connection info
-            CONN_FILE="/tmp/conn-${RUN_ID}.json"
-            RCON_PORT=$(cat "${CONN_FILE}" | grep rcon_port | grep -oP '\d+')
-            RCON_PASS=$(cat "${CONN_FILE}" | grep rcon_password | grep -oP '": "\K[^"]+')
-            
-            echo "=== Running RCON Command Tests ==="
-            echo "RCON Port: ${RCON_PORT}"
-            
-            FAILED=0
-            
-            # Test basic connectivity
-            echo ""
-            echo "Test 1: RCON Connectivity (/list)"
-            RESULT=$(mcrcon -H localhost -P "${RCON_PORT}" -p "${RCON_PASS}" "list" 2>&1) || true
-            echo "Result: $RESULT"
-            if echo "$RESULT" | grep -qi "players"; then
-              echo "✅ PASS"
-            else
-              echo "❌ FAIL"
-              FAILED=$((FAILED + 1))
-            fi
-            
-            # Test SMPStats info command
-            echo ""
-            echo "Test 2: /smpstats info"
-            RESULT=$(mcrcon -H localhost -P "${RCON_PORT}" -p "${RCON_PASS}" "smpstats info" 2>&1) || true
-            echo "Result: $RESULT"
-            if echo "$RESULT" | grep -qi "smpstats\|version\|aktiv\|enabled"; then
-              echo "✅ PASS"
-            else
-              echo "⚠️ Unexpected response"
-            fi
-            
-            # Test stats command
-            echo ""
-            echo "Test 3: /stats"
-            RESULT=$(mcrcon -H localhost -P "${RCON_PORT}" -p "${RCON_PASS}" "stats" 2>&1) || true
-            echo "Result: $RESULT"
-            
-            echo ""
-            echo "=== RCON Tests Complete (${FAILED} failures) ==="
-            
-            if [ $FAILED -gt 0 ]; then
-              exit 1
-            fi
+          source: ".github/test-fixtures/run-e2e-tests.sh"
+          target: "/home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging/${{ steps.info.outputs.run_id }}/"
+          strip_components: 2
 
-      - name: Run HTTP API tests
-        if: ${{ inputs.run_api_tests != false }}
+      - name: Run comprehensive E2E tests
         uses: appleboy/ssh-action@v1.0.3
         env:
           RUN_ID: ${{ steps.info.outputs.run_id }}
+          RUN_RCON: ${{ inputs.run_rcon_tests != false }}
+          RUN_API: ${{ inputs.run_api_tests != false }}
         with:
           host: ${{ secrets.DEV_SERVER_HOST }}
           username: ${{ secrets.DEV_SERVER_USER }}
           key: ${{ secrets.DEV_SERVER_SSH_KEY }}
           port: ${{ secrets.DEV_SERVER_SSH_PORT }}
-          envs: RUN_ID
+          envs: RUN_ID,RUN_RCON,RUN_API
           script: |
             # Load connection info
             CONN_FILE="/tmp/conn-${RUN_ID}.json"
-            API_PORT=$(cat "${CONN_FILE}" | grep api_port | grep -oP '\d+')
-            API_KEY=$(cat "${CONN_FILE}" | grep api_key | grep -oP '": "\K[^"]+')
+            RCON_PORT=$(cat "${CONN_FILE}" | jq -r '.rcon_port')
+            RCON_PASS=$(cat "${CONN_FILE}" | jq -r '.rcon_password')
+            API_PORT=$(cat "${CONN_FILE}" | jq -r '.api_port')
+            API_KEY=$(cat "${CONN_FILE}" | jq -r '.api_key')
+            DASHBOARD_PORT="${API_PORT}"  # Dashboard runs on same port for now
             
-            echo "=== Running HTTP API Tests ==="
+            # Setup test script
+            TEST_SCRIPT="/home/main/Minecraft-Servers/SMPStats-Dev/plugins-staging/${RUN_ID}/run-e2e-tests.sh"
+            chmod +x "${TEST_SCRIPT}"
+            
+            echo "=== Running Comprehensive E2E Tests ==="
+            echo "RCON Port: ${RCON_PORT}"
             echo "API Port: ${API_PORT}"
-            
-            API_URL="http://localhost:${API_PORT}"
-            FAILED=0
-            
-            test_endpoint() {
-              local name="$1"
-              local endpoint="$2"
-              local expected_status="$3"
-              
-              echo ""
-              echo "Testing: $name"
-              
-              RESPONSE=$(curl -s -w "\n%{http_code}" -H "X-API-Key: ${API_KEY}" "${API_URL}${endpoint}" 2>&1)
-              STATUS=$(echo "$RESPONSE" | tail -1)
-              BODY=$(echo "$RESPONSE" | sed '$d')
-              
-              if [ "$STATUS" = "$expected_status" ]; then
-                echo "✅ PASS - Status $STATUS"
-                if [ "$STATUS" = "200" ]; then
-                  if echo "$BODY" | jq empty 2>/dev/null; then
-                    echo "   Valid JSON"
-                  else
-                    echo "   ⚠️ Not valid JSON"
-                  fi
-                fi
-              else
-                echo "❌ FAIL - Expected $expected_status, got $STATUS"
-                FAILED=$((FAILED + 1))
-              fi
-            }
-            
-            # Test authentication (should fail without key)
             echo ""
-            echo "Testing: Auth rejection (no key)"
-            RESPONSE=$(curl -s -w "\n%{http_code}" "${API_URL}/stats/all" 2>&1)
-            STATUS=$(echo "$RESPONSE" | tail -1)
-            if [ "$STATUS" = "401" ]; then
-              echo "✅ PASS - Correctly rejected"
-            else
-              echo "❌ FAIL - Expected 401, got $STATUS"
-              FAILED=$((FAILED + 1))
-            fi
             
-            # Test valid endpoints
-            test_endpoint "GET /stats/all" "/stats/all" "200"
-            test_endpoint "GET /online" "/online" "200"
-            test_endpoint "GET /moments/recent" "/moments/recent?limit=10" "200"
-            test_endpoint "GET /health" "/health" "200"
-            test_endpoint "GET /heatmap/MINING" "/heatmap/MINING" "200"
-            
-            # Test invalid UUID
-            echo ""
-            echo "Testing: Invalid UUID"
-            RESPONSE=$(curl -s -w "\n%{http_code}" -H "X-API-Key: ${API_KEY}" "${API_URL}/stats/invalid-uuid" 2>&1)
-            STATUS=$(echo "$RESPONSE" | tail -1)
-            if [ "$STATUS" = "400" ] || [ "$STATUS" = "404" ]; then
-              echo "✅ PASS - Status $STATUS"
-            else
-              echo "❌ FAIL - Expected 400/404, got $STATUS"
-              FAILED=$((FAILED + 1))
-            fi
-            
-            echo ""
-            echo "=== API Tests Complete (${FAILED} failures) ==="
-            
-            if [ $FAILED -gt 0 ]; then
-              exit 1
-            fi
+            # Run the comprehensive test suite
+            "${TEST_SCRIPT}" \
+              "${RCON_PORT}" \
+              "${RCON_PASS}" \
+              "${API_PORT}" \
+              "${API_KEY}" \
+              "${DASHBOARD_PORT}" \
+              "admin123" \
+              "localhost"
 
       - name: Collect server logs
         if: always()
@@ -345,8 +250,15 @@ jobs:
           echo "- **Minecraft Version:** ${{ env.MC_VERSION }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Plugin Version:** ${{ needs.build.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Run ID:** ${{ steps.info.outputs.run_id }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **RCON Tests:** ${{ inputs.run_rcon_tests != false && '✅ Enabled' || '⏭️ Skipped' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **API Tests:** ${{ inputs.run_api_tests != false && '✅ Enabled' || '⏭️ Skipped' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Test Categories" >> $GITHUB_STEP_SUMMARY
+          echo "| Category | Description |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🎮 RCON Commands | Plugin commands via server console |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🌐 HTTP API | RESTful API endpoint validation |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📊 Dashboard | Web dashboard and admin panel |" >> $GITHUB_STEP_SUMMARY
+          echo "| 💾 Database | Data structure and consistency |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔗 Integration | Cross-component consistency |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Infrastructure" >> $GITHUB_STEP_SUMMARY
           echo "- Dynamic Docker container with unique ports" >> $GITHUB_STEP_SUMMARY
