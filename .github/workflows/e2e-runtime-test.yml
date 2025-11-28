@@ -41,8 +41,8 @@ on:
       - '.github/test-fixtures/**'
 
 concurrency:
-  group: e2e-test-${{ github.ref }}-${{ github.run_id }}
-  cancel-in-progress: false
+  group: e2e-test-${{ github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

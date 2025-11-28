@@ -50,6 +50,9 @@ public class Settings {
     // Dashboard settings
     private final DashboardSettings dashboardSettings;
     
+    // GUI settings
+    private final boolean guiAnimatedBordersEnabled;
+    
     /**
      * Holds all dashboard-related configuration.
      */
@@ -145,7 +148,8 @@ public class Settings {
                     String storyWebhookUrl,
                     int storyTopLimit,
                     int storyRecentMoments,
-                    DashboardSettings dashboardSettings) {
+                    DashboardSettings dashboardSettings,
+                    boolean guiAnimatedBordersEnabled) {
         this.trackMovement = trackMovement;
         this.trackBlocks = trackBlocks;
         this.trackKills = trackKills;
@@ -189,6 +193,7 @@ public class Settings {
         this.storyTopLimit = storyTopLimit;
         this.storyRecentMoments = storyRecentMoments;
         this.dashboardSettings = dashboardSettings;
+        this.guiAnimatedBordersEnabled = guiAnimatedBordersEnabled;
     }
 
     public boolean isTrackMovement() {
@@ -361,5 +366,9 @@ public class Settings {
     
     public DashboardSettings getDashboardSettings() {
         return dashboardSettings;
+    }
+    
+    public boolean isGuiAnimatedBordersEnabled() {
+        return guiAnimatedBordersEnabled;
     }
 }

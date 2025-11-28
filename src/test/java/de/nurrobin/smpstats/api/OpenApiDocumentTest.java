@@ -43,7 +43,7 @@ class OpenApiDocumentTest {
                 true, 0L, 0L, true, 1, 1.0, List.of(), List.of(),
                 true, 1, 1, true, true, true, 1, 1, true, 1, 0, 0, 0, 0,
                 HealthThresholds.defaults(), true, 1, 1, "", 1, 1,
-                Settings.DashboardSettings.defaults()
+                Settings.DashboardSettings.defaults(), true
         );
         document = new OpenApiDocument(settings, "1.0.0");
         openApiJson = JsonParser.parseString(document.toJson()).getAsJsonObject();

@@ -2,7 +2,6 @@ package de.nurrobin.smpstats.timeline;
 
 import de.nurrobin.smpstats.Settings;
 import de.nurrobin.smpstats.database.StatsStorage;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
@@ -16,7 +15,6 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
-import java.util.UUID;
 
 public class DeathReplayService {
     private final Plugin plugin;

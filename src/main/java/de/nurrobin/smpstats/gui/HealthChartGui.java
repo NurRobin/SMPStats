@@ -1,7 +1,6 @@
 package de.nurrobin.smpstats.gui;
 
 import de.nurrobin.smpstats.SMPStats;
-import de.nurrobin.smpstats.Settings;
 import de.nurrobin.smpstats.health.HealthSnapshot;
 import de.nurrobin.smpstats.health.HealthThresholds;
 import de.nurrobin.smpstats.health.ServerHealthService;

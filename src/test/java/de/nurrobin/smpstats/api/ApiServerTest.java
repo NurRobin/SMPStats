@@ -65,7 +65,7 @@ class ApiServerTest {
                 new de.nurrobin.smpstats.skills.SkillWeights.ExplorationWeights(0, 0),
                 new de.nurrobin.smpstats.skills.SkillWeights.BuilderWeights(0),
                 new de.nurrobin.smpstats.skills.SkillWeights.FarmerWeights(0, 0)
-        ), true, 0L, 0L, true, 1, 1.0, List.of(), List.of(), true, 1, 1, true, true, true, 1, 1, true, 1, 0, 0, 0, 0, de.nurrobin.smpstats.health.HealthThresholds.defaults(), true, 1, 1, "", 1, 1, Settings.DashboardSettings.defaults());
+        ), true, 0L, 0L, true, 1, 1.0, List.of(), List.of(), true, 1, 1, true, true, true, 1, 1, true, 1, 0, 0, 0, 0, de.nurrobin.smpstats.health.HealthThresholds.defaults(), true, 1, 1, "", 1, 1, Settings.DashboardSettings.defaults(), true);
         moments = mock(MomentService.class);
         heatmap = mock(HeatmapService.class);
         timeline = mock(TimelineService.class);

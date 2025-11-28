@@ -1,4 +1,8 @@
-config_version: 6
+config_version: 7
+
+# GUI settings
+gui:
+  animated_borders: true  # Enable animated rainbow borders in menus
 
 api:
   enabled: true            # Enable HTTP API
