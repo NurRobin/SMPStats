@@ -298,7 +298,7 @@ Supported grid sizes:
 | **Player Comparison GUI** | Side-by-side stat comparison between two players | ✅ Done |
 | **Social Partners GUI** | "Who I play with most" - top companions from proximity data | ✅ Done |
 | **Player Selector GUI** | Browse and select players for comparison with pagination | ✅ Done |
-| **Timeline Delta View** | "This week vs last week" stat changes | ⏳ Todo |
+| **Timeline Delta View** | "This week vs last week" stat changes | ✅ Done |
 | **Achievement Badges** | Visual badges for milestones/moments | ⏳ Todo |
 | **Animated Borders** | Cycling border colors for highlighted items | ⏳ Todo |
 

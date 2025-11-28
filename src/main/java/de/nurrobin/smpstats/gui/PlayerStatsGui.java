@@ -289,6 +289,12 @@ public class PlayerStatsGui implements InventoryGui, InventoryHolder {
                 Component.text("⚔ Compare", NamedTextColor.LIGHT_PURPLE),
                 Component.text("Compare stats with another player", NamedTextColor.GRAY)));
         
+        // Timeline Delta Button (slot 51)
+        inventory.setItem(51, createGuiItem(Material.RECOVERY_COMPASS, 
+                Component.text("📈 Weekly Progress", NamedTextColor.AQUA),
+                Component.text("This week vs last week", NamedTextColor.GRAY),
+                Component.text("See how you've improved!", NamedTextColor.DARK_GRAY)));
+        
         // Refresh Button (slot 53)
         inventory.setItem(53, createGuiItem(Material.SUNFLOWER, 
                 Component.text("🔄 Refresh", NamedTextColor.GREEN),
@@ -353,6 +359,13 @@ public class PlayerStatsGui implements InventoryGui, InventoryHolder {
             // Compare button - open player selector
             guiManager.openGui(player, new PlayerSelectorGui(plugin, guiManager, statsService, 
                     player, targetPlayer.getUniqueId()));
+        } else if (event.getSlot() == 51) {
+            // Timeline Delta button - open weekly progress view
+            plugin.getStatsStorage().ifPresentOrElse(
+                storage -> guiManager.openGui(player, new TimelineDeltaGui(plugin, guiManager, statsService, 
+                        storage, player, targetPlayer.getUniqueId())),
+                () -> player.sendMessage(Component.text("Timeline stats not available", NamedTextColor.RED))
+            );
         } else if (event.getSlot() == 53) {
             // Refresh button
             playSuccessSound(player);
