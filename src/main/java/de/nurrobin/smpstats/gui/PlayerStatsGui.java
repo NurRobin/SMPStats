@@ -275,47 +275,37 @@ public class PlayerStatsGui implements InventoryGui, InventoryHolder {
     }
 
     private void addNavigationButtons() {
+        // === Simplified Navigation Bar ===
+        // Core features promoted, secondary features in "More" submenu
+        
         // Back Button (slot 45)
         inventory.setItem(45, createGuiItem(Material.ARROW, 
                 Component.text("◀ Back", NamedTextColor.RED),
                 Component.text("Return to main menu", NamedTextColor.GRAY)));
         
-        // Death Replay Button (slot 46)
-        inventory.setItem(46, createGuiItem(Material.SKELETON_SKULL, 
-                Component.text("💀 Death History", NamedTextColor.DARK_RED),
-                Component.text("View your recent deaths", NamedTextColor.GRAY),
-                Component.text("See cause, location, and more", NamedTextColor.DARK_GRAY)));
+        // Badges Button (slot 47) - Promoted: Most engaging feature
+        inventory.setItem(47, createBadgesSummaryButton());
         
-        // Social Partners Button (slot 47)
-        inventory.setItem(47, createGuiItem(Material.TOTEM_OF_UNDYING, 
-                Component.text("👥 Social Partners", NamedTextColor.YELLOW),
-                Component.text("View players you've spent time with", NamedTextColor.GRAY)));
+        // Friends Button (slot 48) - Promoted: Social is important
+        inventory.setItem(48, createGuiItem(Material.TOTEM_OF_UNDYING, 
+                Component.text("👥 Friends", NamedTextColor.YELLOW),
+                Component.text("View your social connections", NamedTextColor.GRAY),
+                Component.text("See who you play with most!", NamedTextColor.DARK_GRAY)));
         
-        // Moments/Achievements Button (slot 48)
-        inventory.setItem(48, createGuiItem(Material.NETHER_STAR, 
-                Component.text("🏆 Moments", NamedTextColor.GOLD),
-                Component.text("View your triggered achievements", NamedTextColor.GRAY),
-                Component.text("Diamond runs, boss kills, etc.", NamedTextColor.DARK_GRAY)));
-        
-        // Compare Button (slot 49)
+        // Compare Button (slot 49) - Promoted: Competitive feature
         inventory.setItem(49, createGuiItem(Material.COMPARATOR, 
                 Component.text("⚔ Compare", NamedTextColor.LIGHT_PURPLE),
                 Component.text("Compare stats with another player", NamedTextColor.GRAY)));
         
-        // Badges Button (slot 50) - Stats-based achievement badges
-        inventory.setItem(50, createBadgesSummaryButton());
-        
-        // Timeline Delta Button (slot 51)
-        inventory.setItem(51, createGuiItem(Material.RECOVERY_COMPASS, 
-                Component.text("📈 Weekly Progress", NamedTextColor.AQUA),
-                Component.text("This week vs last week", NamedTextColor.GRAY),
-                Component.text("See how you've improved!", NamedTextColor.DARK_GRAY)));
-        
-        // Heatmap Preview Button (slot 52)
-        inventory.setItem(52, createGuiItem(Material.FILLED_MAP, 
-                Component.text("🗺 Activity Heatmap", NamedTextColor.RED),
-                Component.text("View area activity around you", NamedTextColor.GRAY),
-                Component.text("Movement, mining, deaths...", NamedTextColor.DARK_GRAY)));
+        // More Stats Button (slot 51) - Groups secondary features
+        inventory.setItem(51, createGuiItem(Material.BOOK, 
+                Component.text("📋 More...", NamedTextColor.AQUA),
+                Component.text("Additional stats & tools", NamedTextColor.GRAY),
+                Component.empty(),
+                Component.text("▸ Death History", NamedTextColor.DARK_GRAY),
+                Component.text("▸ Weekly Progress", NamedTextColor.DARK_GRAY),
+                Component.text("▸ Activity Heatmap", NamedTextColor.DARK_GRAY),
+                Component.text("▸ Moments", NamedTextColor.DARK_GRAY)));
         
         // Refresh Button (slot 53)
         inventory.setItem(53, createGuiItem(Material.SUNFLOWER, 
@@ -402,57 +392,43 @@ public class PlayerStatsGui implements InventoryGui, InventoryHolder {
         Player player = (Player) event.getWhoClicked();
         playClickSound(player);
         
-        if (event.getSlot() == 45) {
-            // Back button
-            plugin.getServerHealthService().ifPresentOrElse(
-                healthService -> guiManager.openGui(player, new MainMenuGui(plugin, guiManager, statsService, healthService)),
-                () -> player.closeInventory()
-            );
-        } else if (event.getSlot() == 46) {
-            // Death Replay button
-            plugin.getStatsStorage().ifPresentOrElse(
-                storage -> guiManager.openGui(player, new DeathReplayGui(plugin, guiManager, statsService, 
-                        storage, player, targetPlayer.getUniqueId())),
-                () -> player.sendMessage(Component.text("Death history not available", NamedTextColor.RED))
-            );
-        } else if (event.getSlot() == 47) {
-            // Social Partners button
-            plugin.getStatsStorage().ifPresentOrElse(
-                storage -> guiManager.openGui(player, new SocialPartnersGui(plugin, guiManager, statsService, 
-                        storage, player, targetPlayer.getUniqueId())),
-                () -> player.sendMessage(Component.text("Social stats not available", NamedTextColor.RED))
-            );
-        } else if (event.getSlot() == 48) {
-            // Achievements/Moments button
-            plugin.getMomentService().ifPresentOrElse(
-                momentService -> guiManager.openGui(player, new MomentsHistoryGui(plugin, guiManager, statsService, 
-                        momentService, player, targetPlayer.getUniqueId())),
-                () -> player.sendMessage(Component.text("Achievements not available", NamedTextColor.RED))
-            );
-        } else if (event.getSlot() == 49) {
-            // Compare button - open player selector
-            guiManager.openGui(player, new PlayerSelectorGui(plugin, guiManager, statsService, 
-                    player, targetPlayer.getUniqueId()));
-        } else if (event.getSlot() == 50) {
-            // Badges button - open badges GUI
-            guiManager.openGui(player, new BadgesGui(plugin, guiManager, statsService, 
-                    player, targetPlayer.getUniqueId()));
-        } else if (event.getSlot() == 51) {
-            // Timeline Delta button - open weekly progress view
-            plugin.getStatsStorage().ifPresentOrElse(
-                storage -> guiManager.openGui(player, new TimelineDeltaGui(plugin, guiManager, statsService, 
-                        storage, player, targetPlayer.getUniqueId())),
-                () -> player.sendMessage(Component.text("Timeline stats not available", NamedTextColor.RED))
-            );
-        } else if (event.getSlot() == 52) {
-            // Heatmap Preview button
-            guiManager.openGui(player, new PersonalHeatmapGui(plugin, guiManager, statsService, player, 
-                    targetPlayer.getUniqueId(), targetPlayer.getName()));
-        } else if (event.getSlot() == 53) {
-            // Refresh button
-            playSuccessSound(player);
-            initializeItems();
-            player.sendMessage(Component.text("Stats refreshed!", NamedTextColor.GREEN));
+        switch (event.getSlot()) {
+            case 45 -> {
+                // Back button
+                plugin.getServerHealthService().ifPresentOrElse(
+                    healthService -> guiManager.openGui(player, new MainMenuGui(plugin, guiManager, statsService, healthService)),
+                    () -> player.closeInventory()
+                );
+            }
+            case 47 -> {
+                // Badges button - promoted to main nav
+                guiManager.openGui(player, new BadgesGui(plugin, guiManager, statsService, 
+                        player, targetPlayer.getUniqueId()));
+            }
+            case 48 -> {
+                // Friends button - enhanced social partners
+                plugin.getStatsStorage().ifPresentOrElse(
+                    storage -> guiManager.openGui(player, new SocialPartnersGui(plugin, guiManager, statsService, 
+                            storage, player, targetPlayer.getUniqueId())),
+                    () -> player.sendMessage(Component.text("Social stats not available", NamedTextColor.RED))
+                );
+            }
+            case 49 -> {
+                // Compare button - open player selector
+                guiManager.openGui(player, new PlayerSelectorGui(plugin, guiManager, statsService, 
+                        player, targetPlayer.getUniqueId()));
+            }
+            case 51 -> {
+                // More Stats button - opens submenu with secondary features
+                guiManager.openGui(player, new MoreStatsGui(plugin, guiManager, statsService, 
+                        player, targetPlayer.getUniqueId(), targetPlayer.getName()));
+            }
+            case 53 -> {
+                // Refresh button
+                playSuccessSound(player);
+                initializeItems();
+                player.sendMessage(Component.text("Stats refreshed!", NamedTextColor.GREEN));
+            }
         }
     }
 }

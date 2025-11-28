@@ -6,7 +6,10 @@ import de.nurrobin.smpstats.StatsService;
 import de.nurrobin.smpstats.skills.SkillProfile;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
+import org.bukkit.event.inventory.ClickType;
+import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,8 +22,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class PlayerStatsGuiTest {
@@ -88,7 +90,7 @@ class PlayerStatsGuiTest {
         PlayerStatsGui gui = new PlayerStatsGui(plugin, guiManager, statsService, player);
         
         InventoryClickEvent event = mock(InventoryClickEvent.class);
-        when(event.getSlot()).thenReturn(45); // Back button position (updated from 36)
+        when(event.getSlot()).thenReturn(45); // Back button position
         when(event.getWhoClicked()).thenReturn(player);
         
         gui.handleClick(event);
@@ -106,7 +108,7 @@ class PlayerStatsGuiTest {
         PlayerStatsGui gui = new PlayerStatsGui(plugin, guiManager, statsService, player);
         
         InventoryClickEvent event = mock(InventoryClickEvent.class);
-        when(event.getSlot()).thenReturn(53); // Refresh button (updated from 44)
+        when(event.getSlot()).thenReturn(53); // Refresh button
         when(event.getWhoClicked()).thenReturn(player);
         
         gui.handleClick(event);
@@ -142,7 +144,7 @@ class PlayerStatsGuiTest {
         assertNotNull(inv.getItem(10));
         assertEquals(Material.CLOCK, inv.getItem(10).getType());
 
-        // Distance at slot 19 (updated from 20)
+        // Distance at slot 19
         assertNotNull(inv.getItem(19));
         assertEquals(Material.LEATHER_BOOTS, inv.getItem(19).getType());
     }
@@ -156,7 +158,7 @@ class PlayerStatsGuiTest {
         PlayerStatsGui gui = new PlayerStatsGui(plugin, guiManager, statsService, player);
         Inventory inv = gui.getInventory();
 
-        // Items crafted at slot 23 (updated from 24)
+        // Items crafted at slot 23
         assertNotNull(inv.getItem(23));
         assertEquals(Material.CRAFTING_TABLE, inv.getItem(23).getType());
     }
@@ -171,7 +173,7 @@ class PlayerStatsGuiTest {
         PlayerStatsGui gui = new PlayerStatsGui(plugin, guiManager, statsService, player);
         Inventory inv = gui.getInventory();
 
-        // Combat at slot 21 (updated from 22)
+        // Combat at slot 21
         assertNotNull(inv.getItem(21));
         assertEquals(Material.IRON_SWORD, inv.getItem(21).getType());
     }
@@ -301,5 +303,138 @@ class PlayerStatsGuiTest {
         // Session stats at slot 8 - should be lime dye when active
         assertNotNull(inv.getItem(8));
         assertEquals(Material.LIME_DYE, inv.getItem(8).getType());
+    }
+
+    // === New navigation tests for simplified layout ===
+    
+    @Test
+    void hasBadgesButtonAtSlot47() {
+        StatsRecord record = new StatsRecord(player.getUniqueId(), player.getName());
+        when(statsService.getStats(player.getUniqueId())).thenReturn(Optional.of(record));
+
+        PlayerStatsGui gui = new PlayerStatsGui(plugin, guiManager, statsService, player);
+        Inventory inv = gui.getInventory();
+
+        // Badges button at slot 47
+        assertNotNull(inv.getItem(47));
+    }
+
+    @Test
+    void hasFriendsButtonAtSlot48() {
+        StatsRecord record = new StatsRecord(player.getUniqueId(), player.getName());
+        when(statsService.getStats(player.getUniqueId())).thenReturn(Optional.of(record));
+
+        PlayerStatsGui gui = new PlayerStatsGui(plugin, guiManager, statsService, player);
+        Inventory inv = gui.getInventory();
+
+        // Friends button at slot 48
+        assertNotNull(inv.getItem(48));
+        assertEquals(Material.TOTEM_OF_UNDYING, inv.getItem(48).getType());
+    }
+
+    @Test
+    void hasCompareButtonAtSlot49() {
+        StatsRecord record = new StatsRecord(player.getUniqueId(), player.getName());
+        when(statsService.getStats(player.getUniqueId())).thenReturn(Optional.of(record));
+
+        PlayerStatsGui gui = new PlayerStatsGui(plugin, guiManager, statsService, player);
+        Inventory inv = gui.getInventory();
+
+        // Compare button at slot 49
+        assertNotNull(inv.getItem(49));
+        assertEquals(Material.COMPARATOR, inv.getItem(49).getType());
+    }
+
+    @Test
+    void hasMoreStatsButtonAtSlot51() {
+        StatsRecord record = new StatsRecord(player.getUniqueId(), player.getName());
+        when(statsService.getStats(player.getUniqueId())).thenReturn(Optional.of(record));
+
+        PlayerStatsGui gui = new PlayerStatsGui(plugin, guiManager, statsService, player);
+        Inventory inv = gui.getInventory();
+
+        // More Stats button at slot 51
+        assertNotNull(inv.getItem(51));
+        assertEquals(Material.BOOK, inv.getItem(51).getType());
+    }
+
+    @Test
+    void moreStatsButtonOpensSubMenu() {
+        // Use real guiManager for this test
+        GuiManager realGuiManager = new GuiManager(plugin);
+        StatsService realStatsService = plugin.getStatsService();
+        realStatsService.handleJoin(player);
+        
+        PlayerStatsGui gui = new PlayerStatsGui(plugin, realGuiManager, realStatsService, player);
+        realGuiManager.openGui(player, gui);
+        
+        // Click on More Stats button (slot 51)
+        InventoryClickEvent event = new InventoryClickEvent(
+                player.getOpenInventory(), InventoryType.SlotType.CONTAINER,
+                51, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+        gui.handleClick(event);
+        
+        // Should open MoreStatsGui
+        assertTrue(player.getOpenInventory().getTopInventory().getHolder() instanceof MoreStatsGui);
+    }
+
+    @Test
+    void friendsButtonOpensSocialPartnersGui() {
+        // Use real guiManager for this test
+        GuiManager realGuiManager = new GuiManager(plugin);
+        StatsService realStatsService = plugin.getStatsService();
+        realStatsService.handleJoin(player);
+        
+        PlayerStatsGui gui = new PlayerStatsGui(plugin, realGuiManager, realStatsService, player);
+        realGuiManager.openGui(player, gui);
+        
+        // Click on Friends button (slot 48)
+        InventoryClickEvent event = new InventoryClickEvent(
+                player.getOpenInventory(), InventoryType.SlotType.CONTAINER,
+                48, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+        gui.handleClick(event);
+        
+        // Should open SocialPartnersGui
+        assertTrue(player.getOpenInventory().getTopInventory().getHolder() instanceof SocialPartnersGui);
+    }
+
+    @Test
+    void badgesButtonOpensBadgesGui() {
+        // Use real guiManager for this test
+        GuiManager realGuiManager = new GuiManager(plugin);
+        StatsService realStatsService = plugin.getStatsService();
+        realStatsService.handleJoin(player);
+        
+        PlayerStatsGui gui = new PlayerStatsGui(plugin, realGuiManager, realStatsService, player);
+        realGuiManager.openGui(player, gui);
+        
+        // Click on Badges button (slot 47)
+        InventoryClickEvent event = new InventoryClickEvent(
+                player.getOpenInventory(), InventoryType.SlotType.CONTAINER,
+                47, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+        gui.handleClick(event);
+        
+        // Should open BadgesGui
+        assertTrue(player.getOpenInventory().getTopInventory().getHolder() instanceof BadgesGui);
+    }
+
+    @Test
+    void compareButtonOpensPlayerSelectorGui() {
+        // Use real guiManager for this test
+        GuiManager realGuiManager = new GuiManager(plugin);
+        StatsService realStatsService = plugin.getStatsService();
+        realStatsService.handleJoin(player);
+        
+        PlayerStatsGui gui = new PlayerStatsGui(plugin, realGuiManager, realStatsService, player);
+        realGuiManager.openGui(player, gui);
+        
+        // Click on Compare button (slot 49)
+        InventoryClickEvent event = new InventoryClickEvent(
+                player.getOpenInventory(), InventoryType.SlotType.CONTAINER,
+                49, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+        gui.handleClick(event);
+        
+        // Should open PlayerSelectorGui
+        assertTrue(player.getOpenInventory().getTopInventory().getHolder() instanceof PlayerSelectorGui);
     }
 }

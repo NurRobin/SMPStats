@@ -309,7 +309,7 @@ Supported grid sizes:
 | **Personal Heatmap Preview** | Small visual representation of player activity zones | ✅ Done |
 | **Death Replay GUI** | View last death details (cause, location, inventory) | ✅ Done |
 | **Moments/Achievements Browser** | Browse triggered moments with timestamps | ✅ Done |
-| **Friends List GUI** | Frequent companions based on social proximity | ⏳ Todo |
+| **Friends List GUI** | Frequent companions with online filter and mutual friend indicator | ✅ Done |
 | **Admin Player Lookup** | Search and view any player's stats (admin only) | ✅ Done |
 
 ---
