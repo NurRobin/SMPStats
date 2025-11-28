@@ -268,4 +268,38 @@ class PlayerStatsGuiTest {
 
         assertEquals(54, inv.getSize());
     }
+
+    @Test
+    void hasSessionStatsItem() {
+        StatsRecord record = new StatsRecord(player.getUniqueId(), player.getName());
+        when(statsService.getStats(player.getUniqueId())).thenReturn(Optional.of(record));
+        // Session delta is empty by default in mock
+        when(statsService.getSessionDelta(player.getUniqueId())).thenReturn(Optional.empty());
+
+        PlayerStatsGui gui = new PlayerStatsGui(plugin, guiManager, statsService, player);
+        Inventory inv = gui.getInventory();
+
+        // Session stats at slot 8
+        assertNotNull(inv.getItem(8));
+        // Should show gray dye when no active session
+        assertEquals(Material.GRAY_DYE, inv.getItem(8).getType());
+    }
+
+    @Test
+    void sessionStatsShowsGreenDyeWhenActive() {
+        StatsRecord record = new StatsRecord(player.getUniqueId(), player.getName());
+        StatsRecord startRecord = new StatsRecord(player.getUniqueId(), player.getName());
+        when(statsService.getStats(player.getUniqueId())).thenReturn(Optional.of(record));
+        
+        // Create mock session delta
+        StatsService.SessionDelta delta = new StatsService.SessionDelta(startRecord, record, 60000); // 1 minute session
+        when(statsService.getSessionDelta(player.getUniqueId())).thenReturn(Optional.of(delta));
+
+        PlayerStatsGui gui = new PlayerStatsGui(plugin, guiManager, statsService, player);
+        Inventory inv = gui.getInventory();
+
+        // Session stats at slot 8 - should be lime dye when active
+        assertNotNull(inv.getItem(8));
+        assertEquals(Material.LIME_DYE, inv.getItem(8).getType());
+    }
 }

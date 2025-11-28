@@ -93,62 +93,67 @@ public class ComparePlayersGui implements InventoryGui, InventoryHolder {
                         .append(Component.text(record2.getName(), NamedTextColor.RED))));
         
         // === Row 1: Playtime ===
-        addComparisonRow(0, Material.CLOCK, "Playtime",
+        addComparisonRow(0, Material.CLOCK, "⏱ Playtime",
                 formatPlaytime(record1.getPlaytimeMillis()), record1.getPlaytimeMillis(),
                 formatPlaytime(record2.getPlaytimeMillis()), record2.getPlaytimeMillis());
         
         // === Row 2: K/D Ratio ===
         double kd1 = calculateKD(record1);
         double kd2 = calculateKD(record2);
-        addComparisonRow(1, Material.DIAMOND_SWORD, "K/D Ratio",
+        addComparisonRow(1, Material.DIAMOND_SWORD, "⚔ K/D Ratio",
                 String.format("%.2f", kd1), kd1,
                 String.format("%.2f", kd2), kd2);
         
-        // === Row 3: Mob Kills ===
-        addComparisonRow(2, Material.BONE, "Mob Kills",
-                formatNumber(record1.getMobKills()), record1.getMobKills(),
-                formatNumber(record2.getMobKills()), record2.getMobKills());
-        
-        // === Row 4: Blocks ===
+        // === Row 3: Blocks (combined) ===
         long blocks1 = record1.getBlocksBroken() + record1.getBlocksPlaced();
         long blocks2 = record2.getBlocksBroken() + record2.getBlocksPlaced();
-        addComparisonRow(3, Material.GRASS_BLOCK, "Blocks",
+        addComparisonRow(2, Material.GRASS_BLOCK, "🧱 Blocks",
                 formatNumber(blocks1), blocks1,
                 formatNumber(blocks2), blocks2);
         
-        // === Row 5: Distance Traveled ===
+        // === Row 4: Distance Traveled ===
         double dist1 = record1.getDistanceOverworld() + record1.getDistanceNether() + record1.getDistanceEnd();
         double dist2 = record2.getDistanceOverworld() + record2.getDistanceNether() + record2.getDistanceEnd();
-        addComparisonRow(4, Material.LEATHER_BOOTS, "Distance",
+        addComparisonRow(3, Material.LEATHER_BOOTS, "🏃 Distance",
                 formatDistance(dist1), dist1,
                 formatDistance(dist2), dist2);
-        
-        // === Row 6: Biomes Visited ===
-        int biomes1 = record1.getBiomesVisited() != null ? record1.getBiomesVisited().size() : 0;
-        int biomes2 = record2.getBiomesVisited() != null ? record2.getBiomesVisited().size() : 0;
-        addComparisonRow(5, Material.MAP, "Biomes",
-                String.valueOf(biomes1), biomes1,
-                String.valueOf(biomes2), biomes2);
-        
-        // === Row 7: Total Skill Points ===
-        addComparisonRow(6, Material.EXPERIENCE_BOTTLE, "Skill Points",
-                formatNumber((long) skills1.total()), skills1.total(),
-                formatNumber((long) skills2.total()), skills2.total());
-        
-        // === Row 8: Deaths ===
-        // Lower is better for deaths, so flip the comparison
-        addComparisonRow(7, Material.SKELETON_SKULL, "Deaths",
-                formatNumber(record1.getDeaths()), -record1.getDeaths(),  // negative so less is "better"
-                formatNumber(record2.getDeaths()), -record2.getDeaths());
         
         // === Skill Comparison (bottom section) ===
         addSkillComparisonBar(skills1, skills2);
         
+        // Add summary row with total scores
+        addSummaryRow(record1, record2, skills1, skills2);
+        
         addBackButton();
+    }
+    
+    private void addSummaryRow(StatsRecord r1, StatsRecord r2, SkillProfile s1, SkillProfile s2) {
+        // Count wins for each player
+        int p1Wins = 0, p2Wins = 0;
+        
+        // Compare all metrics
+        if (r1.getPlaytimeMillis() > r2.getPlaytimeMillis()) p1Wins++; else if (r2.getPlaytimeMillis() > r1.getPlaytimeMillis()) p2Wins++;
+        if (calculateKD(r1) > calculateKD(r2)) p1Wins++; else if (calculateKD(r2) > calculateKD(r1)) p2Wins++;
+        if ((r1.getBlocksBroken() + r1.getBlocksPlaced()) > (r2.getBlocksBroken() + r2.getBlocksPlaced())) p1Wins++; 
+        else if ((r2.getBlocksBroken() + r2.getBlocksPlaced()) > (r1.getBlocksBroken() + r1.getBlocksPlaced())) p2Wins++;
+        double dist1 = r1.getDistanceOverworld() + r1.getDistanceNether() + r1.getDistanceEnd();
+        double dist2 = r2.getDistanceOverworld() + r2.getDistanceNether() + r2.getDistanceEnd();
+        if (dist1 > dist2) p1Wins++; else if (dist2 > dist1) p2Wins++;
+        if (s1.total() > s2.total()) p1Wins++; else if (s2.total() > s1.total()) p2Wins++;
+        
+        // Summary in slot 50 (between skill bar and back button)
+        NamedTextColor winnerColor = p1Wins > p2Wins ? NamedTextColor.AQUA : (p2Wins > p1Wins ? NamedTextColor.RED : NamedTextColor.YELLOW);
+        String winnerText = p1Wins > p2Wins ? "Player 1 Leads!" : (p2Wins > p1Wins ? "Player 2 Leads!" : "It's a Tie!");
+        
+        inventory.setItem(51, createGuiItem(Material.GOLDEN_APPLE,
+                Component.text("🏆 " + winnerText, winnerColor).decorate(TextDecoration.BOLD),
+                Component.text("Player 1: " + p1Wins + " wins", NamedTextColor.AQUA),
+                Component.text("Player 2: " + p2Wins + " wins", NamedTextColor.RED)));
     }
     
     /**
      * Adds a comparison row with color-coded winner indication.
+     * Uses a cleaner 3-column layout: Left stat | Icon | Right stat
      */
     private void addComparisonRow(int rowIndex, Material icon, String statName,
                                    String value1Text, double value1, String value2Text, double value2) {
@@ -168,19 +173,13 @@ public class ComparePlayersGui implements InventoryGui, InventoryHolder {
             color2 = NamedTextColor.YELLOW;
         }
         
-        // Calculate row offsets - 2 rows of 4 stats each
-        int col, row;
-        if (rowIndex < 4) {
-            col = 0;
-            row = rowIndex;
-        } else {
-            col = 1;
-            row = rowIndex - 4;
-        }
-        
-        int slot1 = 9 + (row * 9) + col;          // Left side (columns 0-1)
-        int slotLabel = 12 + (row * 9) + col;     // Center (columns 3-4)
-        int slot2 = 15 + (row * 9) + col + 1;     // Right side (columns 7-8)
+        // Clean row-based layout:
+        // Row 0 starts at slot 9 (second row)
+        // Each row: slots 10, 13, 16 (left, center, right) with proper spacing
+        int baseSlot = 9 + (rowIndex * 9);
+        int slot1 = baseSlot + 1;      // Left side (column 1)
+        int slotLabel = baseSlot + 4;  // Center (column 4)
+        int slot2 = baseSlot + 7;      // Right side (column 7)
         
         // Player 1 stat (left)
         inventory.setItem(slot1, createGuiItem(

@@ -16,7 +16,9 @@ import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
@@ -65,6 +67,9 @@ public class PlayerStatsGui implements InventoryGui, InventoryHolder {
                         .append(Component.text(formatDate(record.getFirstJoin()), NamedTextColor.WHITE)),
                 Component.text("Last Seen: ", NamedTextColor.DARK_GRAY)
                         .append(Component.text(formatDate(record.getLastJoin()), NamedTextColor.WHITE))));
+
+        // Session Stats (slot 8) - shows activity since login
+        addSessionStats(record);
 
         // === ROW 2: Core Stats ===
         // Playtime (slot 10)
@@ -183,6 +188,56 @@ public class PlayerStatsGui implements InventoryGui, InventoryHolder {
         inventory.setItem(43, createGuiItem(Material.NETHER_STAR, 
                 Component.text("🏆 Best Skill", NamedTextColor.LIGHT_PURPLE).decorate(TextDecoration.BOLD),
                 Component.text(bestSkill, NamedTextColor.WHITE)));
+    }
+
+    private void addSessionStats(StatsRecord record) {
+        Optional<StatsService.SessionDelta> deltaOpt = statsService.getSessionDelta(targetPlayer.getUniqueId());
+        
+        if (deltaOpt.isEmpty()) {
+            // Player not in active session (shouldn't happen for online player, but handle gracefully)
+            inventory.setItem(8, createGuiItem(Material.GRAY_DYE,
+                    Component.text("📊 Session Stats", NamedTextColor.GRAY),
+                    Component.text("No active session", NamedTextColor.DARK_GRAY)));
+            return;
+        }
+        
+        StatsService.SessionDelta delta = deltaOpt.get();
+        long sessionMinutes = TimeUnit.MILLISECONDS.toMinutes(delta.durationMillis());
+        
+        List<Component> lore = new ArrayList<>();
+        lore.add(Component.text("Since login (" + sessionMinutes + "m ago):", NamedTextColor.GRAY));
+        lore.add(Component.empty());
+        
+        // Only show non-zero deltas
+        if (delta.deltaKills() > 0) {
+            lore.add(Component.text("  ⚔ Kills: ", NamedTextColor.RED)
+                    .append(Component.text("+" + delta.deltaKills(), NamedTextColor.GREEN)));
+        }
+        if (delta.deltaDeaths() > 0) {
+            lore.add(Component.text("  💀 Deaths: ", NamedTextColor.DARK_RED)
+                    .append(Component.text("+" + delta.deltaDeaths(), NamedTextColor.RED)));
+        }
+        if (delta.deltaBlocks() > 0) {
+            lore.add(Component.text("  🧱 Blocks: ", NamedTextColor.YELLOW)
+                    .append(Component.text("+" + formatNumber(delta.deltaBlocks()), NamedTextColor.GREEN)));
+        }
+        if (delta.deltaDistance() > 100) { // Only show if moved significant distance
+            lore.add(Component.text("  🏃 Distance: ", NamedTextColor.AQUA)
+                    .append(Component.text("+" + formatDistance(delta.deltaDistance()), NamedTextColor.GREEN)));
+        }
+        if (delta.deltaBiomes() > 0) {
+            lore.add(Component.text("  🗺 New Biomes: ", NamedTextColor.LIGHT_PURPLE)
+                    .append(Component.text("+" + delta.deltaBiomes(), NamedTextColor.GREEN)));
+        }
+        
+        // If nothing happened this session
+        if (lore.size() == 2) {
+            lore.add(Component.text("  No activity yet!", NamedTextColor.DARK_GRAY));
+        }
+        
+        inventory.setItem(8, createGuiItem(Material.LIME_DYE,
+                Component.text("📊 Session Stats", NamedTextColor.GREEN).decorate(TextDecoration.BOLD),
+                lore.toArray(new Component[0])));
     }
 
     private ItemStack createSkillItem(Material material, String name, double value, NamedTextColor color) {

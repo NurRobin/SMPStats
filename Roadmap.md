@@ -222,9 +222,9 @@ These principles guide every feature and decision:
 | **Time-Range Filters** | Medium | M | ✅ Done | Query "last 6h", "today", "this week" |
 | **Biome-Filtered Views** | Low | S | ⏳ Todo | Filter any heatmap by biome type |
 | **In-Game GUI** | High | L | ✅ Done | Rich chest-menu interface with visual insights |
-| **Enhanced Leaderboard GUI** | High | M | ⏳ Todo | Player skulls with rank position, top 50 pagination, visual ranking |
+| **Enhanced Leaderboard GUI** | High | M | ✅ Done | Player skulls with rank position, Find My Rank, visual ranking |
 | **Live Activity Dashboard** | Medium | M | ⚠️ Partial | "Who's farming what right now" real-time view |
-| **Player Comparison Views** | Medium | M | ⏳ Todo | Side-by-side stat comparisons in GUI |
+| **Player Comparison Views** | Medium | M | ✅ Done | Side-by-side stat comparisons in GUI |
 
 ### Technical Deep Dive
 
@@ -284,19 +284,20 @@ Supported grid sizes:
 
 | Feature | Description | Status |
 |---------|-------------|--------|
-| **Skill Profile Display** | Visual skill bars in PlayerStatsGui (Mining, Combat, Explorer, Builder, Farmer) | ⏳ Todo |
-| **First/Last Join Dates** | Show join timestamps in PlayerStatsGui | ⏳ Todo |
-| **K/D Ratio** | Calculate and display kill/death ratio | ⏳ Todo |
-| **Biomes Progress** | "X/Y biomes discovered" with visual progress | ⏳ Todo |
-| **Find My Rank** | Button in leaderboards to jump to viewer's page | ⏳ Todo |
-| **Session Stats** | "Since login: +X kills, +Y blocks" display | ⏳ Todo |
+| **Skill Profile Display** | Visual skill bars in PlayerStatsGui (Mining, Combat, Explorer, Builder, Farmer) | ✅ Done |
+| **First/Last Join Dates** | Show join timestamps in PlayerStatsGui | ✅ Done |
+| **K/D Ratio** | Calculate and display kill/death ratio | ✅ Done |
+| **Biomes Progress** | "X/Y biomes discovered" with visual progress | ✅ Done |
+| **Find My Rank** | Button in leaderboards to jump to viewer's page | ✅ Done |
+| **Session Stats** | "Since login: +X kills, +Y blocks" display | ✅ Done |
 
 #### Medium Features
 
 | Feature | Description | Status |
 |---------|-------------|--------|
-| **Player Comparison GUI** | Side-by-side stat comparison between two players | ⏳ Todo |
-| **Social Partners GUI** | "Who I play with most" - top companions from proximity data | ⏳ Todo |
+| **Player Comparison GUI** | Side-by-side stat comparison between two players | ✅ Done |
+| **Social Partners GUI** | "Who I play with most" - top companions from proximity data | ✅ Done |
+| **Player Selector GUI** | Browse and select players for comparison with pagination | ✅ Done |
 | **Timeline Delta View** | "This week vs last week" stat changes | ⏳ Todo |
 | **Achievement Badges** | Visual badges for milestones/moments | ⏳ Todo |
 | **Animated Borders** | Cycling border colors for highlighted items | ⏳ Todo |
