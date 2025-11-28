@@ -310,7 +310,7 @@ Supported grid sizes:
 | **Death Replay GUI** | View last death details (cause, location, inventory) | ✅ Done |
 | **Moments/Achievements Browser** | Browse triggered moments with timestamps | ✅ Done |
 | **Friends List GUI** | Frequent companions based on social proximity | ⏳ Todo |
-| **Admin Player Lookup** | Search and view any player's stats (admin only) | ⏳ Todo |
+| **Admin Player Lookup** | Search and view any player's stats (admin only) | ✅ Done |
 
 ---
 

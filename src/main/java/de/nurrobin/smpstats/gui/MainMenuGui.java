@@ -101,6 +101,19 @@ public class MainMenuGui implements InventoryGui, InventoryHolder {
                     ? Component.text("▶ Click to view", NamedTextColor.GREEN)
                     : Component.text("✖ Requires Permission", NamedTextColor.DARK_RED)));
 
+        // Admin Player Lookup (slot 31) - only visible to admins
+        boolean isAdmin = player.hasPermission("smpstats.admin");
+        if (isAdmin) {
+            inventory.setItem(31, createGuiItem(Material.COMMAND_BLOCK,
+                    Component.text("🔍 Player Lookup", NamedTextColor.GOLD).decorate(TextDecoration.BOLD),
+                    Component.text("Admin: Search any player", NamedTextColor.GRAY),
+                    Component.empty(),
+                    Component.text("View stats of any player", NamedTextColor.DARK_GRAY),
+                    Component.text("Search and sort players", NamedTextColor.DARK_GRAY),
+                    Component.empty(),
+                    Component.text("▶ Click to open", NamedTextColor.GREEN)));
+        }
+
         // Quick tips at bottom
         addQuickTips();
         
@@ -213,6 +226,20 @@ public class MainMenuGui implements InventoryGui, InventoryHolder {
             }
             guiManager.openGui(player, new LeaderboardsGui(plugin, guiManager, statsService, healthService, 
                     LeaderboardsGui.LeaderboardType.PLAYTIME, 0));
+        } else if (event.getSlot() == 31) {
+            // Open Admin Player Lookup
+            if (!player.hasPermission("smpstats.admin")) {
+                playErrorSound(player);
+                player.sendMessage(Component.text("You do not have permission to use admin features.", NamedTextColor.RED));
+                return;
+            }
+            plugin.getStatsStorage().ifPresentOrElse(
+                    storage -> guiManager.openGui(player, new AdminPlayerLookupGui(plugin, guiManager, statsService, storage, player)),
+                    () -> {
+                        playErrorSound(player);
+                        player.sendMessage(Component.text("Storage is not available.", NamedTextColor.RED));
+                    }
+            );
         } else if (event.getSlot() == 40) {
             // Close menu
             player.closeInventory();
