@@ -3,15 +3,25 @@ package de.nurrobin.smpstats.gui;
 import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.StatsService;
 import de.nurrobin.smpstats.health.ServerHealthService;
+import de.nurrobin.smpstats.StatsRecord;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Material;
+import org.bukkit.event.inventory.ClickType;
+import org.bukkit.event.inventory.InventoryAction;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
+
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -190,5 +200,56 @@ class MainMenuGuiTest {
         gui.handleClick(event);
         
         verify(guiManager).openGui(eq(player), any(ServerHealthGui.class));
+    }
+
+    @Test
+    void showsAdminLookupWhenPlayerIsAdmin() {
+        player.addAttachment(plugin, "smpstats.admin", true);
+        MainMenuGui gui = new MainMenuGui(plugin, guiManager, statsService, healthService);
+        gui.open(player);
+
+        ItemStack adminItem = gui.getInventory().getItem(31);
+        assertNotNull(adminItem);
+        assertEquals(Material.COMMAND_BLOCK, adminItem.getType());
+    }
+
+    @Test
+    void rendersStatsPreviewWhenStatsAvailable() {
+        StatsRecord record = new StatsRecord(player.getUniqueId(), player.getName());
+        record.setPlaytimeMillis(TimeUnit.HOURS.toMillis(10));
+        record.setMobKills(10);
+        record.setPlayerKills(5);
+        record.setDeaths(2);
+        record.setBiomesVisited(Set.of("PLAINS", "DESERT"));
+        when(statsService.getStats(player.getUniqueId())).thenReturn(Optional.of(record));
+        player.addAttachment(plugin, "smpstats.gui.stats", true);
+
+        MainMenuGui gui = new MainMenuGui(plugin, guiManager, statsService, healthService);
+        gui.open(player);
+
+        ItemStack myStats = gui.getInventory().getItem(20);
+        assertNotNull(myStats);
+        assertNotNull(myStats.getItemMeta().getLore());
+        boolean hasPlaytime = myStats.getItemMeta().getLore().stream()
+                .map(Object::toString)
+                .anyMatch(line -> line.contains("Playtime"));
+        assertTrue(hasPlaytime);
+    }
+
+    @Test
+    void handleClickAdminOpensLookupWhenPermitted() {
+        player.addAttachment(plugin, "smpstats.admin", true);
+        GuiManager realGuiManager = new GuiManager(plugin);
+        StatsService realStatsService = plugin.getStatsService();
+        realStatsService.handleJoin(player);
+
+        MainMenuGui gui = new MainMenuGui(plugin, realGuiManager, realStatsService, healthService);
+        gui.open(player);
+
+        InventoryClickEvent adminClick = new InventoryClickEvent(
+                player.getOpenInventory(), InventoryType.SlotType.CONTAINER, 31, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+        gui.handleClick(adminClick);
+
+        assertTrue(player.getOpenInventory().getTopInventory().getHolder() instanceof AdminPlayerLookupGui);
     }
 }

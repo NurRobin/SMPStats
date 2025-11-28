@@ -6,14 +6,23 @@ import org.mockbukkit.mockbukkit.entity.PlayerMock;
 import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.StatsService;
 import de.nurrobin.smpstats.moments.MomentService;
+import de.nurrobin.smpstats.database.StatsStorage;
+import de.nurrobin.smpstats.moments.MomentEntry;
 import org.bukkit.Material;
+import org.bukkit.event.inventory.ClickType;
+import org.bukkit.event.inventory.InventoryAction;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -185,5 +194,76 @@ class MomentsHistoryGuiTest {
         assertNotNull(gui);
         assertNotNull(gui.getInventory());
         assertEquals(54, gui.getInventory().getSize());
+    }
+
+    @Test
+    void rendersMomentEntriesWithDetailsAndDuration() throws Exception {
+        StatsStorage storage = plugin.getStatsStorage().orElseThrow();
+        long now = System.currentTimeMillis();
+        MomentEntry entry = new MomentEntry(null, viewer.getUniqueId(), "boss_kill", "Dragon Slayer",
+                "Defeated the dragon", null, "world", 10, 64, -5, now - 5000, now);
+        storage.saveMoment(entry);
+
+        MomentsHistoryGui gui = new MomentsHistoryGui(plugin, guiManager, statsService,
+                momentService, viewer, viewer.getUniqueId());
+        Inventory inventory = gui.getInventory();
+
+        ItemStack momentItem = inventory.getItem(10);
+        assertNotNull(momentItem);
+        assertEquals(Material.WITHER_SKELETON_SKULL, momentItem.getType());
+
+        List<String> lore = new ArrayList<>();
+        momentItem.getItemMeta().getLore().forEach(c -> lore.add(c.toString()));
+
+        assertTrue(lore.stream().anyMatch(line -> line.contains("Duration")), "Duration should be shown in lore");
+        assertTrue(lore.stream().anyMatch(line -> line.contains("Location")), "Location should be included in lore");
+    }
+
+    @Test
+    void paginatesMomentsAndHandlesNavigation() throws Exception {
+        StatsStorage storage = plugin.getStatsStorage().orElseThrow();
+        long base = System.currentTimeMillis();
+        for (int i = 0; i < 25; i++) {
+            storage.saveMoment(new MomentEntry(null, viewer.getUniqueId(), "block_break", "Run " + i,
+                    "Broke a lot of blocks", null, "world", i, 64, i,
+                    base - TimeUnit.MINUTES.toMillis(i + 1), base - TimeUnit.MINUTES.toMillis(i)));
+        }
+
+        MomentsHistoryGui gui = new MomentsHistoryGui(plugin, guiManager, statsService,
+                momentService, viewer, viewer.getUniqueId());
+        guiManager.openGui(viewer, gui);
+        assertNotNull(gui.getInventory().getItem(50), "Next page button should be present");
+
+        InventoryClickEvent nextPage = new InventoryClickEvent(
+                viewer.getOpenInventory(), InventoryType.SlotType.CONTAINER,
+                50, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+        gui.handleClick(nextPage);
+
+        assertTrue(viewer.getOpenInventory().getTopInventory().getHolder() instanceof MomentsHistoryGui, "Should open next page");
+
+        InventoryClickEvent prevPage = new InventoryClickEvent(
+                viewer.getOpenInventory(), InventoryType.SlotType.CONTAINER,
+                48, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+        ((MomentsHistoryGui) viewer.getOpenInventory().getTopInventory().getHolder()).handleClick(prevPage);
+
+        assertTrue(viewer.getOpenInventory().getTopInventory().getHolder() instanceof MomentsHistoryGui, "Should return to previous page");
+    }
+
+    @Test
+    void formatsOldMomentsWithDateString() throws Exception {
+        StatsStorage storage = plugin.getStatsStorage().orElseThrow();
+        long tenDaysAgo = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(10);
+        storage.saveMoment(new MomentEntry(null, viewer.getUniqueId(), "item_gain", "Ancient Loot",
+                "Picked up a relic", null, "world", 1, 70, 1, tenDaysAgo, tenDaysAgo + 2000));
+
+        MomentsHistoryGui gui = new MomentsHistoryGui(plugin, guiManager, statsService,
+                momentService, viewer, viewer.getUniqueId());
+        ItemStack item = gui.getInventory().getItem(10);
+        assertNotNull(item);
+
+        List<String> lore = new ArrayList<>();
+        item.getItemMeta().getLore().forEach(c -> lore.add(c.toString()));
+
+        assertTrue(lore.get(0).contains(",") || lore.get(0).contains("20"), "Old moments should use date formatting");
     }
 }

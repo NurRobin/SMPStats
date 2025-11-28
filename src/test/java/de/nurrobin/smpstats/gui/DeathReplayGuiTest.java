@@ -8,6 +8,10 @@ import de.nurrobin.smpstats.StatsService;
 import de.nurrobin.smpstats.database.StatsStorage;
 import de.nurrobin.smpstats.timeline.DeathReplayEntry;
 import org.bukkit.Material;
+import org.bukkit.event.inventory.ClickType;
+import org.bukkit.event.inventory.InventoryAction;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.AfterEach;
@@ -17,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -491,5 +496,75 @@ class DeathReplayGuiTest {
         ItemStack death = inventory.getItem(10);
         assertNotNull(death);
         assertEquals(Material.LAVA_BUCKET, death.getType()); // fire uses LAVA_BUCKET
+    }
+
+    @Test
+    void paginatesDeathsAndNavigatesBetweenPages() throws SQLException {
+        StatsStorage storage = plugin.getStatsStorage().orElseThrow();
+
+        for (int i = 0; i < 25; i++) {
+            DeathReplayEntry entry = new DeathReplayEntry(
+                    System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(i),
+                    viewer.getUniqueId().toString(),
+                    viewer.getName(),
+                    "fell from a high place " + i,
+                    0.0,
+                    "world",
+                    i, 64, i,
+                    10.0,
+                    List.of(),
+                    List.of(),
+                    List.of()
+            );
+            storage.saveDeathReplay(entry);
+        }
+
+        DeathReplayGui gui = new DeathReplayGui(plugin, guiManager, statsService,
+                storage, viewer, viewer.getUniqueId());
+        guiManager.openGui(viewer, gui);
+        assertNotNull(gui.getInventory().getItem(50), "Next page button should be present");
+
+        InventoryClickEvent next = new InventoryClickEvent(
+                viewer.getOpenInventory(), InventoryType.SlotType.CONTAINER,
+                50, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+        gui.handleClick(next);
+        assertTrue(viewer.getOpenInventory().getTopInventory().getHolder() instanceof DeathReplayGui);
+
+        InventoryClickEvent prev = new InventoryClickEvent(
+                viewer.getOpenInventory(), InventoryType.SlotType.CONTAINER,
+                48, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+        ((DeathReplayGui) viewer.getOpenInventory().getTopInventory().getHolder()).handleClick(prev);
+        assertTrue(viewer.getOpenInventory().getTopInventory().getHolder() instanceof DeathReplayGui);
+    }
+
+    @Test
+    void formatsMobsAndInventoryInLore() throws SQLException {
+        StatsStorage storage = plugin.getStatsStorage().orElseThrow();
+        DeathReplayEntry entry = new DeathReplayEntry(
+                System.currentTimeMillis() - TimeUnit.HOURS.toMillis(10),
+                viewer.getUniqueId().toString(),
+                viewer.getName(),
+                "was killed by Skeleton",
+                0.0,
+                "world",
+                10, 64, 10,
+                8.0,
+                List.of(),
+                List.of("ZOMBIE", "SKELETON", "CREEPER", "SPIDER", "BLAZE", "WITCH"),
+                List.of("DIAMOND_SWORD", "GOLDEN_APPLE")
+        );
+        storage.saveDeathReplay(entry);
+
+        DeathReplayGui gui = new DeathReplayGui(plugin, guiManager, statsService,
+                storage, viewer, viewer.getUniqueId());
+        ItemStack deathItem = gui.getInventory().getItem(10);
+        assertNotNull(deathItem);
+
+        List<String> lore = deathItem.getItemMeta().getLore().stream()
+                .map(Object::toString)
+                .toList();
+
+        assertTrue(lore.stream().anyMatch(l -> l.contains("... and")), "Lore should collapse long mob lists");
+        assertTrue(lore.stream().anyMatch(l -> l.contains("item")), "Lore should mention carried items");
     }
 }

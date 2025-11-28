@@ -431,4 +431,87 @@ class AdminPlayerLookupGuiTest {
         assertNotNull(onlineFilter);
         assertEquals(Material.ENDER_EYE, onlineFilter.getType());
     }
+
+    @Test
+    void testClickingOfflinePlayerShowsMessage() throws SQLException {
+        StatsRecord offline = new StatsRecord(UUID.randomUUID(), "OfflineGuy");
+        offline.setLastJoin(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(60));
+        when(storage.loadAll()).thenReturn(List.of(offline));
+
+        AdminPlayerLookupGui gui = new AdminPlayerLookupGui(plugin, guiManager, statsService, storage, viewer);
+        guiManager.openGui(viewer, gui);
+
+        InventoryClickEvent clickPlayer = new InventoryClickEvent(
+                viewer.getOpenInventory(), InventoryType.SlotType.CONTAINER,
+                10, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+        gui.handleClick(clickPlayer);
+
+        assertTrue(viewer.nextMessage().contains("offline player"));
+    }
+
+    @Test
+    void testClickingOnlinePlayerOpensStatsGui() throws SQLException {
+        PlayerMock online = server.addPlayer("OnlinePlayer");
+        StatsRecord record = new StatsRecord(online.getUniqueId(), online.getName());
+        record.setPlaytimeMillis(TimeUnit.HOURS.toMillis(5));
+        when(storage.loadAll()).thenReturn(List.of(record));
+
+        AdminPlayerLookupGui gui = new AdminPlayerLookupGui(plugin, guiManager, statsService, storage, viewer);
+        guiManager.openGui(viewer, gui);
+
+        InventoryClickEvent clickPlayer = new InventoryClickEvent(
+                viewer.getOpenInventory(), InventoryType.SlotType.CONTAINER,
+                10, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+        gui.handleClick(clickPlayer);
+
+        assertTrue(viewer.getOpenInventory().getTopInventory().getHolder() instanceof PlayerStatsGui);
+    }
+
+    @Test
+    void testSortingByKillsAndDeaths() throws SQLException {
+        StatsRecord lowKills = new StatsRecord(UUID.randomUUID(), "Low");
+        lowKills.setMobKills(1);
+        lowKills.setPlayerKills(0);
+        lowKills.setDeaths(1);
+        lowKills.setLastJoin(System.currentTimeMillis());
+
+        StatsRecord highKills = new StatsRecord(UUID.randomUUID(), "High");
+        highKills.setMobKills(200);
+        highKills.setPlayerKills(5);
+        highKills.setDeaths(2);
+        highKills.setLastJoin(System.currentTimeMillis());
+
+        StatsRecord mostDeaths = new StatsRecord(UUID.randomUUID(), "Death");
+        mostDeaths.setMobKills(10);
+        mostDeaths.setPlayerKills(1);
+        mostDeaths.setDeaths(50);
+        mostDeaths.setLastJoin(System.currentTimeMillis());
+
+        when(storage.loadAll()).thenReturn(List.of(lowKills, highKills, mostDeaths));
+
+        AdminPlayerLookupGui gui = new AdminPlayerLookupGui(plugin, guiManager, statsService, storage, viewer);
+
+        // Cycle to KILLS sort mode
+        for (int i = 0; i < 3; i++) {
+            InventoryClickEvent event = new InventoryClickEvent(
+                    viewer.getOpenInventory(), InventoryType.SlotType.CONTAINER,
+                    0, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+            gui.handleClick(event);
+        }
+        ItemStack firstByKills = gui.getInventory().getItem(10);
+        assertNotNull(firstByKills);
+        String killsName = PlainTextComponentSerializer.plainText().serialize(firstByKills.getItemMeta().displayName());
+        assertTrue(killsName.contains("High"), "High kill record should appear first when sorting by kills");
+
+        // Cycle once more to DEATHS sort mode
+        InventoryClickEvent toDeaths = new InventoryClickEvent(
+                viewer.getOpenInventory(), InventoryType.SlotType.CONTAINER,
+                0, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+        gui.handleClick(toDeaths);
+
+        ItemStack firstByDeaths = gui.getInventory().getItem(10);
+        assertNotNull(firstByDeaths);
+        String deathsName = PlainTextComponentSerializer.plainText().serialize(firstByDeaths.getItemMeta().displayName());
+        assertTrue(deathsName.contains("Death"), "Player with most deaths should be first when sorting by deaths");
+    }
 }

@@ -260,4 +260,78 @@ class BadgesGuiTest {
         
         assertNotNull(player.getOpenInventory());
     }
+
+    @Test
+    void testToggleShowUnearnedAddsPaginationAndGrayBadges() {
+        StatsRecord partial = new StatsRecord(player.getUniqueId(), "Partial");
+        partial.setPlaytimeMillis(TimeUnit.HOURS.toMillis(2));
+        partial.setMobKills(5); // few badges earned
+        when(statsService.getStats(player.getUniqueId())).thenReturn(Optional.of(partial));
+
+        BadgesGui gui = new BadgesGui(plugin, guiManager, statsService, player, player.getUniqueId());
+        guiManager.openGui(player, gui);
+
+        InventoryClickEvent toggle = new InventoryClickEvent(
+                player.getOpenInventory(), InventoryType.SlotType.CONTAINER,
+                47, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+        gui.handleClick(toggle); // show all badges including unearned
+
+        // Unearned badges should use gray dye and pagination should appear
+        boolean foundGray = false;
+        for (int slot : new int[]{19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43}) {
+            ItemStack item = gui.getInventory().getItem(slot);
+            if (item != null && item.getType() == Material.GRAY_DYE) {
+                foundGray = true;
+                break;
+            }
+        }
+        assertTrue(foundGray, "Unearned badges should be displayed in gray");
+
+        ItemStack nextPage = gui.getInventory().getItem(50);
+        assertNotNull(nextPage);
+        assertEquals(Material.SPECTRAL_ARROW, nextPage.getType());
+    }
+
+    @Test
+    void testCategoryFilterNarrowsDisplayedBadges() {
+        StatsRecord richStats = createRecordWithBadges();
+        richStats.setPlayerKills(60);
+        richStats.setMobKills(20_000);
+        richStats.setBlocksBroken(600_000);
+        richStats.setBlocksPlaced(600_000);
+        richStats.setItemsCrafted(6_000);
+        richStats.setItemsConsumed(6_000);
+        richStats.setDistanceOverworld(1_200_000);
+        richStats.setDistanceNether(50_000);
+        richStats.setDistanceEnd(10_000);
+        richStats.setDamageDealt(200_000);
+        richStats.setDamageTaken(60_000);
+        richStats.setDeaths(0);
+        richStats.setPlaytimeMillis(TimeUnit.HOURS.toMillis(1200));
+        when(statsService.getStats(player.getUniqueId())).thenReturn(Optional.of(richStats));
+
+        BadgesGui gui = new BadgesGui(plugin, guiManager, statsService, player, player.getUniqueId());
+        int beforeFilter = countBadgeItems(gui.getInventory());
+
+        // Click first category filter (COMBAT)
+        InventoryClickEvent filterCombat = new InventoryClickEvent(
+                player.getOpenInventory(), InventoryType.SlotType.CONTAINER,
+                10, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+        gui.handleClick(filterCombat);
+
+        int afterFilter = countBadgeItems(gui.getInventory());
+        assertTrue(afterFilter <= beforeFilter, "Filtering should not increase number of visible badges");
+    }
+
+    private int countBadgeItems(Inventory inventory) {
+        int count = 0;
+        int[] slots = {19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43};
+        for (int slot : slots) {
+            ItemStack item = inventory.getItem(slot);
+            if (item != null && item.getType() != Material.BLACK_STAINED_GLASS_PANE) {
+                count++;
+            }
+        }
+        return count;
+    }
 }

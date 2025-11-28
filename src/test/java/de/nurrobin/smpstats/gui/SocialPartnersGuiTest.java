@@ -17,6 +17,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.UUID;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -245,11 +246,95 @@ class SocialPartnersGuiTest {
             InventoryClickEvent event = new InventoryClickEvent(
                     viewer.getOpenInventory(), InventoryType.SlotType.CONTAINER,
                     49, ClickType.LEFT, InventoryAction.PICKUP_ALL);
-            assertDoesNotThrow(() -> gui.handleClick(event));
+        assertDoesNotThrow(() -> gui.handleClick(event));
         }
         
         // GUI should still be functional after cycling - back to HOPPER (ALL)
         assertEquals(Material.HOPPER, gui.getInventory().getItem(49).getType());
     }
-}
 
+    @Test
+    void showsPartnersAndFiltersOnlineAndTop() throws Exception {
+        StatsStorage storage = plugin.getStatsStorage().orElseThrow();
+
+        PlayerMock bestFriend = server.addPlayer("BestFriend");
+        statsService.handleJoin(bestFriend);
+        UUID offlinePartner = UUID.randomUUID();
+
+        storage.incrementSocialPair(viewer.getUniqueId(), bestFriend.getUniqueId(), 20_000, 5, 2, 3);
+        storage.incrementSocialPair(viewer.getUniqueId(), offlinePartner, 300, 1, 0, 1);
+
+        SocialPartnersGui gui = new SocialPartnersGui(plugin, guiManager, statsService,
+                storage, viewer, viewer.getUniqueId());
+        guiManager.openGui(viewer, gui);
+
+        int initialHeads = countHeads(gui.getInventory());
+        assertTrue(initialHeads >= 2, "Both partners should be visible initially");
+
+        InventoryClickEvent filterOnline = new InventoryClickEvent(
+                viewer.getOpenInventory(), InventoryType.SlotType.CONTAINER,
+                49, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+        gui.handleClick(filterOnline);
+        assertEquals(1, countHeads(gui.getInventory()), "Online filter should hide offline partners");
+
+        InventoryClickEvent filterTop = new InventoryClickEvent(
+                viewer.getOpenInventory(), InventoryType.SlotType.CONTAINER,
+                49, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+        gui.handleClick(filterTop);
+        assertEquals(1, countHeads(gui.getInventory()), "Top partners filter keeps best friend only");
+    }
+
+    @Test
+    void clickingOfflinePartnerShowsMessage() throws Exception {
+        StatsStorage storage = plugin.getStatsStorage().orElseThrow();
+        UUID offlinePartner = UUID.randomUUID();
+        storage.incrementSocialPair(viewer.getUniqueId(), offlinePartner, 5_000, 0, 0, 0);
+
+        SocialPartnersGui gui = new SocialPartnersGui(plugin, guiManager, statsService,
+                storage, viewer, viewer.getUniqueId());
+        guiManager.openGui(viewer, gui);
+
+        int partnerSlot = findFirstHeadSlot(gui.getInventory());
+        assertTrue(partnerSlot >= 0, "Expected a partner head to click");
+
+        InventoryClickEvent clickPartner = new InventoryClickEvent(
+                viewer.getOpenInventory(), InventoryType.SlotType.CONTAINER,
+                partnerSlot, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+        gui.handleClick(clickPartner);
+
+        String message = viewer.nextMessage();
+        assertNotNull(message, "Clicking an offline partner should send feedback");
+        assertTrue(message.contains("offline"));
+    }
+
+    private int countHeads(Inventory inventory) {
+        int heads = 0;
+        int[] partnerSlots = {
+                10, 11, 12, 13, 14, 15, 16,
+                19, 20, 21, 22, 23, 24, 25,
+                28, 29, 30, 31, 32, 33, 34
+        };
+        for (int slot : partnerSlots) {
+            ItemStack item = inventory.getItem(slot);
+            if (item != null && item.getType() == Material.PLAYER_HEAD) {
+                heads++;
+            }
+        }
+        return heads;
+    }
+
+    private int findFirstHeadSlot(Inventory inventory) {
+        int[] partnerSlots = {
+                10, 11, 12, 13, 14, 15, 16,
+                19, 20, 21, 22, 23, 24, 25,
+                28, 29, 30, 31, 32, 33, 34
+        };
+        for (int slot : partnerSlots) {
+            ItemStack item = inventory.getItem(slot);
+            if (item != null && item.getType() == Material.PLAYER_HEAD) {
+                return slot;
+            }
+        }
+        return -1;
+    }
+}
