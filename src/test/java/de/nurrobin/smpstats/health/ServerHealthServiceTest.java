@@ -736,6 +736,6 @@ class ServerHealthServiceTest {
                 true, true, 1, 1,
                 enabled, 1, 0.2, 0.02, 0.2, 0.1, de.nurrobin.smpstats.health.HealthThresholds.defaults(),
                 false, 1, 0, "", 1, 1,
-                Settings.DashboardSettings.defaults());
+                Settings.DashboardSettings.defaults(), true);
     }
 }

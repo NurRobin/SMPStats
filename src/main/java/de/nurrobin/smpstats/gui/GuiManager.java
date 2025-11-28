@@ -58,6 +58,9 @@ public class GuiManager implements Listener {
         InventoryGui gui = openGuis.get(player.getUniqueId());
         if (gui != null && event.getInventory().equals(gui.getInventory())) {
             openGuis.remove(player.getUniqueId());
+            
+            // Unregister any animations for this player
+            plugin.getAnimatedBorderService().ifPresent(service -> service.unregisterAnimation(player));
         }
     }
 }

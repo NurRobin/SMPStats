@@ -24,6 +24,7 @@ import de.nurrobin.smpstats.health.ServerHealthService;
 import de.nurrobin.smpstats.health.HealthThresholds;
 import de.nurrobin.smpstats.story.StoryService;
 import de.nurrobin.smpstats.gui.GuiManager;
+import de.nurrobin.smpstats.gui.AnimatedBorderService;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -38,7 +39,7 @@ import java.sql.SQLException;
 import java.util.Objects;
 
 public class SMPStats extends JavaPlugin {
-    private static final int CONFIG_VERSION = 6;
+    private static final int CONFIG_VERSION = 7;
     private StatsStorage storage;
     private StatsService statsService;
     private Settings settings;
@@ -52,6 +53,7 @@ public class SMPStats extends JavaPlugin {
     private ServerHealthService serverHealthService;
     private StoryService storyService;
     private GuiManager guiManager;
+    private AnimatedBorderService animatedBorderService;
     private int autosaveTaskId = -1;
 
     @Override
@@ -78,6 +80,7 @@ public class SMPStats extends JavaPlugin {
         this.serverHealthService = new ServerHealthService(this, settings);
         this.storyService = new StoryService(this, statsService, storage, momentService, settings);
         this.guiManager = new GuiManager(this);
+        this.animatedBorderService = new AnimatedBorderService(this);
 
         registerListeners();
         registerCommands();
@@ -96,6 +99,9 @@ public class SMPStats extends JavaPlugin {
         }
         if (storyService != null) {
             storyService.start();
+        }
+        if (animatedBorderService != null) {
+            animatedBorderService.start();
         }
         startApiServer();
         startDashboardServer();
@@ -125,6 +131,9 @@ public class SMPStats extends JavaPlugin {
         }
         if (storyService != null) {
             storyService.shutdown();
+        }
+        if (animatedBorderService != null) {
+            animatedBorderService.stop();
         }
         if (apiServer != null) {
             apiServer.stop();
@@ -169,12 +178,20 @@ public class SMPStats extends JavaPlugin {
         return java.util.Optional.ofNullable(storage);
     }
 
+    public java.util.Optional<HeatmapService> getHeatmapService() {
+        return java.util.Optional.ofNullable(heatmapService);
+    }
+
     public StatsService getStatsService() {
         return statsService;
     }
 
     public GuiManager getGuiManager() {
         return guiManager;
+    }
+
+    public java.util.Optional<AnimatedBorderService> getAnimatedBorderService() {
+        return java.util.Optional.ofNullable(animatedBorderService);
     }
 
     public void reloadPluginConfig(CommandSender sender) {
@@ -300,6 +317,9 @@ public class SMPStats extends JavaPlugin {
         
         // Parse dashboard settings
         Settings.DashboardSettings dashboardSettings = parseDashboardSettings(config);
+        
+        // GUI settings
+        boolean guiAnimatedBordersEnabled = config.getBoolean("gui.animated_borders", true);
 
         return new Settings(movement, blocks, kills, biomes, crafting, damage, consumption,
                 apiEnabled, apiBindAddress, apiPort, apiKey, autosaveMinutes, skillWeights,
@@ -308,7 +328,7 @@ public class SMPStats extends JavaPlugin {
                 deathReplayEnabled, deathReplayInventoryItems, deathReplayNearbyRadius, deathReplayLimit,
                 healthEnabled, healthSampleMinutes, healthChunkWeight, healthEntityWeight, healthHopperWeight, healthRedstoneWeight, healthThresholds,
                 storyEnabled, storyIntervalDays, storySummaryHour, storyWebhookUrl, storyTopLimit, storyRecentMoments,
-                dashboardSettings);
+                dashboardSettings, guiAnimatedBordersEnabled);
     }
     
     private Settings.DashboardSettings parseDashboardSettings(FileConfiguration config) {

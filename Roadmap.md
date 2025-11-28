@@ -300,13 +300,13 @@ Supported grid sizes:
 | **Player Selector GUI** | Browse and select players for comparison with pagination | ✅ Done |
 | **Timeline Delta View** | "This week vs last week" stat changes | ✅ Done |
 | **Achievement Badges** | Visual badges for milestones/moments | ✅ Done |
-| **Animated Borders** | Cycling border colors for highlighted items | ⏳ Todo |
+| **Animated Borders** | Cycling border colors for highlighted items | ✅ Done |
 
 #### Larger Features
 
 | Feature | Description | Status |
 |---------|-------------|--------|
-| **Personal Heatmap Preview** | Small visual representation of player activity zones | ⏳ Todo |
+| **Personal Heatmap Preview** | Small visual representation of player activity zones | ✅ Done |
 | **Death Replay GUI** | View last death details (cause, location, inventory) | ✅ Done |
 | **Moments/Achievements Browser** | Browse triggered moments with timestamps | ✅ Done |
 | **Friends List GUI** | Frequent companions based on social proximity | ⏳ Todo |

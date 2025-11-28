@@ -194,6 +194,14 @@ public class MainMenuGui implements InventoryGui, InventoryHolder {
     public void open(Player player) {
         initializeItems(player);
         player.openInventory(inventory);
+        
+        // Register rainbow animation for the top row border (if enabled)
+        if (plugin.getSettings().isGuiAnimatedBordersEnabled()) {
+            plugin.getAnimatedBorderService().ifPresent(service -> {
+                int[] topRowSlots = AnimatedBorderService.getTopRowSlots();
+                service.registerAnimation(player, inventory, topRowSlots, AnimatedBorderService.AnimationPreset.RAINBOW);
+            });
+        }
     }
 
     @Override

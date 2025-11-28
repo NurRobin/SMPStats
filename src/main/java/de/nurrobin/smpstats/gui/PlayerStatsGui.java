@@ -311,6 +311,12 @@ public class PlayerStatsGui implements InventoryGui, InventoryHolder {
                 Component.text("This week vs last week", NamedTextColor.GRAY),
                 Component.text("See how you've improved!", NamedTextColor.DARK_GRAY)));
         
+        // Heatmap Preview Button (slot 52)
+        inventory.setItem(52, createGuiItem(Material.FILLED_MAP, 
+                Component.text("🗺 Activity Heatmap", NamedTextColor.RED),
+                Component.text("View area activity around you", NamedTextColor.GRAY),
+                Component.text("Movement, mining, deaths...", NamedTextColor.DARK_GRAY)));
+        
         // Refresh Button (slot 53)
         inventory.setItem(53, createGuiItem(Material.SUNFLOWER, 
                 Component.text("🔄 Refresh", NamedTextColor.GREEN),
@@ -438,6 +444,10 @@ public class PlayerStatsGui implements InventoryGui, InventoryHolder {
                         storage, player, targetPlayer.getUniqueId())),
                 () -> player.sendMessage(Component.text("Timeline stats not available", NamedTextColor.RED))
             );
+        } else if (event.getSlot() == 52) {
+            // Heatmap Preview button
+            guiManager.openGui(player, new PersonalHeatmapGui(plugin, guiManager, statsService, player, 
+                    targetPlayer.getUniqueId(), targetPlayer.getName()));
         } else if (event.getSlot() == 53) {
             // Refresh button
             playSuccessSound(player);

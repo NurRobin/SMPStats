@@ -210,6 +210,6 @@ class HeatmapServiceTest {
                 true, true, 1, 1,
                 false, 1, 0, 0, 0, 0, de.nurrobin.smpstats.health.HealthThresholds.defaults(),
                 false, 1, 1, "", 1, 1,
-                Settings.DashboardSettings.defaults());
+                Settings.DashboardSettings.defaults(), true);
     }
 }
