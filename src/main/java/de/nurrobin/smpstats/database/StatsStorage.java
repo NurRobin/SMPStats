@@ -631,6 +631,41 @@ public class StatsStorage implements Closeable {
         return list;
     }
 
+    /**
+     * Load social pairs for a specific player, sorted by time together descending.
+     * @param uuid The player's UUID
+     * @param limit Maximum number of partners to return
+     * @return List of SocialPairRow records involving this player
+     */
+    public synchronized List<SocialPairRow> loadSocialPairsForPlayer(UUID uuid, int limit) throws SQLException {
+        String sql = """
+                SELECT uuid_a, uuid_b, seconds, shared_kills, shared_player_kills, shared_mob_kills
+                FROM social_pairs
+                WHERE uuid_a = ? OR uuid_b = ?
+                ORDER BY seconds DESC
+                LIMIT ?
+                """;
+        List<SocialPairRow> list = new ArrayList<>();
+        try (PreparedStatement st = connection.prepareStatement(sql)) {
+            st.setString(1, uuid.toString());
+            st.setString(2, uuid.toString());
+            st.setInt(3, limit);
+            try (ResultSet rs = st.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new SocialPairRow(
+                            UUID.fromString(rs.getString("uuid_a")),
+                            UUID.fromString(rs.getString("uuid_b")),
+                            rs.getLong("seconds"),
+                            rs.getLong("shared_kills"),
+                            rs.getLong("shared_player_kills"),
+                            rs.getLong("shared_mob_kills")
+                    ));
+                }
+            }
+        }
+        return list;
+    }
+
     public synchronized void upsertTimeline(StatsRecord record, java.time.LocalDate day) throws SQLException {
         String sql = """
                 INSERT INTO timeline_daily (uuid, day, playtime_ms, blocks_broken, blocks_placed, player_kills, mob_kills, deaths,

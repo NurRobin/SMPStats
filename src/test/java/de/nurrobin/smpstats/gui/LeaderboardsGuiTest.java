@@ -401,4 +401,70 @@ class LeaderboardsGuiTest {
         
         assertNotNull(player.getOpenInventory());
     }
+
+    @Test
+    void hasFindMyRankButton() {
+        when(statsService.getAllStats()).thenReturn(new ArrayList<>());
+        
+        LeaderboardsGui gui = new LeaderboardsGui(plugin, guiManager, statsService, healthService,
+                LeaderboardsGui.LeaderboardType.PLAYTIME, 0);
+        Inventory inv = gui.getInventory();
+
+        // Find My Rank button at slot 46
+        assertNotNull(inv.getItem(46));
+        assertEquals(Material.ENDER_EYE, inv.getItem(46).getType());
+    }
+
+    @Test
+    void findMyRankJumpsToCorrectPage() {
+        List<StatsRecord> stats = new ArrayList<>();
+        
+        // Create 30 players, with the test player at position 25
+        for (int i = 0; i < 30; i++) {
+            UUID uuid = i == 24 ? player.getUniqueId() : UUID.randomUUID();
+            StatsRecord record = new StatsRecord(uuid, i == 24 ? player.getName() : "Player" + i);
+            record.setPlaytimeMillis(1000000L * (30 - i)); // Higher playtime = higher rank
+            stats.add(record);
+        }
+        
+        when(statsService.getAllStats()).thenReturn(stats);
+
+        LeaderboardsGui gui = new LeaderboardsGui(plugin, guiManager, statsService, healthService,
+                LeaderboardsGui.LeaderboardType.PLAYTIME, 0);
+        
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(46); // Find My Rank button
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        gui.handleClick(event);
+        
+        // Should open a new GUI on page 1 (player is rank 25, and 21 players per page)
+        verify(guiManager).openGui(eq(player), any(LeaderboardsGui.class));
+    }
+
+    @Test
+    void findMyRankShowsNotFoundMessageWhenOutsideTop50() {
+        List<StatsRecord> stats = new ArrayList<>();
+        
+        // Create 60 players, test player is NOT in top 50
+        for (int i = 0; i < 60; i++) {
+            StatsRecord record = new StatsRecord(UUID.randomUUID(), "Player" + i);
+            record.setPlaytimeMillis(1000000L * (60 - i));
+            stats.add(record);
+        }
+        
+        when(statsService.getAllStats()).thenReturn(stats);
+
+        LeaderboardsGui gui = new LeaderboardsGui(plugin, guiManager, statsService, healthService,
+                LeaderboardsGui.LeaderboardType.PLAYTIME, 0);
+        
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(46); // Find My Rank button
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        gui.handleClick(event);
+        
+        // Should NOT open a new GUI since player is not in top 50
+        verify(guiManager, never()).openGui(eq(player), any(LeaderboardsGui.class));
+    }
 }

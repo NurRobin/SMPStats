@@ -17,6 +17,7 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
@@ -41,6 +42,8 @@ public class LeaderboardsGui implements InventoryGui, InventoryHolder {
     private static final int MAX_RANK = 50;
     /** First slot for player entries (row 2, starting at slot 10) */
     private static final int FIRST_PLAYER_SLOT = 10;
+    /** Slot for "Find My Rank" button */
+    private static final int FIND_MY_RANK_SLOT = 46;
 
     /**
      * Available leaderboard sorting types.
@@ -225,6 +228,13 @@ public class LeaderboardsGui implements InventoryGui, InventoryHolder {
             inventory.setItem(45, createBorderItem(Material.GRAY_STAINED_GLASS_PANE));
         }
 
+        // Find My Rank button (slot 46)
+        inventory.setItem(FIND_MY_RANK_SLOT, createGuiItem(Material.ENDER_EYE, 
+                Component.text("🔍 Find My Rank", NamedTextColor.LIGHT_PURPLE).decorate(TextDecoration.BOLD),
+                Component.text("Jump to your position", NamedTextColor.GRAY),
+                Component.empty(),
+                Component.text("Click to find yourself", NamedTextColor.DARK_GRAY)));
+
         // Back button (slot 48)
         inventory.setItem(48, createGuiItem(Material.BARRIER, 
                 Component.text("✖ Back to Menu", NamedTextColor.RED),
@@ -251,6 +261,25 @@ public class LeaderboardsGui implements InventoryGui, InventoryHolder {
         } else {
             inventory.setItem(53, createBorderItem(Material.GRAY_STAINED_GLASS_PANE));
         }
+    }
+
+    /**
+     * Finds the rank and page for a given player UUID.
+     * @param playerUuid The UUID of the player to find
+     * @return An array containing [rank, page] or null if not found in top MAX_RANK
+     */
+    private int[] findPlayerRank(UUID playerUuid) {
+        List<StatsRecord> allStats = statsService.getAllStats();
+        allStats.sort(Comparator.comparing(currentType::getValue).reversed());
+        
+        for (int i = 0; i < Math.min(allStats.size(), MAX_RANK); i++) {
+            if (allStats.get(i).getUuid().equals(playerUuid)) {
+                int rank = i + 1;
+                int targetPage = i / PLAYERS_PER_PAGE;
+                return new int[]{rank, targetPage};
+            }
+        }
+        return null; // Not in top MAX_RANK
     }
 
     private static String formatPlaytime(long millis) {
@@ -299,6 +328,24 @@ public class LeaderboardsGui implements InventoryGui, InventoryHolder {
         if (slot == 45 && page > 0) {
             playPageTurnSound(player);
             guiManager.openGui(player, new LeaderboardsGui(plugin, guiManager, statsService, healthService, currentType, page - 1));
+            return;
+        }
+
+        // Find My Rank (slot 46)
+        if (slot == FIND_MY_RANK_SLOT) {
+            int[] result = findPlayerRank(player.getUniqueId());
+            if (result != null) {
+                int rank = result[0];
+                int targetPage = result[1];
+                playSuccessSound(player);
+                player.sendMessage(Component.text("You are ranked #" + rank + " in " + currentType.getDisplayName() + "!", NamedTextColor.GREEN));
+                if (targetPage != page) {
+                    guiManager.openGui(player, new LeaderboardsGui(plugin, guiManager, statsService, healthService, currentType, targetPage));
+                }
+            } else {
+                playErrorSound(player);
+                player.sendMessage(Component.text("You are not in the top " + MAX_RANK + " for " + currentType.getDisplayName() + ".", NamedTextColor.YELLOW));
+            }
             return;
         }
 

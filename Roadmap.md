@@ -276,6 +276,43 @@ Supported grid sizes:
 
 ---
 
+### 🎮 GUI Enhancement Roadmap
+
+> **Focus:** Improve the in-game chest menu experience with richer data visualization and player engagement features.
+
+#### Quick Wins (Small)
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **Skill Profile Display** | Visual skill bars in PlayerStatsGui (Mining, Combat, Explorer, Builder, Farmer) | ⏳ Todo |
+| **First/Last Join Dates** | Show join timestamps in PlayerStatsGui | ⏳ Todo |
+| **K/D Ratio** | Calculate and display kill/death ratio | ⏳ Todo |
+| **Biomes Progress** | "X/Y biomes discovered" with visual progress | ⏳ Todo |
+| **Find My Rank** | Button in leaderboards to jump to viewer's page | ⏳ Todo |
+| **Session Stats** | "Since login: +X kills, +Y blocks" display | ⏳ Todo |
+
+#### Medium Features
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **Player Comparison GUI** | Side-by-side stat comparison between two players | ⏳ Todo |
+| **Social Partners GUI** | "Who I play with most" - top companions from proximity data | ⏳ Todo |
+| **Timeline Delta View** | "This week vs last week" stat changes | ⏳ Todo |
+| **Achievement Badges** | Visual badges for milestones/moments | ⏳ Todo |
+| **Animated Borders** | Cycling border colors for highlighted items | ⏳ Todo |
+
+#### Larger Features
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **Personal Heatmap Preview** | Small visual representation of player activity zones | ⏳ Todo |
+| **Death Replay GUI** | View last death details (cause, location, inventory) | ⏳ Todo |
+| **Moments/Achievements Browser** | Browse triggered moments with timestamps | ⏳ Todo |
+| **Friends List GUI** | Frequent companions based on social proximity | ⏳ Todo |
+| **Admin Player Lookup** | Search and view any player's stats (admin only) | ⏳ Todo |
+
+---
+
 ## 🤝 Milestone 3 — Social Dynamics (PLANNED)
 
 > **Status:** Planning  
