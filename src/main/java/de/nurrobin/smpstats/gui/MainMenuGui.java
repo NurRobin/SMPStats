@@ -15,6 +15,8 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
@@ -64,16 +66,44 @@ public class MainMenuGui implements InventoryGui, InventoryHolder {
         boolean canViewHealth = player.hasPermission("smpstats.gui.health") || player.hasPermission("smpstats.health");
         boolean canViewLeaderboard = player.hasPermission("smpstats.gui.leaderboard");
 
-        // My Stats - use player's head (slot 20)
-        inventory.setItem(20, createPlayerHead(player, 
-                Component.text("📈 My Stats", NamedTextColor.GOLD).decorate(TextDecoration.BOLD),
-                Component.text("View your personal statistics", NamedTextColor.GRAY),
-                Component.empty(),
-                getQuickStatsSummary(player),
-                Component.empty(),
-                canViewStats 
-                    ? Component.text("▶ Click to view details", NamedTextColor.GREEN)
-                    : Component.text("✖ Requires Permission", NamedTextColor.DARK_RED)));
+        // My Stats - use player's head (slot 20) with enhanced preview
+        Optional<StatsRecord> playerRecord = statsService.getStats(player.getUniqueId());
+        
+        if (playerRecord.isPresent() && canViewStats) {
+            StatsRecord record = playerRecord.get();
+            long hours = TimeUnit.MILLISECONDS.toHours(record.getPlaytimeMillis());
+            long totalKills = record.getMobKills() + record.getPlayerKills();
+            double kdRatio = record.getDeaths() > 0 ? (double) totalKills / record.getDeaths() : totalKills;
+            NamedTextColor kdColor = kdRatio >= 2.0 ? NamedTextColor.GREEN : 
+                                     (kdRatio >= 1.0 ? NamedTextColor.YELLOW : NamedTextColor.RED);
+            
+            inventory.setItem(20, createPlayerHead(player,
+                    Component.text("📈 My Stats", NamedTextColor.GOLD).decorate(TextDecoration.BOLD),
+                    Component.text("Your personal statistics", NamedTextColor.GRAY),
+                    Component.empty(),
+                    Component.text("⏱ Playtime: ", NamedTextColor.DARK_GRAY)
+                            .append(Component.text(hours + " hours", NamedTextColor.WHITE)),
+                    Component.text("⚔ K/D Ratio: ", NamedTextColor.DARK_GRAY)
+                            .append(Component.text(String.format("%.2f", kdRatio), kdColor)),
+                    Component.text("🗺 Biomes: ", NamedTextColor.DARK_GRAY)
+                            .append(Component.text(record.getBiomesVisited().size() + "/64", NamedTextColor.AQUA)),
+                    Component.empty(),
+                    Component.text("▶ Click to view full stats", NamedTextColor.GREEN)
+                            .decorate(TextDecoration.BOLD)));
+        } else if (!canViewStats) {
+            inventory.setItem(20, createPlayerHead(player,
+                    Component.text("📈 My Stats", NamedTextColor.GRAY),
+                    Component.text("Your personal statistics", NamedTextColor.DARK_GRAY),
+                    Component.empty(),
+                    Component.text("✖ Requires Permission", NamedTextColor.DARK_RED)));
+        } else {
+            inventory.setItem(20, createPlayerHead(player,
+                    Component.text("📈 My Stats", NamedTextColor.GOLD).decorate(TextDecoration.BOLD),
+                    Component.text("Your personal statistics", NamedTextColor.GRAY),
+                    Component.empty(),
+                    Component.text("No stats recorded yet", NamedTextColor.GRAY),
+                    Component.text("Start playing to generate stats!", NamedTextColor.DARK_GRAY)));
+        }
 
         // Server Health (slot 22)
         Material healthMaterial = canViewHealth ? Material.REDSTONE_BLOCK : Material.BEDROCK;
@@ -149,12 +179,21 @@ public class MainMenuGui implements InventoryGui, InventoryHolder {
     }
 
     private void addHeaderInfo(Player player) {
-        // Plugin info (slot 4 - center top)
+        // Plugin info with live status (slot 4 - center top)
+        int onlinePlayers = Bukkit.getOnlinePlayers().size();
+        double tps = healthService != null && healthService.getLatest() != null 
+            ? Math.min(20.0, healthService.getLatest().tps()) : 20.0;
+        NamedTextColor tpsColor = tps >= 18.0 ? NamedTextColor.GREEN : 
+                                   (tps >= 15.0 ? NamedTextColor.YELLOW : NamedTextColor.RED);
+        
         inventory.setItem(4, createGuiItem(Material.NETHER_STAR,
-                Component.text("SMPStats", NamedTextColor.GOLD).decorate(TextDecoration.BOLD),
-                Component.text("Server statistics & analytics", NamedTextColor.GRAY),
+                Component.text("⚡ SMPStats", NamedTextColor.GOLD).decorate(TextDecoration.BOLD),
+                Component.text("Welcome, " + player.getName() + "!", NamedTextColor.WHITE),
                 Component.empty(),
-                Component.text("Welcome, " + player.getName() + "!", NamedTextColor.WHITE)));
+                Component.text("🟢 Players Online: ", NamedTextColor.GRAY)
+                        .append(Component.text(String.valueOf(onlinePlayers), NamedTextColor.YELLOW)),
+                Component.text("⚡ Server TPS: ", NamedTextColor.GRAY)
+                        .append(Component.text(String.format("%.1f", tps), tpsColor))));
     }
 
     private Component getQuickStatsSummary(Player player) {

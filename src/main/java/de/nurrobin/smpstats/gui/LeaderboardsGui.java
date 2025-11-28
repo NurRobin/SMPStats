@@ -36,8 +36,8 @@ public class LeaderboardsGui implements InventoryGui, InventoryHolder {
     private final LeaderboardType currentType;
     private final int page;
     
-    /** Maximum players shown per page */
-    private static final int PLAYERS_PER_PAGE = 21;
+    /** Maximum players shown per page (reduced to 14 due to larger category row) */
+    private static final int PLAYERS_PER_PAGE = 14;
     /** Maximum rank to display (top 50) */
     private static final int MAX_RANK = 50;
     /** First slot for player entries (row 2, starting at slot 10) */
@@ -144,33 +144,45 @@ public class LeaderboardsGui implements InventoryGui, InventoryHolder {
     }
 
     private void initializeCategoryButtons() {
-        int categorySlot = 1; // Start at slot 1 (skip slot 0 for symmetry)
-        for (LeaderboardType type : LeaderboardType.values()) {
+        // Use row 2 (slots 10-16) for larger, more visible category buttons
+        int[] categorySlots = {10, 11, 12, 13, 14, 15, 16};
+        
+        for (int i = 0; i < LeaderboardType.values().length && i < categorySlots.length; i++) {
+            LeaderboardType type = LeaderboardType.values()[i];
             boolean isSelected = type == currentType;
             Material material = type.getIcon();
             
             ItemStack item;
             if (isSelected) {
+                // Selected: Use glowing enchanted version
                 item = createGuiItem(Material.ENCHANTED_BOOK,
-                        Component.text("▶ " + type.getDisplayName(), NamedTextColor.GREEN)
+                        Component.text("⭐ " + type.getDisplayName(), NamedTextColor.GOLD)
                                 .decorate(TextDecoration.BOLD),
-                        Component.text("Currently viewing", NamedTextColor.GRAY),
+                        Component.text("▶ Currently viewing", NamedTextColor.GREEN),
                         Component.empty(),
-                        Component.text("Top players by " + type.getDisplayName().toLowerCase(), NamedTextColor.DARK_GRAY));
+                        Component.text("Top players by this stat", NamedTextColor.GRAY));
             } else {
+                // Unselected: Show category icon
                 item = createGuiItem(material,
-                        Component.text(type.getDisplayName(), type.getColor()),
-                        Component.text("Click to view", NamedTextColor.DARK_GRAY));
+                        Component.text(type.getDisplayName(), type.getColor()).decorate(TextDecoration.BOLD),
+                        Component.empty(),
+                        Component.text("▶ Click to switch", NamedTextColor.DARK_GRAY));
             }
-            inventory.setItem(categorySlot, item);
-            categorySlot++;
+            inventory.setItem(categorySlots[i], item);
         }
+        
+        // Add category header in top row
+        inventory.setItem(4, createGuiItem(Material.WRITABLE_BOOK,
+                Component.text("🏆 Categories", NamedTextColor.GOLD).decorate(TextDecoration.BOLD),
+                Component.text("Choose a leaderboard type", NamedTextColor.GRAY),
+                Component.empty(),
+                Component.text("Current: ", NamedTextColor.DARK_GRAY)
+                        .append(Component.text(currentType.getDisplayName(), currentType.getColor()))));
     }
 
     private void displayPlayers(List<StatsRecord> allStats, int startIndex, int endIndex) {
-        // Grid slots for 7x3 layout
+        // Grid slots for 7x2 layout (reduced to fit new category row)
         int[] playerSlots = {
-            10, 11, 12, 13, 14, 15, 16,  // Row 2
             19, 20, 21, 22, 23, 24, 25,  // Row 3
             28, 29, 30, 31, 32, 33, 34   // Row 4
         };
@@ -315,11 +327,14 @@ public class LeaderboardsGui implements InventoryGui, InventoryHolder {
         int slot = event.getSlot();
         playClickSound(player);
 
-        // Category selection (slots 1-7)
-        if (slot >= 1 && slot <= LeaderboardType.values().length) {
-            LeaderboardType selectedType = LeaderboardType.values()[slot - 1];
-            if (selectedType != currentType) {
-                guiManager.openGui(player, new LeaderboardsGui(plugin, guiManager, statsService, healthService, selectedType, 0));
+        // Category selection (slots 10-16 in row 2)
+        if (slot >= 10 && slot <= 16) {
+            int categoryIndex = slot - 10;
+            if (categoryIndex < LeaderboardType.values().length) {
+                LeaderboardType selectedType = LeaderboardType.values()[categoryIndex];
+                if (selectedType != currentType) {
+                    guiManager.openGui(player, new LeaderboardsGui(plugin, guiManager, statsService, healthService, selectedType, 0));
+                }
             }
             return;
         }
