@@ -198,6 +198,50 @@ class StatsStorageTest {
     }
 
     @Test
+    void loadsDeathReplaysForSpecificPlayer() throws Exception {
+        StatsStorage storage = newStorage();
+        UUID playerUuid = UUID.randomUUID();
+        UUID otherUuid = UUID.randomUUID();
+        
+        // Save death for the target player
+        DeathReplayEntry targetEntry = new DeathReplayEntry(
+                123L,
+                playerUuid.toString(),
+                "Player",
+                "fell from a high place",
+                0.0,
+                "world",
+                1, 2, 3,
+                10.0,
+                List.of(),
+                List.of(),
+                List.of()
+        );
+        storage.saveDeathReplay(targetEntry);
+        
+        // Save death for another player
+        DeathReplayEntry otherEntry = new DeathReplayEntry(
+                124L,
+                otherUuid.toString(),
+                "Other",
+                "was slain",
+                0.0,
+                "world",
+                4, 5, 6,
+                0.0,
+                List.of(),
+                List.of(),
+                List.of()
+        );
+        storage.saveDeathReplay(otherEntry);
+        
+        // Should only return deaths for the target player
+        List<DeathReplayEntry> loaded = storage.loadDeathReplaysForPlayer(playerUuid, 10);
+        assertEquals(1, loaded.size());
+        assertEquals("fell from a high place", loaded.getFirst().cause());
+    }
+
+    @Test
     void heatmapDecayWorks() throws Exception {
         StatsStorage storage = newStorage();
         long halfLife = 1000L; // 1 second

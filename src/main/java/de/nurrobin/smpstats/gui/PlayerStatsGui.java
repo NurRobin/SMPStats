@@ -279,6 +279,12 @@ public class PlayerStatsGui implements InventoryGui, InventoryHolder {
                 Component.text("◀ Back", NamedTextColor.RED),
                 Component.text("Return to main menu", NamedTextColor.GRAY)));
         
+        // Death Replay Button (slot 46)
+        inventory.setItem(46, createGuiItem(Material.SKELETON_SKULL, 
+                Component.text("💀 Death History", NamedTextColor.DARK_RED),
+                Component.text("View your recent deaths", NamedTextColor.GRAY),
+                Component.text("See cause, location, and more", NamedTextColor.DARK_GRAY)));
+        
         // Social Partners Button (slot 47)
         inventory.setItem(47, createGuiItem(Material.TOTEM_OF_UNDYING, 
                 Component.text("👥 Social Partners", NamedTextColor.YELLOW),
@@ -347,6 +353,13 @@ public class PlayerStatsGui implements InventoryGui, InventoryHolder {
             plugin.getServerHealthService().ifPresentOrElse(
                 healthService -> guiManager.openGui(player, new MainMenuGui(plugin, guiManager, statsService, healthService)),
                 () -> player.closeInventory()
+            );
+        } else if (event.getSlot() == 46) {
+            // Death Replay button
+            plugin.getStatsStorage().ifPresentOrElse(
+                storage -> guiManager.openGui(player, new DeathReplayGui(plugin, guiManager, statsService, 
+                        storage, player, targetPlayer.getUniqueId())),
+                () -> player.sendMessage(Component.text("Death history not available", NamedTextColor.RED))
             );
         } else if (event.getSlot() == 47) {
             // Social Partners button
