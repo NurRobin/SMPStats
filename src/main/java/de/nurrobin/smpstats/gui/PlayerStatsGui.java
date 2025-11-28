@@ -3,6 +3,7 @@ package de.nurrobin.smpstats.gui;
 import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.StatsRecord;
 import de.nurrobin.smpstats.StatsService;
+import de.nurrobin.smpstats.gui.AchievementBadge.BadgeTier;
 import de.nurrobin.smpstats.skills.SkillProfile;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -290,16 +291,19 @@ public class PlayerStatsGui implements InventoryGui, InventoryHolder {
                 Component.text("👥 Social Partners", NamedTextColor.YELLOW),
                 Component.text("View players you've spent time with", NamedTextColor.GRAY)));
         
-        // Achievements/Moments Button (slot 48)
+        // Moments/Achievements Button (slot 48)
         inventory.setItem(48, createGuiItem(Material.NETHER_STAR, 
-                Component.text("🏆 Achievements", NamedTextColor.GOLD),
-                Component.text("View your badges and moments", NamedTextColor.GRAY),
-                Component.text("Track your milestones!", NamedTextColor.DARK_GRAY)));
+                Component.text("🏆 Moments", NamedTextColor.GOLD),
+                Component.text("View your triggered achievements", NamedTextColor.GRAY),
+                Component.text("Diamond runs, boss kills, etc.", NamedTextColor.DARK_GRAY)));
         
         // Compare Button (slot 49)
         inventory.setItem(49, createGuiItem(Material.COMPARATOR, 
                 Component.text("⚔ Compare", NamedTextColor.LIGHT_PURPLE),
                 Component.text("Compare stats with another player", NamedTextColor.GRAY)));
+        
+        // Badges Button (slot 50) - Stats-based achievement badges
+        inventory.setItem(50, createBadgesSummaryButton());
         
         // Timeline Delta Button (slot 51)
         inventory.setItem(51, createGuiItem(Material.RECOVERY_COMPASS, 
@@ -319,6 +323,44 @@ public class PlayerStatsGui implements InventoryGui, InventoryHolder {
                 inventory.setItem(i, filler);
             }
         }
+    }
+    
+    private ItemStack createBadgesSummaryButton() {
+        Optional<StatsRecord> recordOpt = statsService.getStats(targetPlayer.getUniqueId());
+        if (recordOpt.isEmpty()) {
+            return createGuiItem(Material.GOLDEN_HELMET,
+                    Component.text("🏅 Badges", NamedTextColor.GOLD),
+                    Component.text("No stats available", NamedTextColor.GRAY));
+        }
+        
+        List<AchievementBadge> earned = BadgeEvaluator.evaluateBadges(recordOpt.get());
+        int total = BadgeEvaluator.getTotalBadgeCount();
+        int earnedCount = earned.size();
+        int percent = total > 0 ? (earnedCount * 100) / total : 0;
+        
+        // Count by tier
+        long legendary = earned.stream().filter(b -> b.tier() == BadgeTier.LEGENDARY).count();
+        long diamond = earned.stream().filter(b -> b.tier() == BadgeTier.DIAMOND).count();
+        long gold = earned.stream().filter(b -> b.tier() == BadgeTier.GOLD).count();
+        
+        List<Component> lore = new ArrayList<>();
+        lore.add(Component.text(earnedCount + "/" + total + " badges (" + percent + "%)", NamedTextColor.YELLOW));
+        lore.add(Component.empty());
+        if (legendary > 0) {
+            lore.add(Component.text("🌟 Legendary: " + legendary, NamedTextColor.LIGHT_PURPLE));
+        }
+        if (diamond > 0) {
+            lore.add(Component.text("💎 Diamond: " + diamond, NamedTextColor.AQUA));
+        }
+        if (gold > 0) {
+            lore.add(Component.text("🥇 Gold: " + gold, NamedTextColor.GOLD));
+        }
+        lore.add(Component.empty());
+        lore.add(Component.text("Click to view all badges!", NamedTextColor.DARK_GRAY));
+        
+        return createGuiItem(Material.GOLDEN_HELMET,
+                Component.text("🏅 Badges", NamedTextColor.GOLD).decorate(TextDecoration.BOLD),
+                lore.toArray(new Component[0]));
     }
 
     private String formatDistance(double meters) {
@@ -384,6 +426,10 @@ public class PlayerStatsGui implements InventoryGui, InventoryHolder {
         } else if (event.getSlot() == 49) {
             // Compare button - open player selector
             guiManager.openGui(player, new PlayerSelectorGui(plugin, guiManager, statsService, 
+                    player, targetPlayer.getUniqueId()));
+        } else if (event.getSlot() == 50) {
+            // Badges button - open badges GUI
+            guiManager.openGui(player, new BadgesGui(plugin, guiManager, statsService, 
                     player, targetPlayer.getUniqueId()));
         } else if (event.getSlot() == 51) {
             // Timeline Delta button - open weekly progress view
