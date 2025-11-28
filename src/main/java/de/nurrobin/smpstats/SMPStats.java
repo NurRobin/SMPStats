@@ -161,6 +161,10 @@ public class SMPStats extends JavaPlugin {
         return java.util.Optional.ofNullable(storyService);
     }
 
+    public java.util.Optional<de.nurrobin.smpstats.moments.MomentService> getMomentService() {
+        return java.util.Optional.ofNullable(momentService);
+    }
+
     public java.util.Optional<StatsStorage> getStatsStorage() {
         return java.util.Optional.ofNullable(storage);
     }

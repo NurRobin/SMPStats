@@ -290,6 +290,12 @@ public class PlayerStatsGui implements InventoryGui, InventoryHolder {
                 Component.text("👥 Social Partners", NamedTextColor.YELLOW),
                 Component.text("View players you've spent time with", NamedTextColor.GRAY)));
         
+        // Achievements/Moments Button (slot 48)
+        inventory.setItem(48, createGuiItem(Material.NETHER_STAR, 
+                Component.text("🏆 Achievements", NamedTextColor.GOLD),
+                Component.text("View your badges and moments", NamedTextColor.GRAY),
+                Component.text("Track your milestones!", NamedTextColor.DARK_GRAY)));
+        
         // Compare Button (slot 49)
         inventory.setItem(49, createGuiItem(Material.COMPARATOR, 
                 Component.text("⚔ Compare", NamedTextColor.LIGHT_PURPLE),
@@ -367,6 +373,13 @@ public class PlayerStatsGui implements InventoryGui, InventoryHolder {
                 storage -> guiManager.openGui(player, new SocialPartnersGui(plugin, guiManager, statsService, 
                         storage, player, targetPlayer.getUniqueId())),
                 () -> player.sendMessage(Component.text("Social stats not available", NamedTextColor.RED))
+            );
+        } else if (event.getSlot() == 48) {
+            // Achievements/Moments button
+            plugin.getMomentService().ifPresentOrElse(
+                momentService -> guiManager.openGui(player, new MomentsHistoryGui(plugin, guiManager, statsService, 
+                        momentService, player, targetPlayer.getUniqueId())),
+                () -> player.sendMessage(Component.text("Achievements not available", NamedTextColor.RED))
             );
         } else if (event.getSlot() == 49) {
             // Compare button - open player selector
