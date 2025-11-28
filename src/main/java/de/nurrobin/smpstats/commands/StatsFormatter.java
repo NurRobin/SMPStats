@@ -3,7 +3,6 @@ package de.nurrobin.smpstats.commands;
 import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.StatsRecord;
 import de.nurrobin.smpstats.StatsService;
-import de.nurrobin.smpstats.skills.SkillProfile;
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 

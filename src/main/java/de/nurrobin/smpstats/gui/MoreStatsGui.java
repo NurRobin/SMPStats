@@ -2,7 +2,6 @@ package de.nurrobin.smpstats.gui;
 
 import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.StatsService;
-import de.nurrobin.smpstats.database.StatsStorage;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;

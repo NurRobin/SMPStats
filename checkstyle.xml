@@ -1,0 +1,142 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+    "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+    SMPStats Checkstyle Configuration
+    Focus on catching common issues without being overly strict.
+-->
+<module name="Checker">
+    <property name="charset" value="UTF-8"/>
+    <property name="severity" value="warning"/>
+    <property name="fileExtensions" value="java"/>
+
+    <!-- Suppress checks for test files -->
+    <module name="SuppressionSingleFilter">
+        <property name="files" value=".*[\\/]test[\\/].*"/>
+        <property name="checks" value=".*"/>
+    </module>
+
+    <!-- File-level checks -->
+    <module name="FileTabCharacter">
+        <property name="eachLine" value="true"/>
+    </module>
+
+    <module name="LineLength">
+        <property name="max" value="250"/>
+        <property name="ignorePattern" value="^package.*|^import.*|a href|href|http://|https://|ftp://"/>
+    </module>
+
+    <module name="TreeWalker">
+        <!-- Unused imports -->
+        <module name="UnusedImports">
+            <property name="processJavadoc" value="false"/>
+        </module>
+
+        <!-- Redundant imports -->
+        <module name="RedundantImport"/>
+
+        <!-- Star imports (import java.util.*) - Disabled for now to match existing code -->
+        <!--
+        <module name="AvoidStarImport">
+            <property name="excludes" value="java.io,java.net,java.lang.Math"/>
+            <property name="allowClassImports" value="false"/>
+            <property name="allowStaticMemberImports" value="true"/>
+        </module>
+        -->
+
+        <!-- Naming conventions -->
+        <module name="ConstantName">
+            <property name="format" value="^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$"/>
+        </module>
+        <module name="LocalVariableName">
+            <property name="format" value="^[a-z]([a-z0-9][a-zA-Z0-9]*)?$"/>
+        </module>
+        <module name="MemberName">
+            <property name="format" value="^[a-z][a-zA-Z0-9]*$"/>
+        </module>
+        <module name="MethodName">
+            <property name="format" value="^[a-z][a-zA-Z0-9]*$"/>
+        </module>
+        <module name="ParameterName">
+            <property name="format" value="^[a-z]([a-z0-9][a-zA-Z0-9]*)?$"/>
+        </module>
+        <module name="TypeName">
+            <property name="format" value="^[A-Z][a-zA-Z0-9]*$"/>
+        </module>
+
+        <!-- Code quality -->
+        <module name="EmptyBlock">
+            <property name="option" value="TEXT"/>
+            <property name="tokens" value="LITERAL_TRY, LITERAL_FINALLY, LITERAL_IF, LITERAL_ELSE, LITERAL_SWITCH"/>
+        </module>
+
+        <module name="EmptyCatchBlock">
+            <property name="exceptionVariableName" value="expected|ignore|ignored"/>
+        </module>
+
+        <module name="EqualsHashCode"/>
+
+        <module name="IllegalInstantiation"/>
+
+        <!-- MissingSwitchDefault - Disabled, modern code often uses exhaustive enums -->
+        <!-- <module name="MissingSwitchDefault"/> -->
+
+        <module name="SimplifyBooleanExpression"/>
+
+        <module name="SimplifyBooleanReturn"/>
+
+        <module name="StringLiteralEquality"/>
+
+        <module name="NestedIfDepth">
+            <property name="max" value="5"/>
+        </module>
+
+        <module name="NestedTryDepth">
+            <property name="max" value="2"/>
+        </module>
+
+        <!-- Modifier order -->
+        <module name="ModifierOrder"/>
+        <module name="RedundantModifier"/>
+
+        <!-- Whitespace -->
+        <module name="GenericWhitespace"/>
+        <module name="MethodParamPad"/>
+        <module name="NoWhitespaceBefore"/>
+        <module name="ParenPad"/>
+        <module name="TypecastParenPad"/>
+        <module name="WhitespaceAfter"/>
+
+        <!-- Braces -->
+        <!-- LeftCurly/RightCurly disabled - codebase has mix of styles including single-line methods -->
+        <!-- NeedBraces disabled - codebase uses single-line if/else chains -->
+        <!--
+        <module name="LeftCurly">
+            <property name="option" value="eol"/>
+        </module>
+        <module name="RightCurly">
+            <property name="option" value="same"/>
+        </module>
+        <module name="NeedBraces">
+            <property name="allowSingleLineStatement" value="true"/>
+        </module>
+        -->
+
+        <!-- Misc -->
+        <module name="ArrayTypeStyle"/>
+        <module name="UpperEll"/>
+        <module name="OuterTypeFilename"/>
+
+        <!-- Annotations -->
+        <module name="MissingOverride"/>
+
+        <!-- Suppress specific checks with comments -->
+        <module name="SuppressionCommentFilter">
+            <property name="offCommentFormat" value="CHECKSTYLE.OFF\: ([\w\|]+)"/>
+            <property name="onCommentFormat" value="CHECKSTYLE.ON\: ([\w\|]+)"/>
+            <property name="checkFormat" value="$1"/>
+        </module>
+    </module>
+</module>

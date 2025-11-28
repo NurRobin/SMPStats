@@ -2,7 +2,6 @@ package de.nurrobin.smpstats.dashboard;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -10,7 +9,6 @@ import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.Settings;
 import de.nurrobin.smpstats.StatsRecord;
 import de.nurrobin.smpstats.StatsService;
-import de.nurrobin.smpstats.database.StatsStorage;
 import de.nurrobin.smpstats.health.ServerHealthService;
 import de.nurrobin.smpstats.heatmap.HeatmapService;
 import de.nurrobin.smpstats.moments.MomentService;

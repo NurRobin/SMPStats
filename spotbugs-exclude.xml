@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!--
+        SMPStats SpotBugs Exclusions
+        Excludes false positives and acceptable patterns.
+    -->
+
+    <!-- Exclude test classes -->
+    <Match>
+        <Source name="~.*Test\.java"/>
+    </Match>
+
+    <!-- Exclude generated code and tools -->
+    <Match>
+        <Package name="~de\.nurrobin\.smpstats\.tools\..*"/>
+    </Match>
+
+    <!-- Allow field hiding in GUI classes (common pattern with 'inventory') -->
+    <Match>
+        <Class name="~de\.nurrobin\.smpstats\.gui\..*"/>
+        <Bug pattern="MS_PKGPROTECT"/>
+    </Match>
+
+    <!-- Allow non-serializable fields in plugin classes (Bukkit pattern) -->
+    <Match>
+        <Bug pattern="SE_BAD_FIELD"/>
+    </Match>
+    <Match>
+        <Bug pattern="SE_NO_SERIALVERSIONID"/>
+    </Match>
+
+    <!-- Allow System.out in specific cases like CoveragePrinter -->
+    <Match>
+        <Class name="de.nurrobin.smpstats.tools.CoveragePrinter"/>
+        <Bug pattern="SYSTEM_OUT_PRINTLN"/>
+    </Match>
+
+    <!-- Ignore internationalization warnings for Minecraft plugin -->
+    <Match>
+        <Bug pattern="DM_DEFAULT_ENCODING"/>
+    </Match>
+
+    <!-- Ignore PRNG security for non-crypto random (game features) -->
+    <Match>
+        <Bug pattern="PREDICTABLE_RANDOM"/>
+    </Match>
+
+    <!-- Ignore inner class exposure (common in Bukkit) -->
+    <Match>
+        <Bug pattern="SIC_INNER_SHOULD_BE_STATIC"/>
+    </Match>
+
+    <!-- Allow methods that could be static but are instance for flexibility -->
+    <Match>
+        <Bug pattern="MCME_USE_MAP_ENTRY_SET"/>
+    </Match>
+
+    <!-- Enum valueOf() is fine for controlled inputs -->
+    <Match>
+        <Bug pattern="THROWS_METHOD_THROWS_CLAUSE_BASIC_EXCEPTION"/>
+    </Match>
+
+    <!-- SQL injection - we use parameterized queries, false positives -->
+    <Match>
+        <Class name="de.nurrobin.smpstats.database.StatsStorage"/>
+        <Bug pattern="SQL_INJECTION_JDBC"/>
+    </Match>
+
+    <!-- Resource management - connections managed by service lifecycle -->
+    <Match>
+        <Bug pattern="ODR_OPEN_DATABASE_RESOURCE"/>
+    </Match>
+</FindBugsFilter>

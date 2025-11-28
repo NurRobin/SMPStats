@@ -3,7 +3,6 @@ package de.nurrobin.smpstats.database;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import de.nurrobin.smpstats.StatsRecord;
-import de.nurrobin.smpstats.heatmap.HeatmapBin;
 import de.nurrobin.smpstats.moments.MomentEntry;
 import de.nurrobin.smpstats.social.SocialPairRow;
 import org.bukkit.plugin.Plugin;
