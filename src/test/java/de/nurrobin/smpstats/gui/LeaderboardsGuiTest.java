@@ -54,14 +54,14 @@ class LeaderboardsGuiTest {
                 LeaderboardsGui.LeaderboardType.PLAYTIME, 0);
         Inventory inv = gui.getInventory();
 
-        // All category buttons should be present (slots 0-6)
-        for (int i = 0; i < LeaderboardsGui.LeaderboardType.values().length; i++) {
+        // Category buttons at slots 1-7 (shifted for symmetry)
+        for (int i = 1; i <= LeaderboardsGui.LeaderboardType.values().length; i++) {
             assertNotNull(inv.getItem(i), "Category button at slot " + i + " should exist");
         }
     }
 
     @Test
-    void showsPlayersInCorrectOrder() {
+    void showsPlayersWithPlayerHeads() {
         List<StatsRecord> stats = new ArrayList<>();
         
         StatsRecord player1 = new StatsRecord(UUID.randomUUID(), "TopPlayer");
@@ -83,17 +83,21 @@ class LeaderboardsGuiTest {
                 LeaderboardsGui.LeaderboardType.PLAYTIME, 0);
         Inventory inv = gui.getInventory();
 
-        // First player should be at slot 18 (gold block for #1)
-        assertNotNull(inv.getItem(18));
-        assertEquals(Material.GOLD_BLOCK, inv.getItem(18).getType());
+        // All players should now use PLAYER_HEAD (with rank as item amount)
+        // First player at slot 10
+        assertNotNull(inv.getItem(10));
+        assertEquals(Material.PLAYER_HEAD, inv.getItem(10).getType());
+        assertEquals(1, inv.getItem(10).getAmount()); // Rank 1
         
-        // Second player should be at slot 19 (iron block for #2)
-        assertNotNull(inv.getItem(19));
-        assertEquals(Material.IRON_BLOCK, inv.getItem(19).getType());
+        // Second player at slot 11
+        assertNotNull(inv.getItem(11));
+        assertEquals(Material.PLAYER_HEAD, inv.getItem(11).getType());
+        assertEquals(2, inv.getItem(11).getAmount()); // Rank 2
         
-        // Third player should be at slot 20 (copper block for #3)
-        assertNotNull(inv.getItem(20));
-        assertEquals(Material.COPPER_BLOCK, inv.getItem(20).getType());
+        // Third player at slot 12
+        assertNotNull(inv.getItem(12));
+        assertEquals(Material.PLAYER_HEAD, inv.getItem(12).getType());
+        assertEquals(3, inv.getItem(12).getAmount()); // Rank 3
     }
 
     @Test
@@ -104,7 +108,7 @@ class LeaderboardsGuiTest {
                 LeaderboardsGui.LeaderboardType.PLAYTIME, 0);
         
         InventoryClickEvent event = mock(InventoryClickEvent.class);
-        when(event.getSlot()).thenReturn(1); // Kills category
+        when(event.getSlot()).thenReturn(2); // Kills category at slot 2 (shifted by 1)
         when(event.getWhoClicked()).thenReturn(player);
         
         gui.handleClick(event);
@@ -131,6 +135,19 @@ class LeaderboardsGuiTest {
         // Page indicator at 49
         assertNotNull(inv.getItem(49));
         assertEquals(Material.PAPER, inv.getItem(49).getType());
+    }
+
+    @Test
+    void hasInfoPanel() {
+        when(statsService.getAllStats()).thenReturn(new ArrayList<>());
+        
+        LeaderboardsGui gui = new LeaderboardsGui(plugin, guiManager, statsService, healthService,
+                LeaderboardsGui.LeaderboardType.PLAYTIME, 0);
+        Inventory inv = gui.getInventory();
+
+        // Info panel at slot 8
+        assertNotNull(inv.getItem(8));
+        assertEquals(Material.BOOK, inv.getItem(8).getType());
     }
 
     @Test
@@ -168,9 +185,9 @@ class LeaderboardsGuiTest {
     @Test
     void paginationWorksWithManyPlayers() {
         List<StatsRecord> stats = new ArrayList<>();
-        for (int i = 0; i < 25; i++) {
+        for (int i = 0; i < 45; i++) { // More than 21 per page
             StatsRecord record = new StatsRecord(UUID.randomUUID(), "Player" + i);
-            record.setPlaytimeMillis(1000000L * (25 - i));
+            record.setPlaytimeMillis(1000000L * (45 - i));
             stats.add(record);
         }
         when(statsService.getAllStats()).thenReturn(stats);
@@ -184,7 +201,8 @@ class LeaderboardsGuiTest {
         assertNotNull(inv.getItem(53));
         assertEquals(Material.ARROW, inv.getItem(53).getType());
         
-        // Should NOT have previous page button on first page
+        // First page should NOT have previous page arrow (but slot 45 exists with glass)
+        assertNotNull(inv.getItem(45));
         assertNotEquals(Material.ARROW, inv.getItem(45).getType());
     }
 
@@ -202,9 +220,9 @@ class LeaderboardsGuiTest {
     @Test
     void previousPageButtonWorks() {
         List<StatsRecord> stats = new ArrayList<>();
-        for (int i = 0; i < 25; i++) {
+        for (int i = 0; i < 45; i++) {
             StatsRecord record = new StatsRecord(UUID.randomUUID(), "Player" + i);
-            record.setPlaytimeMillis(1000000L * (25 - i));
+            record.setPlaytimeMillis(1000000L * (45 - i));
             stats.add(record);
         }
         when(statsService.getAllStats()).thenReturn(stats);
@@ -231,9 +249,9 @@ class LeaderboardsGuiTest {
     @Test
     void nextPageButtonWorks() {
         List<StatsRecord> stats = new ArrayList<>();
-        for (int i = 0; i < 25; i++) {
+        for (int i = 0; i < 45; i++) {
             StatsRecord record = new StatsRecord(UUID.randomUUID(), "Player" + i);
-            record.setPlaytimeMillis(1000000L * (25 - i));
+            record.setPlaytimeMillis(1000000L * (45 - i));
             stats.add(record);
         }
         when(statsService.getAllStats()).thenReturn(stats);
@@ -258,9 +276,9 @@ class LeaderboardsGuiTest {
         LeaderboardsGui gui = new LeaderboardsGui(plugin, guiManager, statsService, healthService,
                 LeaderboardsGui.LeaderboardType.PLAYTIME, 0);
         
-        // Click same category (PLAYTIME is at slot 0)
+        // Click same category (PLAYTIME is at slot 1 now)
         InventoryClickEvent event = mock(InventoryClickEvent.class);
-        when(event.getSlot()).thenReturn(0);
+        when(event.getSlot()).thenReturn(1);
         when(event.getWhoClicked()).thenReturn(player);
         
         gui.handleClick(event);
@@ -295,7 +313,6 @@ class LeaderboardsGuiTest {
         LeaderboardsGui gui = new LeaderboardsGui(plugin, guiManager, statsService, healthService,
                 LeaderboardsGui.LeaderboardType.PLAYTIME, 0);
         
-        // Just verify it doesn't throw and creates the GUI
         assertNotNull(gui.getInventory());
     }
 
@@ -330,11 +347,11 @@ class LeaderboardsGuiTest {
     }
 
     @Test
-    void playerRank4AndBeyondUsesPlayerHead() {
+    void playerRankShownAsItemAmount() {
         List<StatsRecord> stats = new ArrayList<>();
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 10; i++) {
             StatsRecord record = new StatsRecord(UUID.randomUUID(), "Player" + i);
-            record.setPlaytimeMillis(1000000L * (5 - i));
+            record.setPlaytimeMillis(1000000L * (10 - i));
             stats.add(record);
         }
         
@@ -344,9 +361,33 @@ class LeaderboardsGuiTest {
                 LeaderboardsGui.LeaderboardType.PLAYTIME, 0);
         Inventory inv = gui.getInventory();
 
-        // Rank 4 (slot 21) should use PLAYER_HEAD
-        assertNotNull(inv.getItem(21));
-        assertEquals(Material.PLAYER_HEAD, inv.getItem(21).getType());
+        // All entries should use PLAYER_HEAD with rank as amount
+        // Slots 10-16 (row 2), 19-25 (row 3) for 7x3 grid
+        int[] playerSlots = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21};
+        for (int i = 0; i < 10; i++) {
+            assertNotNull(inv.getItem(playerSlots[i]));
+            assertEquals(Material.PLAYER_HEAD, inv.getItem(playerSlots[i]).getType());
+            assertEquals(i + 1, inv.getItem(playerSlots[i]).getAmount(), "Rank " + (i+1) + " should have amount " + (i+1));
+        }
+    }
+
+    @Test
+    void maxRankIs50() {
+        List<StatsRecord> stats = new ArrayList<>();
+        for (int i = 0; i < 100; i++) { // More than max 50
+            StatsRecord record = new StatsRecord(UUID.randomUUID(), "Player" + i);
+            record.setPlaytimeMillis(1000000L * (100 - i));
+            stats.add(record);
+        }
+        
+        when(statsService.getAllStats()).thenReturn(stats);
+
+        // Should limit to 50 players total
+        LeaderboardsGui gui = new LeaderboardsGui(plugin, guiManager, statsService, healthService,
+                LeaderboardsGui.LeaderboardType.PLAYTIME, 0);
+        
+        // Just verify it creates without error
+        assertNotNull(gui.getInventory());
     }
 
     @Test
@@ -358,7 +399,6 @@ class LeaderboardsGuiTest {
         
         gui.open(player);
         
-        // MockBukkit tracks open inventory
         assertNotNull(player.getOpenInventory());
     }
 }

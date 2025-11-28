@@ -222,6 +222,7 @@ These principles guide every feature and decision:
 | **Time-Range Filters** | Medium | M | ✅ Done | Query "last 6h", "today", "this week" |
 | **Biome-Filtered Views** | Low | S | ⏳ Todo | Filter any heatmap by biome type |
 | **In-Game GUI** | High | L | ✅ Done | Rich chest-menu interface with visual insights |
+| **Enhanced Leaderboard GUI** | High | M | ⏳ Todo | Player skulls with rank position, top 50 pagination, visual ranking |
 | **Live Activity Dashboard** | Medium | M | ⚠️ Partial | "Who's farming what right now" real-time view |
 | **Player Comparison Views** | Medium | M | ⏳ Todo | Side-by-side stat comparisons in GUI |
 

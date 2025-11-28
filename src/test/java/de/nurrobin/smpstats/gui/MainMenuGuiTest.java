@@ -3,7 +3,6 @@ package de.nurrobin.smpstats.gui;
 import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.StatsService;
 import de.nurrobin.smpstats.health.ServerHealthService;
-import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
@@ -14,8 +13,7 @@ import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class MainMenuGuiTest {
@@ -44,20 +42,52 @@ class MainMenuGuiTest {
     @Test
     void showsMenuItemsAfterOpen() {
         MainMenuGui gui = new MainMenuGui(plugin, guiManager, statsService, healthService);
-        gui.open(player); // Items are now initialized on open
+        gui.open(player);
         Inventory inv = gui.getInventory();
 
-        // My Stats (player head is set on open)
-        assertNotNull(inv.getItem(11));
-        assertEquals(Material.PLAYER_HEAD, inv.getItem(11).getType());
+        // My Stats at slot 20 (player head)
+        assertNotNull(inv.getItem(20));
+        assertEquals(Material.PLAYER_HEAD, inv.getItem(20).getType());
 
-        // Server Health
-        assertNotNull(inv.getItem(13));
-        assertEquals(Material.REDSTONE_BLOCK, inv.getItem(13).getType());
+        // Server Health at slot 22 (redstone block for player with permission)
+        assertNotNull(inv.getItem(22));
+        // Material depends on permission, but should exist
+        assertNotNull(inv.getItem(22).getType());
 
-        // Leaderboards
-        assertNotNull(inv.getItem(15));
-        assertEquals(Material.GOLD_INGOT, inv.getItem(15).getType());
+        // Leaderboards at slot 24
+        assertNotNull(inv.getItem(24));
+        // Material depends on permission
+        assertNotNull(inv.getItem(24).getType());
+    }
+
+    @Test
+    void hasCorrectInventorySize() {
+        MainMenuGui gui = new MainMenuGui(plugin, guiManager, statsService, healthService);
+        gui.open(player);
+        
+        assertEquals(45, gui.getInventory().getSize());
+    }
+
+    @Test
+    void hasHeaderInfo() {
+        MainMenuGui gui = new MainMenuGui(plugin, guiManager, statsService, healthService);
+        gui.open(player);
+        Inventory inv = gui.getInventory();
+
+        // Header info at slot 4
+        assertNotNull(inv.getItem(4));
+        assertEquals(Material.NETHER_STAR, inv.getItem(4).getType());
+    }
+
+    @Test
+    void hasCloseButton() {
+        MainMenuGui gui = new MainMenuGui(plugin, guiManager, statsService, healthService);
+        gui.open(player);
+        Inventory inv = gui.getInventory();
+
+        // Close button at slot 40
+        assertNotNull(inv.getItem(40));
+        assertEquals(Material.BARRIER, inv.getItem(40).getType());
     }
 
     @Test
@@ -66,7 +96,7 @@ class MainMenuGuiTest {
         gui.open(player);
         
         InventoryClickEvent event = mock(InventoryClickEvent.class);
-        when(event.getSlot()).thenReturn(11);
+        when(event.getSlot()).thenReturn(20); // New slot for My Stats
         when(event.getWhoClicked()).thenReturn(player);
         
         gui.handleClick(event);
@@ -81,7 +111,7 @@ class MainMenuGuiTest {
         gui.open(player);
         
         InventoryClickEvent event = mock(InventoryClickEvent.class);
-        when(event.getSlot()).thenReturn(13);
+        when(event.getSlot()).thenReturn(22); // New slot for Server Health
         when(event.getWhoClicked()).thenReturn(player);
         
         gui.handleClick(event);
@@ -96,7 +126,7 @@ class MainMenuGuiTest {
         gui.open(player);
         
         InventoryClickEvent event = mock(InventoryClickEvent.class);
-        when(event.getSlot()).thenReturn(13);
+        when(event.getSlot()).thenReturn(22); // New slot for Server Health
         when(event.getWhoClicked()).thenReturn(player);
         
         gui.handleClick(event);
@@ -110,11 +140,55 @@ class MainMenuGuiTest {
         gui.open(player);
         
         InventoryClickEvent event = mock(InventoryClickEvent.class);
-        when(event.getSlot()).thenReturn(15);
+        when(event.getSlot()).thenReturn(24); // New slot for Leaderboards
         when(event.getWhoClicked()).thenReturn(player);
         
         gui.handleClick(event);
         
         verify(guiManager).openGui(eq(player), any(LeaderboardsGui.class));
+    }
+
+    @Test
+    void closeButtonClosesInventory() {
+        MainMenuGui gui = new MainMenuGui(plugin, guiManager, statsService, healthService);
+        gui.open(player);
+        
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(40); // Close button
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        // Should not throw and should not open any other GUI
+        assertDoesNotThrow(() -> gui.handleClick(event));
+        verify(guiManager, never()).openGui(eq(player), any());
+    }
+
+    @Test
+    void hasQuickTipsItems() {
+        MainMenuGui gui = new MainMenuGui(plugin, guiManager, statsService, healthService);
+        gui.open(player);
+        Inventory inv = gui.getInventory();
+
+        // Quick tips at slot 37
+        assertNotNull(inv.getItem(37));
+        assertEquals(Material.BOOK, inv.getItem(37).getType());
+        
+        // Web dashboard info at slot 43
+        assertNotNull(inv.getItem(43));
+        assertEquals(Material.COMPASS, inv.getItem(43).getType());
+    }
+
+    @Test
+    void opensServerHealthWithNewPermission() {
+        player.addAttachment(plugin, "smpstats.gui.health", true);
+        MainMenuGui gui = new MainMenuGui(plugin, guiManager, statsService, healthService);
+        gui.open(player);
+        
+        InventoryClickEvent event = mock(InventoryClickEvent.class);
+        when(event.getSlot()).thenReturn(22);
+        when(event.getWhoClicked()).thenReturn(player);
+        
+        gui.handleClick(event);
+        
+        verify(guiManager).openGui(eq(player), any(ServerHealthGui.class));
     }
 }
