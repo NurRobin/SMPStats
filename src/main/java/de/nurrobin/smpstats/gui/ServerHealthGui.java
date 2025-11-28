@@ -4,6 +4,7 @@ import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.health.ServerHealthService;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -38,50 +39,102 @@ public class ServerHealthGui implements InventoryGui, InventoryHolder {
             return;
         }
 
-        // TPS
+        // === Header: Overall Status (slot 4) ===
         double tps = Math.min(20.0, Math.round(snapshot.tps() * 100.0) / 100.0);
+        String overallStatus = getOverallStatus(snapshot, tps);
+        NamedTextColor statusColor = tps >= 18.0 ? NamedTextColor.GREEN : 
+                                      (tps >= 15.0 ? NamedTextColor.YELLOW : NamedTextColor.RED);
+        inventory.setItem(4, createGuiItem(Material.BEACON,
+                Component.text("⭐ Server Status", NamedTextColor.GOLD).decorate(TextDecoration.BOLD),
+                Component.text(overallStatus, statusColor).decorate(TextDecoration.BOLD),
+                Component.empty(),
+                Component.text("Click metrics below for details", NamedTextColor.GRAY)));
+
+        // === Primary Metrics (Row 2) ===
+        // TPS - Most important metric
         NamedTextColor tpsColor = tps >= 18.0 ? NamedTextColor.GREEN : (tps >= 15.0 ? NamedTextColor.YELLOW : NamedTextColor.RED);
-        inventory.setItem(10, createGuiItem(Material.CLOCK, Component.text("TPS", NamedTextColor.GOLD),
-                Component.text(String.valueOf(tps), tpsColor),
+        inventory.setItem(10, createGuiItem(Material.CLOCK, 
+                Component.text("⚡ TPS", NamedTextColor.GOLD).decorate(TextDecoration.BOLD),
+                Component.text(String.valueOf(tps), tpsColor).decorate(TextDecoration.BOLD),
                 Component.text(getTpsStatus(tps), tpsColor),
-                Component.text("Click for history", NamedTextColor.DARK_GRAY)));
+                Component.empty(),
+                Component.text("▶ Click for history chart", NamedTextColor.DARK_GRAY)));
 
         // Memory
         long usedMb = snapshot.memoryUsed() / 1024 / 1024;
         long maxMb = snapshot.memoryMax() / 1024 / 1024;
-        if (maxMb == 0) maxMb = 1; // Prevent division by zero
+        if (maxMb == 0) maxMb = 1;
         int memoryPercent = (int) ((usedMb * 100) / maxMb);
-        NamedTextColor memColor = memoryPercent < 70 ? NamedTextColor.GREEN : (memoryPercent < 85 ? NamedTextColor.YELLOW : NamedTextColor.RED);
-        inventory.setItem(11, createGuiItem(Material.ENDER_CHEST, Component.text("Memory", NamedTextColor.AQUA),
-                Component.text(usedMb + "MB / " + maxMb + "MB", memColor),
-                Component.text(memoryPercent + "% used", NamedTextColor.GRAY),
-                Component.text("Click for history", NamedTextColor.DARK_GRAY)));
+        NamedTextColor memColor = memoryPercent < 70 ? NamedTextColor.GREEN : 
+                                   (memoryPercent < 85 ? NamedTextColor.YELLOW : NamedTextColor.RED);
+        String memBar = createProgressBar(memoryPercent, 10);
+        inventory.setItem(12, createGuiItem(Material.ENDER_CHEST, 
+                Component.text("📦 Memory", NamedTextColor.AQUA).decorate(TextDecoration.BOLD),
+                Component.text(usedMb + " / " + maxMb + " MB", NamedTextColor.WHITE),
+                Component.text(memBar + " " + memoryPercent + "%", memColor),
+                Component.empty(),
+                Component.text("▶ Click for history chart", NamedTextColor.DARK_GRAY)));
 
-        inventory.setItem(12, createGuiItem(Material.GRASS_BLOCK, Component.text("Chunks", NamedTextColor.GREEN),
-                Component.text(String.valueOf(snapshot.chunks()), NamedTextColor.WHITE),
-                Component.text("Click for history", NamedTextColor.DARK_GRAY)));
-
-        inventory.setItem(13, createGuiItem(Material.CREEPER_HEAD, Component.text("Entities", NamedTextColor.RED),
-                Component.text(String.valueOf(snapshot.entities()), NamedTextColor.WHITE),
-                Component.text("Left-click: History chart", NamedTextColor.DARK_GRAY),
-                Component.text("Right-click: Entity breakdown", NamedTextColor.GRAY)));
-
-        inventory.setItem(14, createGuiItem(Material.HOPPER, Component.text("Hoppers", NamedTextColor.GRAY),
-                Component.text(String.valueOf(snapshot.hoppers()), NamedTextColor.WHITE),
-                Component.text("Click for history", NamedTextColor.DARK_GRAY)));
-
-        inventory.setItem(15, createGuiItem(Material.REDSTONE, Component.text("Redstone", NamedTextColor.DARK_RED),
-                Component.text(String.valueOf(snapshot.redstone()), NamedTextColor.WHITE),
-                Component.text("Click for history", NamedTextColor.DARK_GRAY)));
-        
+        // Cost Index - Combined performance metric
         double costIndex = snapshot.costIndex();
-        NamedTextColor costColor = costIndex < 50 ? NamedTextColor.GREEN : (costIndex < 100 ? NamedTextColor.YELLOW : NamedTextColor.RED);
-        inventory.setItem(16, createGuiItem(Material.EMERALD, Component.text("Cost Index", NamedTextColor.DARK_GREEN),
-                Component.text(String.format("%.1f", costIndex), costColor),
-                Component.text(getCostStatus(costIndex), NamedTextColor.GRAY),
-                Component.text("Click for history", NamedTextColor.DARK_GRAY)));
+        NamedTextColor costColor = costIndex < 50 ? NamedTextColor.GREEN : 
+                                    (costIndex < 100 ? NamedTextColor.YELLOW : NamedTextColor.RED);
+        inventory.setItem(14, createGuiItem(Material.EMERALD, 
+                Component.text("📊 Cost Index", NamedTextColor.DARK_GREEN).decorate(TextDecoration.BOLD),
+                Component.text(String.format("%.1f", costIndex), costColor).decorate(TextDecoration.BOLD),
+                Component.text(getCostStatus(costIndex), costColor),
+                Component.empty(),
+                Component.text("Combined performance score", NamedTextColor.GRAY),
+                Component.text("▶ Click for history chart", NamedTextColor.DARK_GRAY)));
+
+        // === Secondary Metrics (Row 3) ===
+        inventory.setItem(19, createGuiItem(Material.GRASS_BLOCK, 
+                Component.text("🏞 Chunks", NamedTextColor.GREEN),
+                Component.text(String.valueOf(snapshot.chunks()), NamedTextColor.WHITE),
+                Component.text("Loaded chunks", NamedTextColor.GRAY),
+                Component.empty(),
+                Component.text("▶ Click for chart", NamedTextColor.DARK_GRAY)));
+
+        inventory.setItem(21, createGuiItem(Material.ZOMBIE_HEAD, 
+                Component.text("🧟 Entities", NamedTextColor.RED),
+                Component.text(String.valueOf(snapshot.entities()), NamedTextColor.WHITE),
+                Component.text("Total entities loaded", NamedTextColor.GRAY),
+                Component.empty(),
+                Component.text("Left: Chart | Right: Breakdown", NamedTextColor.DARK_GRAY)));
+
+        inventory.setItem(23, createGuiItem(Material.HOPPER, 
+                Component.text("📥 Hoppers", NamedTextColor.GRAY),
+                Component.text(String.valueOf(snapshot.hoppers()), NamedTextColor.WHITE),
+                Component.text("Active hoppers", NamedTextColor.GRAY),
+                Component.empty(),
+                Component.text("▶ Click for chart", NamedTextColor.DARK_GRAY)));
+
+        inventory.setItem(25, createGuiItem(Material.REDSTONE, 
+                Component.text("⚡ Redstone", NamedTextColor.DARK_RED),
+                Component.text(String.valueOf(snapshot.redstone()), NamedTextColor.WHITE),
+                Component.text("Active redstone components", NamedTextColor.GRAY),
+                Component.empty(),
+                Component.text("▶ Click for chart", NamedTextColor.DARK_GRAY)));
 
         addNavigationButtons();
+    }
+    
+    private String getOverallStatus(de.nurrobin.smpstats.health.HealthSnapshot snapshot, double tps) {
+        if (tps >= 19.0 && snapshot.memoryUsed() * 100 / snapshot.memoryMax() < 70) {
+            return "✅ Excellent";
+        } else if (tps >= 18.0 && snapshot.memoryUsed() * 100 / snapshot.memoryMax() < 85) {
+            return "🟢 Good";
+        } else if (tps >= 15.0) {
+            return "🟡 Fair";
+        } else {
+            return "🔴 Poor";
+        }
+    }
+    
+    private String createProgressBar(int percent, int length) {
+        int filled = (percent * length) / 100;
+        int empty = length - filled;
+        return "█".repeat(Math.max(0, filled)) + "░".repeat(Math.max(0, empty));
     }
 
     private void addNavigationButtons() {
@@ -141,11 +194,13 @@ public class ServerHealthGui implements InventoryGui, InventoryHolder {
         switch (slot) {
             case 10 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
                     HealthChartGui.MetricType.TPS, HealthChartGui.TimeScale.FIVE_MINUTES));
-            case 11 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
-                    HealthChartGui.MetricType.MEMORY, HealthChartGui.TimeScale.FIVE_MINUTES));
             case 12 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
+                    HealthChartGui.MetricType.MEMORY, HealthChartGui.TimeScale.FIVE_MINUTES));
+            case 14 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
+                    HealthChartGui.MetricType.COST_INDEX, HealthChartGui.TimeScale.FIVE_MINUTES));
+            case 19 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
                     HealthChartGui.MetricType.CHUNKS, HealthChartGui.TimeScale.FIVE_MINUTES));
-            case 13 -> {
+            case 21 -> {
                 if (event.getClick().isRightClick()) {
                     guiManager.openGui(player, new EntityBreakdownGui(plugin, guiManager, healthService, 0));
                 } else {
@@ -153,12 +208,10 @@ public class ServerHealthGui implements InventoryGui, InventoryHolder {
                             HealthChartGui.MetricType.ENTITIES, HealthChartGui.TimeScale.FIVE_MINUTES));
                 }
             }
-            case 14 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
+            case 23 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
                     HealthChartGui.MetricType.HOPPERS, HealthChartGui.TimeScale.FIVE_MINUTES));
-            case 15 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
+            case 25 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
                     HealthChartGui.MetricType.REDSTONE, HealthChartGui.TimeScale.FIVE_MINUTES));
-            case 16 -> guiManager.openGui(player, new HealthChartGui(plugin, guiManager, healthService, 
-                    HealthChartGui.MetricType.COST_INDEX, HealthChartGui.TimeScale.FIVE_MINUTES));
             case 18 -> guiManager.openGui(player, new HotChunksGui(plugin, guiManager, healthService));
             case 22 -> guiManager.openGui(player, new MainMenuGui(plugin, guiManager, plugin.getStatsService(), healthService));
             case 26 -> {

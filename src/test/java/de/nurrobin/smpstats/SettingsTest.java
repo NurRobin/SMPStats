@@ -38,7 +38,9 @@ class SettingsTest {
                 true, true, 16, 17,
                 true, 18, 0.1, 0.2, 0.3, 0.4, thresholds,
                 true, 19, 20, "url", 21, 22,
-                dashboardSettings);
+                dashboardSettings, true);
+
+        assertTrue(settings.isGuiAnimatedBordersEnabled());
 
         assertTrue(settings.isTrackMovement());
         assertTrue(settings.isTrackBlocks());

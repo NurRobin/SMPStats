@@ -63,33 +63,37 @@ class ServerHealthGuiTest {
         ServerHealthGui gui = new ServerHealthGui(plugin, guiManager, healthService);
         Inventory inv = gui.getInventory();
 
-        // TPS
+        // Overall Status
+        assertNotNull(inv.getItem(4));
+        assertEquals(Material.BEACON, inv.getItem(4).getType());
+        
+        // TPS (Primary metric)
         assertNotNull(inv.getItem(10));
         assertEquals(Material.CLOCK, inv.getItem(10).getType());
         
-        // Memory
-        assertNotNull(inv.getItem(11));
-        assertEquals(Material.ENDER_CHEST, inv.getItem(11).getType());
-        
-        // Chunks
+        // Memory (Primary metric)
         assertNotNull(inv.getItem(12));
-        assertEquals(Material.GRASS_BLOCK, inv.getItem(12).getType());
+        assertEquals(Material.ENDER_CHEST, inv.getItem(12).getType());
         
-        // Entities
-        assertNotNull(inv.getItem(13));
-        assertEquals(Material.CREEPER_HEAD, inv.getItem(13).getType());
-        
-        // Hoppers
+        // Cost Index (Primary metric)
         assertNotNull(inv.getItem(14));
-        assertEquals(Material.HOPPER, inv.getItem(14).getType());
+        assertEquals(Material.EMERALD, inv.getItem(14).getType());
         
-        // Redstone
-        assertNotNull(inv.getItem(15));
-        assertEquals(Material.REDSTONE, inv.getItem(15).getType());
+        // Chunks (Secondary metric)
+        assertNotNull(inv.getItem(19));
+        assertEquals(Material.GRASS_BLOCK, inv.getItem(19).getType());
         
-        // Cost Index
-        assertNotNull(inv.getItem(16));
-        assertEquals(Material.EMERALD, inv.getItem(16).getType());
+        // Entities (Secondary metric)
+        assertNotNull(inv.getItem(21));
+        assertEquals(Material.ZOMBIE_HEAD, inv.getItem(21).getType());
+        
+        // Hoppers (Secondary metric)
+        assertNotNull(inv.getItem(23));
+        assertEquals(Material.HOPPER, inv.getItem(23).getType());
+        
+        // Redstone (Secondary metric)
+        assertNotNull(inv.getItem(25));
+        assertEquals(Material.REDSTONE, inv.getItem(25).getType());
         
         // Hot Chunks Button
         assertNotNull(inv.getItem(18));
@@ -200,8 +204,8 @@ class ServerHealthGuiTest {
         ServerHealthGui gui = new ServerHealthGui(plugin, guiManager, healthService);
         Inventory inv = gui.getInventory();
 
-        assertNotNull(inv.getItem(11));
-        assertEquals(Material.ENDER_CHEST, inv.getItem(11).getType());
+        assertNotNull(inv.getItem(12));
+        assertEquals(Material.ENDER_CHEST, inv.getItem(12).getType());
     }
 
     @Test
@@ -216,8 +220,8 @@ class ServerHealthGuiTest {
         ServerHealthGui gui = new ServerHealthGui(plugin, guiManager, healthService);
         Inventory inv = gui.getInventory();
 
-        assertNotNull(inv.getItem(16));
-        assertEquals(Material.EMERALD, inv.getItem(16).getType());
+        assertNotNull(inv.getItem(14));
+        assertEquals(Material.EMERALD, inv.getItem(14).getType());
     }
 
     @Test

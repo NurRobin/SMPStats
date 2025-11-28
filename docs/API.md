@@ -6,6 +6,7 @@ HTTP API served by the plugin’s built-in Java `HttpServer` (no TLS/HTTP2). It 
 - Auth: every endpoint requires header `X-API-Key: <api.api_key>`; missing/invalid → `401 Unauthorized` (plain text).
 - Methods: only `GET` is implemented.
 - Content types: JSON responses use `application/json`; `/moments/stream` uses `text/event-stream`; error strings are plain text.
+- OpenAPI: `GET /openapi.json` returns the machine-readable OpenAPI 3.1 document (no auth required).
 - Time fields: epoch milliseconds unless noted. Coordinates are block coordinates unless noted. Query numbers must be valid integers; otherwise the server throws and you’ll get a 500.
 - HTTPS: terminate TLS in a reverse proxy if you expose the API publicly.
 
@@ -59,8 +60,14 @@ Returned by `/heatmap/*`.
 | --- | --- | --- |
 | `type` | string | Heatmap type (e.g. `MINING`, `DEATH`) |
 | `world` | string | World name |
-| `chunkX`,`chunkZ` | int | Chunk coordinates |
-| `count` | long | Hits recorded in the bin |
+| `x`,`z` | int | Grid indices (chunk-aligned when `grid=16`, otherwise scaled to the requested grid size) |
+| `gridSize` | int | Bin size in blocks (8, 16, 32, 64) |
+| `count` | number | Weighted hits recorded in the bin (decay applied when configured) |
+
+### Heatmap hotspots map
+Returned by `/heatmap/hotspots/*`.
+
+`{ "<hotspotName>": <weightedCount>, ... }`
 
 ### Timeline day entry
 Returned by `/timeline/*`. Each entry is a map with keys:
@@ -83,17 +90,69 @@ Returned by `/health`.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `timestamp` | long | Capture time (ms since epoch) |
+| `tps` | double | Server TPS (first bucket returned by Paper) |
+| `memoryUsed` | long | Used memory (bytes) |
+| `memoryMax` | long | Max JVM memory (bytes) |
 | `chunks` | int | Loaded chunks (all worlds) |
 | `entities` | int | Loaded entities (all worlds) |
 | `hoppers` | int | Loaded hoppers (all worlds) |
 | `redstone` | int | Count of redstone-ish block entities (droppers/dispensers/observers/pistons/etc., excluding hoppers) |
 | `costIndex` | double | Weighted cost score (0-100) based on counts and config weights |
 | `worlds` | object | Per-world breakdown `{ "<world>": { chunks, entities, hoppers, redstone } }` |
+| `hotChunks` | array | Top chunk samples: `{ world, x, z, entityCount, tileEntityCount, topOwner }` |
 
 ### Timeline range delta
 Returned by `/timeline/range/*`. Same numeric keys as timeline entries but represent deltas over the requested range, plus `from`/`to` day strings.
 
+## Time Range Filters
+
+Many endpoints accept a `from` (and optionally `to`) parameter for human-readable time range filtering. This provides a more intuitive alternative to epoch timestamps.
+
+### Supported Formats
+
+| Format | Example | Description |
+| --- | --- | --- |
+| **Duration** | `6h`, `30m`, `3d`, `2w` | Relative duration from now |
+| **Named Period** | `today`, `yesterday` | Specific day |
+| **Named Period** | `this_week`, `last_week` | Week boundaries (Monday-based) |
+| **Named Period** | `this_month`, `last_month` | Month boundaries |
+| **Epoch (ms)** | `1700000000000` | Raw timestamp (backwards compatibility) |
+
+### Duration Units
+
+| Unit | Meaning | Example |
+| --- | --- | --- |
+| `s` | Seconds | `30s` = last 30 seconds |
+| `m` | Minutes | `15m` = last 15 minutes |
+| `h` | Hours | `6h` = last 6 hours |
+| `d` | Days | `3d` = last 3 days |
+| `w` | Weeks | `2w` = last 2 weeks |
+
+### Examples
+
+```bash
+# Get heatmap data for the last 6 hours
+curl -H "X-API-Key: $API_KEY" "http://localhost:8765/heatmap/MINING?from=6h"
+
+# Get moments from today only
+curl -H "X-API-Key: $API_KEY" "http://localhost:8765/moments/recent?from=today"
+
+# Get this week's leaderboard
+curl -H "X-API-Key: $API_KEY" "http://localhost:8765/timeline/leaderboard?from=this_week"
+
+# Get mining heatmap for a specific time window
+curl -H "X-API-Key: $API_KEY" "http://localhost:8765/heatmap/MINING?from=3d&to=yesterday"
+```
+
+### Backwards Compatibility
+
+The original `since`/`until` (epoch milliseconds) and `days` (integer) parameters still work. If both the new (`from`/`to`) and legacy parameters are provided, the new parameters take precedence.
+
 ## Endpoints
+
+### GET `/openapi.json`
+- Purpose: machine-readable OpenAPI 3.1 document for the HTTP API.
+- Auth: none (public for tooling).
 
 ### GET `/stats/{uuid}`
 - Returns the latest stats for the given player UUID.
@@ -105,30 +164,44 @@ Returned by `/timeline/range/*`. Same numeric keys as timeline entries but repre
 ### GET `/online`
 - Returns a JSON array of currently online player names (sorted case-insensitively).
 
-### GET `/moments/recent?limit=&since=`
+### GET `/moments/recent?limit=&since=&from=`
 - Purpose: recent moments snapshot.
-- Query: `limit` (int, default 50), `since` (ms epoch; if >0 returns moments with `startedAt >= since` ascending, else the latest moments descending).
+- Query: 
+  - `limit` (int, default 50): Maximum moments to return.
+  - `from` (string): Human-readable time range (e.g., `6h`, `3d`, `today`, `this_week`). See [Time Range Filters](#time-range-filters).
+  - `since` (ms epoch): Legacy parameter; use `from` for human-readable syntax. If both are provided, `from` takes precedence.
 - Response: list of `MomentEntry`.
 
-### GET `/moments/query?player=&type=&since=&limit=`
+### GET `/moments/query?player=&type=&since=&from=&limit=`
 - Purpose: filterable moments.
-- Query: `player` (UUID string; ignored if invalid), `type` (moment id; the handler uppercases it before filtering), `since` (ms epoch), `limit` (int, default 100).
+- Query: 
+  - `player` (UUID string; ignored if invalid).
+  - `type` (moment id; the handler uppercases it before filtering).
+  - `from` (string): Human-readable time range. See [Time Range Filters](#time-range-filters).
+  - `since` (ms epoch): Legacy parameter; `from` takes precedence if provided.
+  - `limit` (int, default 100).
 - Response: list of `MomentEntry` ordered by `startedAt` desc.
 - Note: because the filter uppercases `type` and the DB stores the raw definition id, only all-uppercase ids will match.
 
-### GET `/moments/stream?since=&limit=`
+### GET `/moments/stream?since=&from=&limit=`
 - Purpose: server-sent event snapshot of moments.
-- Query: `limit` (int, default 50), `since` (ms epoch; if >0 returns entries from that point, otherwise the latest).
+- Query: 
+  - `limit` (int, default 50).
+  - `from` (string): Human-readable time range. See [Time Range Filters](#time-range-filters).
+  - `since` (ms epoch): Legacy parameter; `from` takes precedence if provided.
 - Response: `text/event-stream` containing one `data: <MomentEntry-json>\n\n` block per moment. It sends the snapshot once; it is not a long-lived live stream.
 
 ### GET `/heatmap/{type}`
 - Purpose: aggregated heatmap data (by chunk).
 - Path: `type` (uppercased internally). Built-in emitters use `MINING`, `DEATH`, `POSITION`.
 - Query:
-  - `since` (long, default: 7 days ago): Start timestamp (ms).
-  - `until` (long, default: now): End timestamp (ms).
+  - `from` (string): Human-readable time range start (e.g., `6h`, `3d`, `today`). See [Time Range Filters](#time-range-filters).
+  - `to` (string): Human-readable time range end.
+  - `since` (long, default: 7 days ago): Legacy start timestamp (ms). `from` takes precedence if provided.
+  - `until` (long, default: now): Legacy end timestamp (ms). `to` takes precedence if provided.
   - `decay` (double, default: from settings): Half-life in hours for time-decay weighting. Set to 0 to disable decay.
   - `world` (string, default: "world"): World name to filter by.
+  - `grid` (int, default: 16): Grid size for aggregation (8, 16, 32, 64).
 - Response: list of `HeatmapBin` records (chunkX, chunkZ, count/weight) ordered by weight descending.
 - Errors: `400 Invalid heatmap type` if an illegal value triggers an `IllegalArgumentException`.
 
@@ -143,14 +216,19 @@ Returned by `/timeline/range/*`. Same numeric keys as timeline entries but repre
 - Response: list of timeline day maps ordered by `day` desc. If the timeline feature is disabled, an empty list is returned.
 - Note: values are cumulative totals captured at autosave times, not per-day diffs.
 
-### GET `/timeline/range/{uuid}?days=`
+### GET `/timeline/range/{uuid}?days=&from=`
 - Purpose: aggregated deltas over a rolling range (weekly/monthly).
-- Query: `days` (int, default 7).
+- Query: 
+  - `from` (string): Human-readable time range (e.g., `3d`, `this_week`). See [Time Range Filters](#time-range-filters). Converted to equivalent days.
+  - `days` (int, default 7): Legacy parameter; `from` takes precedence if provided.
 - Response: map of deltas between the latest snapshot and the baseline before the window plus `from`/`to` day strings.
 
-### GET `/timeline/leaderboard?days=&limit=`
+### GET `/timeline/leaderboard?days=&from=&limit=`
 - Purpose: leaderboard across players for a range.
-- Query: `days` (int, default 7), `limit` (int, default 20).
+- Query: 
+  - `from` (string): Human-readable time range (e.g., `7d`, `this_week`). See [Time Range Filters](#time-range-filters). Converted to equivalent days.
+  - `days` (int, default 7): Legacy parameter; `from` takes precedence if provided.
+  - `limit` (int, default 20).
 - Response: list of rows ordered by `playtime_ms` delta (includes `uuid` + `name` and deltas for the tracked fields).
 
 ### GET `/social/top?limit=`

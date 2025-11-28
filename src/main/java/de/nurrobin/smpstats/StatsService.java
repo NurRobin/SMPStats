@@ -127,6 +127,52 @@ public class StatsService {
         return stats.map(skillCalculator::calculate);
     }
 
+    /**
+     * Returns session delta information for a player if they have an active session.
+     * @param uuid The player's UUID
+     * @return Optional containing SessionDelta if player has active session
+     */
+    public Optional<SessionDelta> getSessionDelta(UUID uuid) {
+        PlayerSession session = sessions.get(uuid);
+        if (session == null) {
+            return Optional.empty();
+        }
+        StatsRecord current = session.snapshot();
+        StatsRecord start = session.getSessionStartSnapshot();
+        long duration = System.currentTimeMillis() - session.getSessionStartTime();
+        return Optional.of(new SessionDelta(start, current, duration));
+    }
+
+    /**
+     * Represents the delta between session start and current stats.
+     */
+    public record SessionDelta(StatsRecord start, StatsRecord current, long durationMillis) {
+        public long deltaKills() {
+            return (current.getPlayerKills() + current.getMobKills()) 
+                 - (start.getPlayerKills() + start.getMobKills());
+        }
+        
+        public long deltaDeaths() {
+            return current.getDeaths() - start.getDeaths();
+        }
+        
+        public long deltaBlocks() {
+            return (current.getBlocksBroken() + current.getBlocksPlaced())
+                 - (start.getBlocksBroken() + start.getBlocksPlaced());
+        }
+        
+        public double deltaDistance() {
+            return (current.getDistanceOverworld() + current.getDistanceNether() + current.getDistanceEnd())
+                 - (start.getDistanceOverworld() + start.getDistanceNether() + start.getDistanceEnd());
+        }
+        
+        public int deltaBiomes() {
+            int startBiomes = start.getBiomesVisited() != null ? start.getBiomesVisited().size() : 0;
+            int currentBiomes = current.getBiomesVisited() != null ? current.getBiomesVisited().size() : 0;
+            return currentBiomes - startBiomes;
+        }
+    }
+
     public boolean resetStats(UUID uuid) {
         StatsRecord record = getMutableRecord(uuid);
         if (record == null) {
@@ -274,17 +320,38 @@ public class StatsService {
         }
     }
 
+    /**
+     * Tracks a player's active session including session-start snapshot for delta calculations.
+     */
     private static class PlayerSession {
         private final StatsRecord record;
+        private final StatsRecord sessionStartSnapshot;
         private long lastPlaytimeMark;
+        private final long sessionStartTime;
 
         PlayerSession(StatsRecord record) {
             this.record = record;
+            this.sessionStartSnapshot = record.copy();
             this.lastPlaytimeMark = System.currentTimeMillis();
+            this.sessionStartTime = System.currentTimeMillis();
         }
 
         public StatsRecord getRecord() {
             return record;
+        }
+
+        /**
+         * Returns the stats snapshot from when the session started.
+         */
+        public StatsRecord getSessionStartSnapshot() {
+            return sessionStartSnapshot;
+        }
+
+        /**
+         * Returns the time when this session started.
+         */
+        public long getSessionStartTime() {
+            return sessionStartTime;
         }
 
         void updatePlaytime(long now) {

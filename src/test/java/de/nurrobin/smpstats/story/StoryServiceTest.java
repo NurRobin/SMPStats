@@ -176,6 +176,6 @@ class StoryServiceTest {
                 true, true, 1, 1,
                 true, 1, 0.1, 0.1, 0.1, 0.1, de.nurrobin.smpstats.health.HealthThresholds.defaults(),
                 enabled, 1, 0, "", 2, 3,
-                Settings.DashboardSettings.defaults());
+                Settings.DashboardSettings.defaults(), true);
     }
 }

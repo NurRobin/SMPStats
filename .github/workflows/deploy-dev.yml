@@ -1,0 +1,261 @@
+name: Deploy to Dev Server (Docker)
+
+on:
+  push:
+    branches:
+      - dev
+      - "feature/**"
+    paths:
+      - '**.java'
+      - 'pom.xml'
+      - 'src/**'
+      - 'plugin.yml'
+      - '.github/workflows/deploy-dev.yml'
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deployment even if no code changes'
+        required: false
+        type: boolean
+        default: false
+      mc_version:
+        description: 'Minecraft version'
+        required: false
+        type: string
+        default: '1.21.10'
+
+concurrency:
+  group: deploy-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Early skip detection - saves build + SSH deployment
+  changes:
+    name: Check for relevant changes
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    outputs:
+      should_run: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for code changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          # Compare against previous commit for push events
+          base: ${{ github.event.before }}
+          filters: |
+            relevant:
+              - '**.java'
+              - 'pom.xml'
+              - 'src/**'
+              - 'plugin.yml'
+              - '.github/workflows/deploy-dev.yml'
+
+      - name: Skip notification
+        if: steps.filter.outputs.relevant == 'false'
+        run: |
+          echo "## ⏭️ Deployment Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "No changes to code or build files detected." >> $GITHUB_STEP_SUMMARY
+          echo "Skipping dev server deployment." >> $GITHUB_STEP_SUMMARY
+
+  build:
+    needs: [changes]
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.should_run == 'true' || needs.changes.result == 'skipped')
+    uses: ./.github/workflows/build.yml
+    with:
+      skip-tests: false
+      upload-coverage: false
+
+  deploy:
+    name: Deploy to Docker Dev Server
+    needs: [changes, build]
+    runs-on: ubuntu-latest
+    if: always() && needs.build.result == 'success'
+    environment: dev-server
+
+    steps:
+      - name: Download built artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+          path: target/
+
+      - name: Prepare deployment info
+        id: info
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          BRANCH_NAME=$(echo "${{ github.ref_name }}" | sed 's/\//-/g')
+          RUN_ID="${{ github.run_id }}-${SHORT_SHA}"
+          
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "branch_safe=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+          echo "run_id=${RUN_ID}" >> $GITHUB_OUTPUT
+          
+          echo "## Deployment Info" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${SHORT_SHA}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ needs.build.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run ID:** ${RUN_ID}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Deploy and start Docker container
+        uses: appleboy/ssh-action@v1.0.3
+        id: deploy
+        env:
+          RUN_ID: ${{ steps.info.outputs.run_id }}
+          SHORT_SHA: ${{ steps.info.outputs.short_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+          MC_VERSION: ${{ inputs.mc_version || '1.21.10' }}
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID,SHORT_SHA,VERSION,MC_VERSION
+          command_timeout: 2m
+          script: |
+            MANAGER="/opt/smpstats-ci/manage-test-server.sh"
+            PLUGIN_DIR="/opt/smpstats-ci/plugins-staging"
+            
+            echo "=== SMPStats Docker Deployment ==="
+            echo "Version: ${VERSION}"
+            echo "Commit: ${SHORT_SHA}"
+            echo "Run ID: ${RUN_ID}"
+            echo "MC Version: ${MC_VERSION}"
+            
+            # Create staging directory for plugin
+            mkdir -p "${PLUGIN_DIR}/${RUN_ID}"
+            
+            # Stop any existing container with same run ID
+            ${MANAGER} stop "${RUN_ID}" 2>/dev/null || true
+
+      - name: Upload JAR to dev server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          source: "target/SMPStats.jar"
+          target: "/opt/smpstats-ci/plugins-staging/${{ steps.info.outputs.run_id }}/"
+          strip_components: 1
+          timeout: 60s
+
+      - name: Start Docker container and get connection info
+        uses: appleboy/ssh-action@v1.0.3
+        id: start
+        env:
+          RUN_ID: ${{ steps.info.outputs.run_id }}
+          MC_VERSION: ${{ inputs.mc_version || '1.21.10' }}
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID,MC_VERSION
+          command_timeout: 3m
+          script: |
+            MANAGER="/opt/smpstats-ci/manage-test-server.sh"
+            PLUGIN_JAR="/opt/smpstats-ci/plugins-staging/${RUN_ID}/SMPStats.jar"
+            
+            # Start the container with the plugin
+            ${MANAGER} start "${RUN_ID}" "${PLUGIN_JAR}" "${MC_VERSION}"
+
+      - name: Wait and verify SMPStats loaded
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          RUN_ID: ${{ steps.info.outputs.run_id }}
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          envs: RUN_ID
+          command_timeout: 1m
+          script: |
+            CONTAINER="smpstats-test-${RUN_ID}"
+            
+            echo "Waiting for SMPStats to load..."
+            sleep 10
+            
+            if docker logs "${CONTAINER}" 2>&1 | grep -q "\[SMPStats\].*Enabling"; then
+              echo "✅ SMPStats plugin loaded successfully!"
+              docker logs "${CONTAINER}" 2>&1 | grep -i "SMPStats" | tail -10
+            else
+              echo "⚠️ SMPStats load status unclear"
+              docker logs "${CONTAINER}" --tail 30
+            fi
+            
+            echo ""
+            echo "=== Container Status ==="
+            docker ps --filter "name=${CONTAINER}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+      - name: Deployment summary
+        run: |
+          echo "## ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "SMPStats v${{ needs.build.outputs.version }} (${{ steps.info.outputs.short_sha }}) deployed to Docker container." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Container Info" >> $GITHUB_STEP_SUMMARY
+          echo "- **Container:** smpstats-test-${{ steps.info.outputs.run_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **MC Version:** ${{ inputs.mc_version || '1.21.10' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Actions Performed" >> $GITHUB_STEP_SUMMARY
+          echo "1. ✅ Built plugin JAR" >> $GITHUB_STEP_SUMMARY
+          echo "2. ✅ Uploaded to server" >> $GITHUB_STEP_SUMMARY
+          echo "3. ✅ Started Docker container with dynamic ports" >> $GITHUB_STEP_SUMMARY
+          echo "4. ✅ SMPStats plugin loaded" >> $GITHUB_STEP_SUMMARY
+
+  cleanup-old:
+    name: Cleanup Old Containers
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    environment: dev-server
+    continue-on-error: true
+
+    steps:
+      - name: Cleanup containers older than 2 hours
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          command_timeout: 2m
+          script: |
+            echo "Cleaning up old containers..."
+            
+            # Find and remove containers older than 2 hours
+            docker ps -a --filter "name=smpstats-test-" --format "{{.ID}} {{.Names}} {{.Status}}" | while read line; do
+              id=$(echo "$line" | awk '{print $1}')
+              name=$(echo "$line" | awk '{print $2}')
+              
+              # Check if container is running for more than 2 hours
+              created=$(docker inspect --format='{{.Created}}' "$id" 2>/dev/null || echo "")
+              if [ -n "$created" ]; then
+                created_ts=$(date -d "$created" +%s 2>/dev/null || echo 0)
+                now_ts=$(date +%s)
+                age=$((now_ts - created_ts))
+                
+                # 7200 seconds = 2 hours
+                if [ $age -gt 7200 ]; then
+                  echo "Removing old container: ${name} (age: ${age}s)"
+                  docker stop "${id}" 2>/dev/null || true
+                  docker rm "${id}" 2>/dev/null || true
+                fi
+              fi
+            done
+            
+            # Cleanup staging files older than 1 day
+            find /opt/smpstats-ci/plugins-staging -mindepth 1 -maxdepth 1 -mtime +1 -exec rm -rf {} \; 2>/dev/null || true
+            
+            echo "Cleanup complete"

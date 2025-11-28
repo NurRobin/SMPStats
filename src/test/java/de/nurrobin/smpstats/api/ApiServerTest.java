@@ -1,5 +1,7 @@
 package de.nurrobin.smpstats.api;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpPrincipal;
 import de.nurrobin.smpstats.SMPStats;
@@ -12,6 +14,7 @@ import de.nurrobin.smpstats.heatmap.HeatmapService;
 import de.nurrobin.smpstats.moments.MomentService;
 import de.nurrobin.smpstats.social.SocialPairRow;
 import de.nurrobin.smpstats.timeline.TimelineService;
+import org.bukkit.plugin.PluginDescriptionFile;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -32,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.AdditionalMatchers.and;
 
 class ApiServerTest {
     private static final String API_KEY = "secret";
@@ -50,6 +54,8 @@ class ApiServerTest {
     void setup() {
         plugin = mock(SMPStats.class);
         when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        PluginDescriptionFile pdf = new PluginDescriptionFile("SMPStats", "1.2.3", "de.nurrobin.smpstats.SMPStats");
+        when(plugin.getDescription()).thenReturn(pdf);
         stats = mock(StatsService.class);
         settings = new Settings(
                 true, true, true, true, true, true, true,
@@ -59,7 +65,7 @@ class ApiServerTest {
                 new de.nurrobin.smpstats.skills.SkillWeights.ExplorationWeights(0, 0),
                 new de.nurrobin.smpstats.skills.SkillWeights.BuilderWeights(0),
                 new de.nurrobin.smpstats.skills.SkillWeights.FarmerWeights(0, 0)
-        ), true, 0L, 0L, true, 1, 1.0, List.of(), List.of(), true, 1, 1, true, true, true, 1, 1, true, 1, 0, 0, 0, 0, de.nurrobin.smpstats.health.HealthThresholds.defaults(), true, 1, 1, "", 1, 1, Settings.DashboardSettings.defaults());
+        ), true, 0L, 0L, true, 1, 1.0, List.of(), List.of(), true, 1, 1, true, true, true, 1, 1, true, 1, 0, 0, 0, 0, de.nurrobin.smpstats.health.HealthThresholds.defaults(), true, 1, 1, "", 1, 1, Settings.DashboardSettings.defaults(), true);
         moments = mock(MomentService.class);
         heatmap = mock(HeatmapService.class);
         timeline = mock(TimelineService.class);
@@ -183,6 +189,115 @@ class ApiServerTest {
         handler.handle(invalidGrid);
         assertEquals(200, invalidGrid.status);
         verify(heatmap).generateHeatmap(eq("BREAK"), anyString(), anyLong(), anyLong(), anyDouble(), eq(16));
+    }
+
+    @Test
+    void heatmapEndpointsAcceptTimeRangeFromParameter() throws Exception {
+        var handler = server.heatmapHandler();
+        
+        // Test 'from' parameter with human-readable time range (e.g., "6h")
+        long beforeMs = System.currentTimeMillis();
+        FakeExchange fromReq = new FakeExchange("/heatmap/break?from=6h", API_KEY);
+        handler.handle(fromReq);
+        assertEquals(200, fromReq.status);
+        
+        // Verify the heatmap was called with a 'since' value approximately 6 hours ago
+        verify(heatmap, atLeastOnce()).generateHeatmap(
+                eq("BREAK"), 
+                anyString(), 
+                longThat(since -> since >= beforeMs - 6L * 3600 * 1000 - 1000 && since <= beforeMs - 6L * 3600 * 1000 + 1000),
+                anyLong(), 
+                anyDouble(), 
+                anyInt()
+        );
+    }
+
+    @Test
+    void heatmapEndpointsAcceptTimeRangeToParameter() throws Exception {
+        var handler = server.heatmapHandler();
+        
+        // Test 'from' and 'to' parameters together
+        FakeExchange fromToReq = new FakeExchange("/heatmap/break?from=today&to=today", API_KEY);
+        handler.handle(fromToReq);
+        assertEquals(200, fromToReq.status);
+    }
+
+    @Test
+    void heatmapEndpointsFallbackToSinceUntilParameters() throws Exception {
+        var handler = server.heatmapHandler();
+        
+        // Test that 'since' and 'until' still work for backwards compatibility
+        long since = System.currentTimeMillis() - 3600000L;
+        long until = System.currentTimeMillis();
+        FakeExchange legacyReq = new FakeExchange("/heatmap/break?since=" + since + "&until=" + until, API_KEY);
+        handler.handle(legacyReq);
+        assertEquals(200, legacyReq.status);
+        
+        verify(heatmap, atLeastOnce()).generateHeatmap(
+                eq("BREAK"), 
+                anyString(), 
+                eq(since),
+                eq(until), 
+                anyDouble(), 
+                anyInt()
+        );
+    }
+
+    @Test
+    void openApiEndpointIsPublicAndWellFormed() throws Exception {
+        var handler = server.openApiHandler();
+        FakeExchange exchange = new FakeExchange("/openapi.json", null); // no auth required
+        handler.handle(exchange);
+
+        assertEquals(200, exchange.status);
+        JsonObject json = JsonParser.parseString(exchange.body()).getAsJsonObject();
+        assertEquals("3.1.0", json.get("openapi").getAsString());
+        assertTrue(json.getAsJsonObject("info").get("version").getAsString().contains("1.2.3"));
+        assertTrue(json.getAsJsonObject("paths").has("/stats/{playerId}"));
+        assertTrue(json.getAsJsonObject("components").getAsJsonObject("schemas").has("HeatmapBin"));
+    }
+
+    @Test
+    void momentsEndpointsAcceptFromParameter() throws Exception {
+        when(moments.queryMoments(any(), any(), anyLong(), anyInt())).thenReturn(List.of());
+        when(moments.getRecentMoments(anyInt())).thenReturn(List.of());
+        
+        // Test query moments with 'from' parameter
+        var queryHandler = server.queryMomentsHandler();
+        FakeExchange queryReq = new FakeExchange("/moments/query?from=6h", API_KEY);
+        queryHandler.handle(queryReq);
+        assertEquals(200, queryReq.status);
+        
+        // Test recent moments with 'from' parameter
+        when(moments.getMomentsSince(anyLong(), anyInt())).thenReturn(List.of());
+        var recentHandler = server.recentMomentsHandler();
+        FakeExchange recentReq = new FakeExchange("/moments/recent?from=today", API_KEY);
+        recentHandler.handle(recentReq);
+        assertEquals(200, recentReq.status);
+        
+        // Test stream moments with 'from' parameter
+        var streamHandler = server.momentsStreamHandler();
+        FakeExchange streamReq = new FakeExchange("/moments/stream?from=this_week", API_KEY);
+        streamHandler.handle(streamReq);
+        assertEquals(200, streamReq.status);
+    }
+
+    @Test
+    void timelineEndpointsAcceptFromParameter() throws Exception {
+        when(storage.loadTimelineLeaderboard(anyInt(), anyInt())).thenReturn(List.of());
+        
+        // Test leaderboard with 'from' parameter (should convert to days)
+        var handler = server.timelineHandler();
+        FakeExchange leaderboardReq = new FakeExchange("/timeline/leaderboard?from=this_week", API_KEY);
+        handler.handle(leaderboardReq);
+        assertEquals(200, leaderboardReq.status);
+        
+        // Test range with 'from' parameter
+        UUID uuid = UUID.randomUUID();
+        when(storage.loadTimelineRange(eq(uuid), anyInt())).thenReturn(Map.of("from", "2024-01-01"));
+        FakeExchange rangeReq = new FakeExchange("/timeline/range/" + uuid + "?from=3d", API_KEY);
+        handler.handle(rangeReq);
+        assertEquals(200, rangeReq.status);
     }
 
     @Test

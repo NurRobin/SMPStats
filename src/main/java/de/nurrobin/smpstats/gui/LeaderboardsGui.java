@@ -6,6 +6,7 @@ import de.nurrobin.smpstats.StatsService;
 import de.nurrobin.smpstats.health.ServerHealthService;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -16,6 +17,7 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
@@ -23,6 +25,7 @@ import static de.nurrobin.smpstats.gui.GuiUtils.*;
 
 /**
  * GUI for displaying player leaderboards sorted by various statistics.
+ * Features player skulls with rank indicators and pagination support for top 50 players.
  */
 public class LeaderboardsGui implements InventoryGui, InventoryHolder {
     private final SMPStats plugin;
@@ -32,7 +35,15 @@ public class LeaderboardsGui implements InventoryGui, InventoryHolder {
     private final Inventory inventory;
     private final LeaderboardType currentType;
     private final int page;
-    private static final int PLAYERS_PER_PAGE = 10;
+    
+    /** Maximum players shown per page (reduced to 14 due to larger category row) */
+    private static final int PLAYERS_PER_PAGE = 14;
+    /** Maximum rank to display (top 50) */
+    private static final int MAX_RANK = 50;
+    /** First slot for player entries (row 2, starting at slot 10) */
+    private static final int FIRST_PLAYER_SLOT = 10;
+    /** Slot for "Find My Rank" button */
+    private static final int FIND_MY_RANK_SLOT = 46;
 
     /**
      * Available leaderboard sorting types.
@@ -86,96 +97,201 @@ public class LeaderboardsGui implements InventoryGui, InventoryHolder {
         this.currentType = type;
         this.page = page;
         this.inventory = Bukkit.createInventory(this, 54, 
-                Component.text("Leaderboard: " + type.getDisplayName(), NamedTextColor.GOLD));
+                Component.text("🏆 ", NamedTextColor.GOLD)
+                        .append(Component.text(type.getDisplayName() + " Leaderboard", NamedTextColor.WHITE)));
         initializeItems();
     }
 
     private void initializeItems() {
-        // Category selection row (top row)
-        int categorySlot = 0;
-        for (LeaderboardType type : LeaderboardType.values()) {
-            boolean isSelected = type == currentType;
-            Material material = isSelected ? Material.ENCHANTED_BOOK : type.getIcon();
-            inventory.setItem(categorySlot, createGuiItem(material,
-                    Component.text(type.getDisplayName(), isSelected ? NamedTextColor.GREEN : type.getColor()),
-                    isSelected ? Component.text("Currently viewing", NamedTextColor.GRAY) 
-                               : Component.text("Click to view", NamedTextColor.DARK_GRAY)));
-            categorySlot++;
-        }
+        // Fill background first
+        fillBackground();
+        
+        // Category selection row (top row, slots 1-7)
+        initializeCategoryButtons();
 
-        // Get sorted player list
+        // Get sorted player list (limited to top MAX_RANK)
         List<StatsRecord> allStats = statsService.getAllStats();
         allStats.sort(Comparator.comparing(currentType::getValue).reversed());
         
-        int totalPages = (int) Math.ceil(allStats.size() / (double) PLAYERS_PER_PAGE);
+        // Limit to top MAX_RANK players
+        int totalPlayers = Math.min(allStats.size(), MAX_RANK);
+        int totalPages = (int) Math.ceil(totalPlayers / (double) PLAYERS_PER_PAGE);
         int startIndex = page * PLAYERS_PER_PAGE;
-        int endIndex = Math.min(startIndex + PLAYERS_PER_PAGE, allStats.size());
+        int endIndex = Math.min(startIndex + PLAYERS_PER_PAGE, totalPlayers);
 
-        // Display players (slots 18-27 for top 10)
-        int displaySlot = 18;
-        for (int i = startIndex; i < endIndex && displaySlot < 28; i++) {
-            StatsRecord record = allStats.get(i);
-            int rank = i + 1;
-            Material headMaterial = getRankMaterial(rank);
-            
-            inventory.setItem(displaySlot, createGuiItem(headMaterial,
-                    Component.text("#" + rank + " ", getRankColor(rank))
-                            .append(Component.text(record.getName(), NamedTextColor.WHITE)),
-                    Component.text(currentType.getDisplayName() + ": ", NamedTextColor.GRAY)
-                            .append(Component.text(currentType.formatValue(record), currentType.getColor()))));
-            displaySlot++;
-        }
+        // Display players in a 7x3 grid layout (slots 10-16, 19-25, 28-34)
+        displayPlayers(allStats, startIndex, endIndex);
+
+        // Info item showing current category stats
+        addInfoPanel(allStats, totalPlayers);
 
         // Navigation row (bottom)
-        // Previous page
-        if (page > 0) {
-            inventory.setItem(45, createGuiItem(Material.ARROW, 
-                    Component.text("Previous Page", NamedTextColor.YELLOW),
-                    Component.text("Page " + page + "/" + totalPages, NamedTextColor.GRAY)));
-        }
+        addNavigationButtons(totalPages, totalPlayers);
+    }
 
-        // Page indicator
-        inventory.setItem(49, createGuiItem(Material.PAPER,
-                Component.text("Page " + (page + 1) + "/" + Math.max(1, totalPages), NamedTextColor.WHITE)));
-
-        // Next page
-        if (page < totalPages - 1) {
-            inventory.setItem(53, createGuiItem(Material.ARROW,
-                    Component.text("Next Page", NamedTextColor.YELLOW),
-                    Component.text("Page " + (page + 2) + "/" + totalPages, NamedTextColor.GRAY)));
-        }
-
-        // Back button
-        inventory.setItem(48, createGuiItem(Material.BARRIER, Component.text("Back to Menu", NamedTextColor.RED)));
-
-        // Refresh button
-        inventory.setItem(50, createGuiItem(Material.SUNFLOWER, Component.text("Refresh", NamedTextColor.GREEN)));
-
-        // Fill background
-        ItemStack filler = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, Component.text(" "));
+    private void fillBackground() {
+        ItemStack filler = createBorderItem(Material.GRAY_STAINED_GLASS_PANE);
+        ItemStack topBorder = createBorderItem(Material.BLACK_STAINED_GLASS_PANE);
+        
         for (int i = 0; i < inventory.getSize(); i++) {
-            if (inventory.getItem(i) == null) {
+            // Top row uses black glass for contrast
+            if (i < 9) {
+                inventory.setItem(i, topBorder);
+            } else {
                 inventory.setItem(i, filler);
             }
         }
     }
 
-    private Material getRankMaterial(int rank) {
-        return switch (rank) {
-            case 1 -> Material.GOLD_BLOCK;
-            case 2 -> Material.IRON_BLOCK;
-            case 3 -> Material.COPPER_BLOCK;
-            default -> Material.PLAYER_HEAD;
-        };
+    private void initializeCategoryButtons() {
+        // Use row 2 (slots 10-16) for larger, more visible category buttons
+        int[] categorySlots = {10, 11, 12, 13, 14, 15, 16};
+        
+        for (int i = 0; i < LeaderboardType.values().length && i < categorySlots.length; i++) {
+            LeaderboardType type = LeaderboardType.values()[i];
+            boolean isSelected = type == currentType;
+            Material material = type.getIcon();
+            
+            ItemStack item;
+            if (isSelected) {
+                // Selected: Use glowing enchanted version
+                item = createGuiItem(Material.ENCHANTED_BOOK,
+                        Component.text("⭐ " + type.getDisplayName(), NamedTextColor.GOLD)
+                                .decorate(TextDecoration.BOLD),
+                        Component.text("▶ Currently viewing", NamedTextColor.GREEN),
+                        Component.empty(),
+                        Component.text("Top players by this stat", NamedTextColor.GRAY));
+            } else {
+                // Unselected: Show category icon
+                item = createGuiItem(material,
+                        Component.text(type.getDisplayName(), type.getColor()).decorate(TextDecoration.BOLD),
+                        Component.empty(),
+                        Component.text("▶ Click to switch", NamedTextColor.DARK_GRAY));
+            }
+            inventory.setItem(categorySlots[i], item);
+        }
+        
+        // Add category header in top row
+        inventory.setItem(4, createGuiItem(Material.WRITABLE_BOOK,
+                Component.text("🏆 Categories", NamedTextColor.GOLD).decorate(TextDecoration.BOLD),
+                Component.text("Choose a leaderboard type", NamedTextColor.GRAY),
+                Component.empty(),
+                Component.text("Current: ", NamedTextColor.DARK_GRAY)
+                        .append(Component.text(currentType.getDisplayName(), currentType.getColor()))));
     }
 
-    private NamedTextColor getRankColor(int rank) {
-        return switch (rank) {
-            case 1 -> NamedTextColor.GOLD;
-            case 2 -> NamedTextColor.GRAY;
-            case 3 -> NamedTextColor.RED;
-            default -> NamedTextColor.WHITE;
+    private void displayPlayers(List<StatsRecord> allStats, int startIndex, int endIndex) {
+        // Grid slots for 7x2 layout (reduced to fit new category row)
+        int[] playerSlots = {
+            19, 20, 21, 22, 23, 24, 25,  // Row 3
+            28, 29, 30, 31, 32, 33, 34   // Row 4
         };
+
+        int slotIndex = 0;
+        for (int i = startIndex; i < endIndex && slotIndex < playerSlots.length; i++) {
+            StatsRecord record = allStats.get(i);
+            int rank = i + 1;
+            
+            // Create player head with rank as item amount
+            ItemStack playerItem = createRankedPlayerHeadByUuid(
+                    record.getUuid(),
+                    record.getName(),
+                    rank,
+                    currentType.getDisplayName() + ": " + currentType.formatValue(record),
+                    currentType.getColor()
+            );
+            
+            inventory.setItem(playerSlots[slotIndex], playerItem);
+            slotIndex++;
+        }
+    }
+
+    private void addInfoPanel(List<StatsRecord> allStats, int totalPlayers) {
+        // Stats summary in slot 8 (top right)
+        String[] infoLines;
+        if (allStats.isEmpty()) {
+            infoLines = new String[]{"No player data yet", "Start playing to see stats!"};
+        } else {
+            // Calculate some interesting stats
+            double total = allStats.stream()
+                    .limit(MAX_RANK)
+                    .mapToDouble(currentType::getValue)
+                    .sum();
+            double average = allStats.isEmpty() ? 0 : total / Math.min(allStats.size(), MAX_RANK);
+            
+            infoLines = new String[]{
+                "Showing top " + totalPlayers + " players",
+                "Page " + (page + 1) + " of " + Math.max(1, (int) Math.ceil(totalPlayers / (double) PLAYERS_PER_PAGE)),
+                "",
+                "Hover over heads to see stats",
+                "Item count = Player rank"
+            };
+        }
+        inventory.setItem(8, createInfoItem("ℹ Leaderboard Info", infoLines));
+    }
+
+    private void addNavigationButtons(int totalPages, int totalPlayers) {
+        // Previous page (slot 45)
+        if (page > 0) {
+            inventory.setItem(45, createGuiItem(Material.ARROW, 
+                    Component.text("◀ Previous Page", NamedTextColor.YELLOW),
+                    Component.text("Go to page " + page, NamedTextColor.GRAY)));
+        } else {
+            inventory.setItem(45, createBorderItem(Material.GRAY_STAINED_GLASS_PANE));
+        }
+
+        // Find My Rank button (slot 46)
+        inventory.setItem(FIND_MY_RANK_SLOT, createGuiItem(Material.ENDER_EYE, 
+                Component.text("🔍 Find My Rank", NamedTextColor.LIGHT_PURPLE).decorate(TextDecoration.BOLD),
+                Component.text("Jump to your position", NamedTextColor.GRAY),
+                Component.empty(),
+                Component.text("Click to find yourself", NamedTextColor.DARK_GRAY)));
+
+        // Back button (slot 48)
+        inventory.setItem(48, createGuiItem(Material.BARRIER, 
+                Component.text("✖ Back to Menu", NamedTextColor.RED),
+                Component.text("Return to main menu", NamedTextColor.GRAY)));
+
+        // Page indicator (slot 49)
+        int displayPage = page + 1;
+        int displayTotalPages = Math.max(1, totalPages);
+        inventory.setItem(49, createGuiItem(Material.PAPER,
+                Component.text("Page " + displayPage + "/" + displayTotalPages, NamedTextColor.WHITE),
+                Component.text("Showing ranks " + (page * PLAYERS_PER_PAGE + 1) + "-" + 
+                        Math.min((page + 1) * PLAYERS_PER_PAGE, totalPlayers), NamedTextColor.GRAY)));
+
+        // Refresh button (slot 50)
+        inventory.setItem(50, createGuiItem(Material.SUNFLOWER, 
+                Component.text("🔄 Refresh", NamedTextColor.GREEN),
+                Component.text("Reload leaderboard data", NamedTextColor.GRAY)));
+
+        // Next page (slot 53)
+        if (page < totalPages - 1) {
+            inventory.setItem(53, createGuiItem(Material.ARROW,
+                    Component.text("Next Page ▶", NamedTextColor.YELLOW),
+                    Component.text("Go to page " + (page + 2), NamedTextColor.GRAY)));
+        } else {
+            inventory.setItem(53, createBorderItem(Material.GRAY_STAINED_GLASS_PANE));
+        }
+    }
+
+    /**
+     * Finds the rank and page for a given player UUID.
+     * @param playerUuid The UUID of the player to find
+     * @return An array containing [rank, page] or null if not found in top MAX_RANK
+     */
+    private int[] findPlayerRank(UUID playerUuid) {
+        List<StatsRecord> allStats = statsService.getAllStats();
+        allStats.sort(Comparator.comparing(currentType::getValue).reversed());
+        
+        for (int i = 0; i < Math.min(allStats.size(), MAX_RANK); i++) {
+            if (allStats.get(i).getUuid().equals(playerUuid)) {
+                int rank = i + 1;
+                int targetPage = i / PLAYERS_PER_PAGE;
+                return new int[]{rank, targetPage};
+            }
+        }
+        return null; // Not in top MAX_RANK
     }
 
     private static String formatPlaytime(long millis) {
@@ -211,36 +327,60 @@ public class LeaderboardsGui implements InventoryGui, InventoryHolder {
         int slot = event.getSlot();
         playClickSound(player);
 
-        // Category selection (slots 0-6)
-        if (slot >= 0 && slot < LeaderboardType.values().length) {
-            LeaderboardType selectedType = LeaderboardType.values()[slot];
-            if (selectedType != currentType) {
-                guiManager.openGui(player, new LeaderboardsGui(plugin, guiManager, statsService, healthService, selectedType, 0));
+        // Category selection (slots 10-16 in row 2)
+        if (slot >= 10 && slot <= 16) {
+            int categoryIndex = slot - 10;
+            if (categoryIndex < LeaderboardType.values().length) {
+                LeaderboardType selectedType = LeaderboardType.values()[categoryIndex];
+                if (selectedType != currentType) {
+                    guiManager.openGui(player, new LeaderboardsGui(plugin, guiManager, statsService, healthService, selectedType, 0));
+                }
             }
             return;
         }
 
-        // Previous page
+        // Previous page (slot 45)
         if (slot == 45 && page > 0) {
+            playPageTurnSound(player);
             guiManager.openGui(player, new LeaderboardsGui(plugin, guiManager, statsService, healthService, currentType, page - 1));
             return;
         }
 
-        // Next page
+        // Find My Rank (slot 46)
+        if (slot == FIND_MY_RANK_SLOT) {
+            int[] result = findPlayerRank(player.getUniqueId());
+            if (result != null) {
+                int rank = result[0];
+                int targetPage = result[1];
+                playSuccessSound(player);
+                player.sendMessage(Component.text("You are ranked #" + rank + " in " + currentType.getDisplayName() + "!", NamedTextColor.GREEN));
+                if (targetPage != page) {
+                    guiManager.openGui(player, new LeaderboardsGui(plugin, guiManager, statsService, healthService, currentType, targetPage));
+                }
+            } else {
+                playErrorSound(player);
+                player.sendMessage(Component.text("You are not in the top " + MAX_RANK + " for " + currentType.getDisplayName() + ".", NamedTextColor.YELLOW));
+            }
+            return;
+        }
+
+        // Next page (slot 53)
         List<StatsRecord> allStats = statsService.getAllStats();
-        int totalPages = (int) Math.ceil(allStats.size() / (double) PLAYERS_PER_PAGE);
+        int totalPlayers = Math.min(allStats.size(), MAX_RANK);
+        int totalPages = (int) Math.ceil(totalPlayers / (double) PLAYERS_PER_PAGE);
         if (slot == 53 && page < totalPages - 1) {
+            playPageTurnSound(player);
             guiManager.openGui(player, new LeaderboardsGui(plugin, guiManager, statsService, healthService, currentType, page + 1));
             return;
         }
 
-        // Back to menu
+        // Back to menu (slot 48)
         if (slot == 48) {
             guiManager.openGui(player, new MainMenuGui(plugin, guiManager, statsService, healthService));
             return;
         }
 
-        // Refresh
+        // Refresh (slot 50)
         if (slot == 50) {
             playSuccessSound(player);
             guiManager.openGui(player, new LeaderboardsGui(plugin, guiManager, statsService, healthService, currentType, page));

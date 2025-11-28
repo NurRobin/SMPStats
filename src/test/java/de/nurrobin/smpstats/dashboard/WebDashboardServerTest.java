@@ -74,7 +74,7 @@ class WebDashboardServerTest {
                 true, 1, 1, true, true, true, 1, 1,
                 true, 1, 0, 0, 0, 0, HealthThresholds.defaults(),
                 true, 1, 1, "", 1, 1,
-                dashboardSettings
+                dashboardSettings, true
         );
     }
 
@@ -131,11 +131,11 @@ class WebDashboardServerTest {
                 true, "127.0.0.1", 8765, "apiKey", 1, settings.getSkillWeights(),
                 true, 0L, 0L, true, 1, 1.0, List.of(), List.of(),
                 true, 1, 1, true, true, true, 1, 1,
-                true, 1, 0, 0, 0, 0, HealthThresholds.defaults(),
+                true, 1, 0.0, 0.0, 0.0, 0.0, HealthThresholds.defaults(),
                 true, 1, 1, "", 1, 1,
                 new Settings.DashboardSettings(true, "0.0.0.0", 8080,
                         new Settings.PublicSettings(true, false, true, true, true),
-                        Settings.AdminSettings.defaults())
+                        Settings.AdminSettings.defaults()), true
         );
         
         WebDashboardServer restrictedDashboard = new WebDashboardServer(plugin, statsService, restrictedSettings, momentService, heatmapService, healthService);
@@ -748,7 +748,7 @@ class WebDashboardServerTest {
                 true, 1, 1, "", 1, 1,
                 new Settings.DashboardSettings(true, "0.0.0.0", 8080,
                         new Settings.PublicSettings(true, true, true, true, false),
-                        Settings.AdminSettings.defaults())
+                        Settings.AdminSettings.defaults()), true
         );
         
         WebDashboardServer restrictedDashboard = new WebDashboardServer(plugin, statsService, restrictedSettings, momentService, heatmapService, healthService);
@@ -770,7 +770,7 @@ class WebDashboardServerTest {
                 true, 1, 1, "", 1, 1,
                 new Settings.DashboardSettings(true, "0.0.0.0", 8080,
                         new Settings.PublicSettings(true, true, false, true, true),
-                        Settings.AdminSettings.defaults())
+                        Settings.AdminSettings.defaults()), true
         );
         
         WebDashboardServer restrictedDashboard = new WebDashboardServer(plugin, statsService, restrictedSettings, momentService, heatmapService, healthService);
@@ -792,7 +792,7 @@ class WebDashboardServerTest {
                 true, 1, 1, "", 1, 1,
                 new Settings.DashboardSettings(true, "0.0.0.0", 8080,
                         new Settings.PublicSettings(true, true, true, false, true),
-                        Settings.AdminSettings.defaults())
+                        Settings.AdminSettings.defaults()), true
         );
         
         WebDashboardServer restrictedDashboard = new WebDashboardServer(plugin, statsService, restrictedSettings, momentService, heatmapService, healthService);
@@ -810,11 +810,11 @@ class WebDashboardServerTest {
                 true, "127.0.0.1", 8765, "apiKey", 1, settings.getSkillWeights(),
                 true, 0L, 0L, true, 1, 1.0, List.of(), List.of(),
                 true, 1, 1, true, true, true, 1, 1,
-                true, 1, 0, 0, 0, 0, HealthThresholds.defaults(),
+                true, 1, 0.0, 0.0, 0.0, 0.0, HealthThresholds.defaults(),
                 true, 1, 1, "", 1, 1,
                 new Settings.DashboardSettings(true, "0.0.0.0", 8080,
                         Settings.PublicSettings.defaults(),
-                        new Settings.AdminSettings(false, "", 60, true, true, true, true))
+                        new Settings.AdminSettings(false, "", 60, true, true, true, true)), true
         );
         
         WebDashboardServer restrictedDashboard = new WebDashboardServer(plugin, statsService, disabledAdminSettings, momentService, heatmapService, healthService);
@@ -833,11 +833,11 @@ class WebDashboardServerTest {
                 true, "127.0.0.1", 8765, "apiKey", 1, settings.getSkillWeights(),
                 true, 0L, 0L, true, 1, 1.0, List.of(), List.of(),
                 true, 1, 1, true, true, true, 1, 1,
-                true, 1, 0, 0, 0, 0, HealthThresholds.defaults(),
+                true, 1, 0.0, 0.0, 0.0, 0.0, HealthThresholds.defaults(),
                 true, 1, 1, "", 1, 1,
                 new Settings.DashboardSettings(true, "0.0.0.0", 8080,
                         Settings.PublicSettings.defaults(),
-                        new Settings.AdminSettings(true, ADMIN_PASSWORD, 60, false, true, true, true))
+                        new Settings.AdminSettings(true, ADMIN_PASSWORD, 60, false, true, true, true)), true
         );
         
         WebDashboardServer restrictedDashboard = new WebDashboardServer(plugin, statsService, disabledHealthSettings, momentService, heatmapService, healthService);
@@ -863,11 +863,11 @@ class WebDashboardServerTest {
                 true, "127.0.0.1", 8765, "apiKey", 1, settings.getSkillWeights(),
                 true, 0L, 0L, true, 1, 1.0, List.of(), List.of(),
                 true, 1, 1, true, true, true, 1, 1,
-                true, 1, 0, 0, 0, 0, HealthThresholds.defaults(),
+                true, 1, 0.0, 0.0, 0.0, 0.0, HealthThresholds.defaults(),
                 true, 1, 1, "", 1, 1,
                 new Settings.DashboardSettings(true, "0.0.0.0", 8080,
                         Settings.PublicSettings.defaults(),
-                        new Settings.AdminSettings(true, ADMIN_PASSWORD, 60, true, false, true, true))
+                        new Settings.AdminSettings(true, ADMIN_PASSWORD, 60, true, false, true, true)), true
         );
         
         WebDashboardServer restrictedDashboard = new WebDashboardServer(plugin, statsService, disabledHeatmapSettings, momentService, heatmapService, healthService);
@@ -893,11 +893,11 @@ class WebDashboardServerTest {
                 true, "127.0.0.1", 8765, "apiKey", 1, settings.getSkillWeights(),
                 true, 0L, 0L, true, 1, 1.0, List.of(), List.of(),
                 true, 1, 1, true, true, true, 1, 1,
-                true, 1, 0, 0, 0, 0, HealthThresholds.defaults(),
+                true, 1, 0.0, 0.0, 0.0, 0.0, HealthThresholds.defaults(),
                 true, 1, 1, "", 1, 1,
                 new Settings.DashboardSettings(true, "0.0.0.0", 8080,
                         Settings.PublicSettings.defaults(),
-                        new Settings.AdminSettings(true, ADMIN_PASSWORD, 60, true, true, false, true))
+                        new Settings.AdminSettings(true, ADMIN_PASSWORD, 60, true, true, false, true)), true
         );
         
         WebDashboardServer restrictedDashboard = new WebDashboardServer(plugin, statsService, disabledSocialSettings, momentService, heatmapService, healthService);
@@ -923,11 +923,11 @@ class WebDashboardServerTest {
                 true, "127.0.0.1", 8765, "apiKey", 1, settings.getSkillWeights(),
                 true, 0L, 0L, true, 1, 1.0, List.of(), List.of(),
                 true, 1, 1, true, true, true, 1, 1,
-                true, 1, 0, 0, 0, 0, HealthThresholds.defaults(),
+                true, 1, 0.0, 0.0, 0.0, 0.0, HealthThresholds.defaults(),
                 true, 1, 1, "", 1, 1,
                 new Settings.DashboardSettings(true, "0.0.0.0", 8080,
                         Settings.PublicSettings.defaults(),
-                        new Settings.AdminSettings(true, ADMIN_PASSWORD, 60, true, true, true, false))
+                        new Settings.AdminSettings(true, ADMIN_PASSWORD, 60, true, true, true, false)), true
         );
         
         WebDashboardServer restrictedDashboard = new WebDashboardServer(plugin, statsService, disabledDeathsSettings, momentService, heatmapService, healthService);

@@ -59,6 +59,14 @@ jobs:
         if: ${{ inputs.skip-tests }}
         run: mvn -B -ntp clean package -DskipTests -T 1C
 
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() && !inputs.skip-tests }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: target/surefire-reports/*.xml
+          flags: backend
+
       - name: Upload built jar
         id: upload
         uses: actions/upload-artifact@v4

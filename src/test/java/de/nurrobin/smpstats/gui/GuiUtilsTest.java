@@ -12,6 +12,7 @@ import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -80,17 +81,120 @@ class GuiUtilsTest {
         org.bukkit.inventory.meta.SkullMeta meta = (org.bukkit.inventory.meta.SkullMeta) item.getItemMeta();
         assertNotNull(meta);
         assertEquals(Component.text("Player Head", NamedTextColor.GOLD), meta.displayName());
-        // Just verify owner is set (MockBukkit may return different objects)
         assertNotNull(meta.getOwningPlayer());
+    }
+
+    @Test
+    void createRankedPlayerHead() {
+        org.mockbukkit.mockbukkit.entity.PlayerMock player = server.addPlayer("RankedPlayer");
+        
+        ItemStack item = GuiUtils.createRankedPlayerHead(player, 5, 
+                Component.text("Player Name", NamedTextColor.WHITE),
+                Component.text("Stat: 100", NamedTextColor.GOLD));
+        
+        assertNotNull(item);
+        assertEquals(Material.PLAYER_HEAD, item.getType());
+        assertEquals(5, item.getAmount()); // Rank as item amount
+        
+        org.bukkit.inventory.meta.SkullMeta meta = (org.bukkit.inventory.meta.SkullMeta) item.getItemMeta();
+        assertNotNull(meta);
+        assertNotNull(meta.getOwningPlayer());
+    }
+
+    @Test
+    void createRankedPlayerHeadCapsAt64() {
+        org.mockbukkit.mockbukkit.entity.PlayerMock player = server.addPlayer("HighRankPlayer");
+        
+        ItemStack item = GuiUtils.createRankedPlayerHead(player, 100, 
+                Component.text("Player Name", NamedTextColor.WHITE));
+        
+        assertNotNull(item);
+        assertEquals(64, item.getAmount()); // Capped at 64
+    }
+
+    @Test
+    void createRankedPlayerHeadByUuid() {
+        UUID uuid = UUID.randomUUID();
+        
+        ItemStack item = GuiUtils.createRankedPlayerHeadByUuid(uuid, "TestPlayer", 3, 
+                "Playtime: 10h", NamedTextColor.GOLD);
+        
+        assertNotNull(item);
+        assertEquals(Material.PLAYER_HEAD, item.getType());
+        assertEquals(3, item.getAmount());
+    }
+
+    @Test
+    void getRankPrefixForTop3() {
+        Component rank1 = GuiUtils.getRankPrefix(1);
+        Component rank2 = GuiUtils.getRankPrefix(2);
+        Component rank3 = GuiUtils.getRankPrefix(3);
+        
+        assertNotNull(rank1);
+        assertNotNull(rank2);
+        assertNotNull(rank3);
+        
+        // Top 3 should have special formatting (contains emoji)
+        assertTrue(rank1.toString().contains("1"));
+        assertTrue(rank2.toString().contains("2"));
+        assertTrue(rank3.toString().contains("3"));
+    }
+
+    @Test
+    void getRankPrefixForLowerRanks() {
+        Component rank10 = GuiUtils.getRankPrefix(10);
+        Component rank50 = GuiUtils.getRankPrefix(50);
+        
+        assertNotNull(rank10);
+        assertNotNull(rank50);
+    }
+
+    @Test
+    void getRankColorForTop3() {
+        assertEquals(NamedTextColor.GOLD, GuiUtils.getRankColor(1));
+        assertEquals(NamedTextColor.GRAY, GuiUtils.getRankColor(2));
+        assertEquals(NamedTextColor.RED, GuiUtils.getRankColor(3));
+    }
+
+    @Test
+    void getRankColorForLowerRanks() {
+        assertEquals(NamedTextColor.WHITE, GuiUtils.getRankColor(4));
+        assertEquals(NamedTextColor.WHITE, GuiUtils.getRankColor(10));
+        assertEquals(NamedTextColor.WHITE, GuiUtils.getRankColor(50));
+    }
+
+    @Test
+    void createBorderItem() {
+        ItemStack item = GuiUtils.createBorderItem(Material.GRAY_STAINED_GLASS_PANE);
+        
+        assertNotNull(item);
+        assertEquals(Material.GRAY_STAINED_GLASS_PANE, item.getType());
+        assertEquals(1, item.getAmount());
+    }
+
+    @Test
+    void createInfoItem() {
+        ItemStack item = GuiUtils.createInfoItem("Info Title", "Line 1", "Line 2", "Line 3");
+        
+        assertNotNull(item);
+        assertEquals(Material.BOOK, item.getType());
+        
+        ItemMeta meta = item.getItemMeta();
+        assertNotNull(meta);
+        assertNotNull(meta.displayName());
+        
+        List<Component> lore = meta.lore();
+        assertNotNull(lore);
+        assertEquals(3, lore.size());
     }
 
     @Test
     void soundMethodsDoNotThrow() {
         org.mockbukkit.mockbukkit.entity.PlayerMock player = server.addPlayer();
         
-        // These should not throw
         assertDoesNotThrow(() -> GuiUtils.playClickSound(player));
         assertDoesNotThrow(() -> GuiUtils.playSuccessSound(player));
         assertDoesNotThrow(() -> GuiUtils.playErrorSound(player));
+        assertDoesNotThrow(() -> GuiUtils.playPageTurnSound(player));
     }
 }

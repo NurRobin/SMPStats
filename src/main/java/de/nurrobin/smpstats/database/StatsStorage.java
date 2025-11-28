@@ -3,7 +3,6 @@ package de.nurrobin.smpstats.database;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import de.nurrobin.smpstats.StatsRecord;
-import de.nurrobin.smpstats.heatmap.HeatmapBin;
 import de.nurrobin.smpstats.moments.MomentEntry;
 import de.nurrobin.smpstats.social.SocialPairRow;
 import org.bukkit.plugin.Plugin;
@@ -631,6 +630,41 @@ public class StatsStorage implements Closeable {
         return list;
     }
 
+    /**
+     * Load social pairs for a specific player, sorted by time together descending.
+     * @param uuid The player's UUID
+     * @param limit Maximum number of partners to return
+     * @return List of SocialPairRow records involving this player
+     */
+    public synchronized List<SocialPairRow> loadSocialPairsForPlayer(UUID uuid, int limit) throws SQLException {
+        String sql = """
+                SELECT uuid_a, uuid_b, seconds, shared_kills, shared_player_kills, shared_mob_kills
+                FROM social_pairs
+                WHERE uuid_a = ? OR uuid_b = ?
+                ORDER BY seconds DESC
+                LIMIT ?
+                """;
+        List<SocialPairRow> list = new ArrayList<>();
+        try (PreparedStatement st = connection.prepareStatement(sql)) {
+            st.setString(1, uuid.toString());
+            st.setString(2, uuid.toString());
+            st.setInt(3, limit);
+            try (ResultSet rs = st.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new SocialPairRow(
+                            UUID.fromString(rs.getString("uuid_a")),
+                            UUID.fromString(rs.getString("uuid_b")),
+                            rs.getLong("seconds"),
+                            rs.getLong("shared_kills"),
+                            rs.getLong("shared_player_kills"),
+                            rs.getLong("shared_mob_kills")
+                    ));
+                }
+            }
+        }
+        return list;
+    }
+
     public synchronized void upsertTimeline(StatsRecord record, java.time.LocalDate day) throws SQLException {
         String sql = """
                 INSERT INTO timeline_daily (uuid, day, playtime_ms, blocks_broken, blocks_placed, player_kills, mob_kills, deaths,
@@ -799,25 +833,50 @@ public class StatsStorage implements Closeable {
             st.setInt(1, limit);
             try (ResultSet rs = st.executeQuery()) {
                 while (rs.next()) {
-                    list.add(new de.nurrobin.smpstats.timeline.DeathReplayEntry(
-                            rs.getLong("ts"),
-                            rs.getString("uuid"),
-                            rs.getString("name"),
-                            rs.getString("cause"),
-                            rs.getDouble("health"),
-                            rs.getString("world"),
-                            rs.getInt("x"),
-                            rs.getInt("y"),
-                            rs.getInt("z"),
-                            rs.getDouble("fall_distance"),
-                            gson.fromJson(rs.getString("nearby_players"), new com.google.gson.reflect.TypeToken<java.util.List<String>>(){}.getType()),
-                            gson.fromJson(rs.getString("nearby_mobs"), new com.google.gson.reflect.TypeToken<java.util.List<String>>(){}.getType()),
-                            gson.fromJson(rs.getString("inventory"), new com.google.gson.reflect.TypeToken<java.util.List<String>>(){}.getType())
-                    ));
+                    list.add(mapDeathReplayRow(rs));
                 }
             }
         }
         return list;
+    }
+
+    /**
+     * Loads death replays for a specific player, ordered by most recent first.
+     * @param uuid The player's UUID
+     * @param limit Maximum number of entries to return
+     * @return List of death replay entries for the player
+     */
+    public synchronized List<de.nurrobin.smpstats.timeline.DeathReplayEntry> loadDeathReplaysForPlayer(UUID uuid, int limit) throws SQLException {
+        String sql = "SELECT * FROM death_replays WHERE uuid = ? ORDER BY ts DESC LIMIT ?";
+        List<de.nurrobin.smpstats.timeline.DeathReplayEntry> list = new ArrayList<>();
+        try (PreparedStatement st = connection.prepareStatement(sql)) {
+            st.setString(1, uuid.toString());
+            st.setInt(2, limit);
+            try (ResultSet rs = st.executeQuery()) {
+                while (rs.next()) {
+                    list.add(mapDeathReplayRow(rs));
+                }
+            }
+        }
+        return list;
+    }
+
+    private de.nurrobin.smpstats.timeline.DeathReplayEntry mapDeathReplayRow(ResultSet rs) throws SQLException {
+        return new de.nurrobin.smpstats.timeline.DeathReplayEntry(
+                rs.getLong("ts"),
+                rs.getString("uuid"),
+                rs.getString("name"),
+                rs.getString("cause"),
+                rs.getDouble("health"),
+                rs.getString("world"),
+                rs.getInt("x"),
+                rs.getInt("y"),
+                rs.getInt("z"),
+                rs.getDouble("fall_distance"),
+                gson.fromJson(rs.getString("nearby_players"), new com.google.gson.reflect.TypeToken<java.util.List<String>>(){}.getType()),
+                gson.fromJson(rs.getString("nearby_mobs"), new com.google.gson.reflect.TypeToken<java.util.List<String>>(){}.getType()),
+                gson.fromJson(rs.getString("inventory"), new com.google.gson.reflect.TypeToken<java.util.List<String>>(){}.getType())
+        );
     }
 
     private Map<String, Object> mapTimelineRow(ResultSet rs) throws SQLException {

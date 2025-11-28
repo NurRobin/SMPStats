@@ -25,8 +25,43 @@ permissions:
   actions: read
 
 jobs:
+  # Early skip detection
+  changes:
+    name: Check for relevant changes
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    outputs:
+      should_run: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for code changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          # Compare against previous commit, not base branch
+          base: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          initial-fetch-depth: 2
+          filters: |
+            relevant:
+              - '**.java'
+              - 'pom.xml'
+              - 'src/**'
+              - '.github/workflows/codeql.yml'
+
+      - name: Skip notification
+        if: steps.filter.outputs.relevant == 'false'
+        run: |
+          echo "## ⏭️ CodeQL Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "No changes to code or build files detected." >> $GITHUB_STEP_SUMMARY
+
   analyze:
     name: Analyze
+    needs: [changes]
+    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.should_run == 'true' || needs.changes.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 30
 

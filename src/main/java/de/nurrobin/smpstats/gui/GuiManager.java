@@ -1,14 +1,11 @@
 package de.nurrobin.smpstats.gui;
 
 import de.nurrobin.smpstats.SMPStats;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
-import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.InventoryHolder;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -58,6 +55,9 @@ public class GuiManager implements Listener {
         InventoryGui gui = openGuis.get(player.getUniqueId());
         if (gui != null && event.getInventory().equals(gui.getInventory())) {
             openGuis.remove(player.getUniqueId());
+            
+            // Unregister any animations for this player
+            plugin.getAnimatedBorderService().ifPresent(service -> service.unregisterAnimation(player));
         }
     }
 }
