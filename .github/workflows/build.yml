@@ -69,7 +69,7 @@ jobs:
 
       - name: Upload built jar
         id: upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: SMPStats-${{ github.run_id }}
           path: |
