@@ -36,14 +36,14 @@ jobs:
         run: |
           # Get current version
           CURRENT_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
-          
+
           # Check if tag already exists
           if git rev-parse "v$CURRENT_VERSION" >/dev/null 2>&1; then
             echo "Tag v$CURRENT_VERSION already exists, skipping release"
             echo "changed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
+
           # Get previous version from git history
           git checkout HEAD~1 -- pom.xml 2>/dev/null || {
             echo "No previous version found, this might be first commit"
@@ -53,19 +53,19 @@ jobs:
             git checkout HEAD -- pom.xml
             exit 0
           }
-          
+
           PREVIOUS_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           git checkout HEAD -- pom.xml
-          
+
           if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
             echo "Version changed from $PREVIOUS_VERSION to $CURRENT_VERSION"
             echo "changed=true" >> $GITHUB_OUTPUT
             echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-            
+
             # Determine version type
             IFS='.' read -r CURR_MAJOR CURR_MINOR CURR_PATCH <<< "$CURRENT_VERSION"
             IFS='.' read -r PREV_MAJOR PREV_MINOR PREV_PATCH <<< "$PREVIOUS_VERSION"
-            
+
             if [ "$CURR_MAJOR" != "$PREV_MAJOR" ]; then
               echo "type=major" >> $GITHUB_OUTPUT
               echo "Detected MAJOR version change"
@@ -92,7 +92,7 @@ jobs:
     needs: [check-version, build]
     if: needs.check-version.outputs.version_changed == 'true'
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -110,11 +110,11 @@ jobs:
         run: |
           VERSION="${{ needs.check-version.outputs.new_version }}"
           TYPE="${{ needs.check-version.outputs.version_type }}"
-          
+
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=v$VERSION" >> $GITHUB_OUTPUT
           echo "type=$TYPE" >> $GITHUB_OUTPUT
-          
+
           # Check if this is a pre-release
           if [[ "$VERSION" =~ -[a-zA-Z] ]]; then
             echo "is_prerelease=true" >> $GITHUB_OUTPUT
@@ -126,7 +126,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
+
           git tag -a "${{ steps.vars.outputs.tag }}" -m "Release ${{ steps.vars.outputs.tag }}"
           git push origin "${{ steps.vars.outputs.tag }}"
 
@@ -155,20 +155,20 @@ jobs:
       - name: Prepare release artifacts
         run: |
           TAG="${{ steps.vars.outputs.tag }}"
-          
+
           # Rename main jar
           mv target/SMPStats.jar "target/SMPStats-${TAG}.jar"
-          
+
           # Generate checksums
           cd target
           sha256sum "SMPStats-${TAG}.jar" > "SMPStats-${TAG}.jar.sha256"
-          
+
           # Copy SBOM
           if [ -f "bom.json" ]; then
             cp bom.json "SMPStats-${TAG}.sbom.json"
             sha256sum "SMPStats-${TAG}.sbom.json" > "SMPStats-${TAG}.sbom.json.sha256"
           fi
-          
+
           # Sign artifacts with GPG if available
           if [ "$GPG_AVAILABLE" = "true" ]; then
             echo "${{ secrets.GPG_PASSPHRASE }}" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 --armor --detach-sign "SMPStats-${TAG}.jar"
@@ -176,7 +176,7 @@ jobs:
               echo "${{ secrets.GPG_PASSPHRASE }}" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 --armor --detach-sign "SMPStats-${TAG}.sbom.json"
             fi
           fi
-          
+
           cd ..
 
       - name: Generate provenance attestation
@@ -190,7 +190,7 @@ jobs:
         run: |
           TYPE="${{ steps.vars.outputs.type }}"
           VERSION="${{ steps.vars.outputs.version }}"
-          
+
           case "$TYPE" in
             major)
               EMOJI="🚀"
@@ -208,14 +208,14 @@ jobs:
               DESCRIPTION="This release includes bug fixes and minor improvements."
               ;;
           esac
-          
+
           cat > /tmp/release_notes.md << EOF
           # $EMOJI SMPStats $VERSION - $TITLE
-          
+
           $DESCRIPTION
-          
+
           EOF
-          
+
           echo "notes_file=/tmp/release_notes.md" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release (Draft)
@@ -240,16 +240,16 @@ jobs:
         run: |
           VERSION="${{ steps.vars.outputs.version }}"
           TAG="${{ steps.vars.outputs.tag }}"
-          
+
           mkdir -p docs/changelog
           CHANGELOG_FILE="docs/changelog/${VERSION}.md"
-          
+
           echo "# ${VERSION}" > "$CHANGELOG_FILE"
           echo "" >> "$CHANGELOG_FILE"
           echo "Released: $(date +%Y-%m-%d)" >> "$CHANGELOG_FILE"
           echo "" >> "$CHANGELOG_FILE"
           echo "Release draft created. Release notes will be available after publishing." >> "$CHANGELOG_FILE"
-          
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "$CHANGELOG_FILE"
