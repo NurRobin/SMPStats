@@ -187,11 +187,14 @@
                     <formats>
                         <format>
                             <includes>
-                                <include>*.md</include>
-                                <include>*.yml</include>
-                                <include>*.yaml</include>
+                                <include>**/*.md</include>
+                                <include>**/*.yml</include>
+                                <include>**/*.yaml</include>
                                 <include>.gitignore</include>
                             </includes>
+                            <excludes>
+                                <exclude>target/**</exclude>
+                            </excludes>
                             <trimTrailingWhitespace/>
                             <endWithNewline/>
                         </format>
