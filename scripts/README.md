@@ -108,6 +108,16 @@ git push origin main
 
 ## 🔧 Für Entwickler
 
+### Git Hooks (Auto-Format beim Commit)
+
+Damit beim Commit automatisch Formatierung (inkl. ungenutzter Imports, Whitespace, Newlines) ausgeführt wird:
+
+```bash
+./scripts/install-githooks.sh
+```
+
+Das aktiviert `core.hooksPath=.githooks` und nutzt den Hook in `.githooks/pre-commit`.
+
 Alle Scripts sind:
 - ✅ Executable (`chmod +x`)
 - ✅ Bash mit `set -e` (fail on error)
