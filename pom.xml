@@ -180,6 +180,7 @@
                 <artifactId>spotless-maven-plugin</artifactId>
                 <version>2.43.0</version>
                 <configuration>
+                    <ratchetFrom>origin/dev</ratchetFrom>
                     <java>
                         <palantirJavaFormat/>
                         <removeUnusedImports/>
