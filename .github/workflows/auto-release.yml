@@ -181,7 +181,7 @@ jobs:
 
       - name: Generate provenance attestation
         if: ${{ steps.vars.outputs.is_prerelease == 'false' }}
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v3
         with:
           subject-path: 'target/SMPStats-${{ steps.vars.outputs.tag }}.jar'
 
