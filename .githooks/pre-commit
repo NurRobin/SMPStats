@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+if ! command -v mvn >/dev/null 2>&1; then
+  echo "[pre-commit] mvn not found; skipping formatting." >&2
+  exit 0
+fi
+
+if ! git show-ref --verify --quiet refs/remotes/origin/dev; then
+  echo "[pre-commit] refs/remotes/origin/dev not found; skipping Spotless ratchet formatting." >&2
+  exit 0
+fi
+
+echo "[pre-commit] Running Spotless (format + remove unused imports)…" >&2
+mvn -q -DskipTests spotless:apply
+
+# Re-stage any formatting changes.
+git add -u
