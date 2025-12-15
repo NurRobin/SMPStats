@@ -87,7 +87,7 @@ jobs:
           mv target/SMPStats.jar "target/SMPStats-${BRANCH}-${SHORT_SHA}.jar"
 
       - name: Upload snapshot artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: SMPStats-${{ env.BRANCH_SAFE }}-${{ env.SHORT_SHA }}
           path: target/SMPStats-${{ env.BRANCH_SAFE }}-${{ env.SHORT_SHA }}.jar
