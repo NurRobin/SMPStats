@@ -118,7 +118,7 @@ jobs:
           echo "run_id=${RUN_ID}" >> $GITHUB_OUTPUT
 
       - name: 📤 Upload JAR
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.DEV_SERVER_HOST }}
           username: ${{ secrets.DEV_SERVER_USER }}
@@ -197,7 +197,7 @@ jobs:
             echo "  ────────────────────────────────────────────────────────────────"
 
       - name: 📤 Upload Test Script
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.DEV_SERVER_HOST }}
           username: ${{ secrets.DEV_SERVER_USER }}
