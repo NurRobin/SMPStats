@@ -77,7 +77,7 @@ jobs:
           flags: backend
 
       - name: Upload coverage artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: coverage-${{ github.run_id }}
           path: |
