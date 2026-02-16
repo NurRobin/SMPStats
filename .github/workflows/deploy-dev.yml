@@ -107,7 +107,7 @@ jobs:
           echo "- **Run ID:** ${RUN_ID}" >> $GITHUB_STEP_SUMMARY
 
       - name: Deploy and start Docker container
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.4
         id: deploy
         env:
           RUN_ID: ${{ steps.info.outputs.run_id }}
@@ -150,7 +150,7 @@ jobs:
           timeout: 60s
 
       - name: Start Docker container and get connection info
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.4
         id: start
         env:
           RUN_ID: ${{ steps.info.outputs.run_id }}
@@ -170,7 +170,7 @@ jobs:
             ${MANAGER} start "${RUN_ID}" "${PLUGIN_JAR}" "${MC_VERSION}"
 
       - name: Wait and verify SMPStats loaded
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.4
         env:
           RUN_ID: ${{ steps.info.outputs.run_id }}
         with:
@@ -224,7 +224,7 @@ jobs:
 
     steps:
       - name: Cleanup containers older than 2 hours
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.4
         with:
           host: ${{ secrets.DEV_SERVER_HOST }}
           username: ${{ secrets.DEV_SERVER_USER }}

@@ -129,7 +129,7 @@ jobs:
           strip_components: 1
 
       - name: 🐳 Start Container
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.4
         env:
           RUN_ID: ${{ steps.info.outputs.run_id }}
           MC_VERSION: ${{ env.MC_VERSION }}
@@ -171,7 +171,7 @@ jobs:
             fi
 
       - name: ⏳ Wait for Server
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.4
         env:
           RUN_ID: ${{ steps.info.outputs.run_id }}
         with:
@@ -209,7 +209,7 @@ jobs:
 
       - name: 🧪 Run E2E Tests
         id: e2e_tests
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.4
         env:
           RUN_ID: ${{ steps.info.outputs.run_id }}
         with:
@@ -416,7 +416,7 @@ jobs:
 
       - name: 📜 Collect Logs
         if: always()
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.4
         env:
           RUN_ID: ${{ steps.info.outputs.run_id }}
         with:
@@ -445,7 +445,7 @@ jobs:
 
       - name: 🧹 Cleanup
         if: always()
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.4
         env:
           RUN_ID: ${{ steps.info.outputs.run_id }}
         with:
