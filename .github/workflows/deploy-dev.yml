@@ -138,7 +138,7 @@ jobs:
             ${MANAGER} stop "${RUN_ID}" 2>/dev/null || true
 
       - name: Upload JAR to dev server
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.DEV_SERVER_HOST }}
           username: ${{ secrets.DEV_SERVER_USER }}
