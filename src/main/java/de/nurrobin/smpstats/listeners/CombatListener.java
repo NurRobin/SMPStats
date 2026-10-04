@@ -3,6 +3,8 @@ package de.nurrobin.smpstats.listeners;
 import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.StatsService;
 import de.nurrobin.smpstats.social.SocialStatsService;
+import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
@@ -58,9 +60,13 @@ public class CombatListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onDamageByEntity(EntityDamageByEntityEvent event) {
+        // Only real combat counts: no boats, item frames, end crystals or armor stands.
+        if (!(event.getEntity() instanceof LivingEntity target) || target instanceof ArmorStand) {
+            return;
+        }
         Player attacker = resolvePlayer(event.getDamager());
         if (attacker != null) {
-            statsService.addDamageDealt(attacker.getUniqueId(), event.getFinalDamage());
+            statsService.addDamageDealt(attacker.getUniqueId(), clampToHealth(event.getFinalDamage(), target));
         }
     }
 
@@ -73,7 +79,15 @@ public class CombatListener implements Listener {
         if (cause == EntityDamageEvent.DamageCause.SUICIDE || "KILL".equalsIgnoreCase(cause.name())) {
             return; // ignore /kill or self-kill to avoid massive damage spikes
         }
-        statsService.addDamageTaken(player.getUniqueId(), event.getFinalDamage());
+        statsService.addDamageTaken(player.getUniqueId(), clampToHealth(event.getFinalDamage(), player));
+    }
+
+    /**
+     * Caps damage at the health the entity has left, so overkill is not counted. The final damage
+     * already excludes what absorption hearts soaked up (ABSORPTION modifier), so the cap is health only.
+     */
+    private double clampToHealth(double finalDamage, LivingEntity entity) {
+        return Math.min(finalDamage, Math.max(0, entity.getHealth()));
     }
 
     private Player resolvePlayer(Object damager) {
