@@ -100,7 +100,7 @@ public class ServerHealthService {
         for (World world : Bukkit.getWorlds()) {
             Chunk[] chunks = world.getLoadedChunks();
             int worldChunks = chunks.length;
-            int worldEntities = world.getEntities().size();
+            int worldEntities = world.getEntityCount();
             int worldHoppers = 0;
             int worldRedstone = 0;
             for (Chunk chunk : chunks) {
@@ -108,7 +108,8 @@ public class ServerHealthService {
                 int chunkRedstone = 0;
                 Map<UUID, Integer> ownerCounts = new HashMap<>();
                 
-                for (BlockState state : chunk.getTileEntities()) {
+                // No snapshots: copying every block state of every loaded chunk is the expensive part of a sample.
+                for (BlockState state : chunk.getTileEntities(false)) {
                     Material type = state.getType();
                     if (type == Material.HOPPER) {
                         chunkHoppers++;
