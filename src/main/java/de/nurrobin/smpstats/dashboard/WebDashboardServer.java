@@ -24,9 +24,12 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Web dashboard server providing a user-friendly interface for SMPStats data.
@@ -42,23 +45,50 @@ public class WebDashboardServer {
     private final Gson gson;
     
     private HttpServer server;
+    private ExecutorService requestExecutor;
     private ScheduledExecutorService sessionCleanupExecutor;
-    
+
     // Session management for admin panel
     private final Map<String, AdminSession> sessions = new ConcurrentHashMap<>();
     private final SecureRandom secureRandom = new SecureRandom();
-    
+
     // Rate limiting for login attempts
     private final Map<String, LoginAttemptTracker> loginAttempts = new ConcurrentHashMap<>();
-    
+    private volatile int maxTrackedLoginIps = MAX_TRACKED_LOGIN_IPS;
+
+    // Short-lived cache for expensive public endpoints (full table scans)
+    private final Map<String, CachedResponse> responseCache = new ConcurrentHashMap<>();
+
     private static final String SESSION_COOKIE_NAME = "smpstats_session";
     private static final long SESSION_CLEANUP_INTERVAL_MINUTES = 10;
-    
+    private static final long LOGIN_ATTEMPT_CLEANUP_INTERVAL_SECONDS = 60;
+    private static final int REQUEST_THREADS = 4;
+
     // Rate limiting configuration
     private static final int MAX_FAILED_ATTEMPTS = 5;
     private static final long LOCKOUT_DURATION_MS = 60_000; // 1 minute lockout after max failed attempts
     private static final long ATTEMPT_WINDOW_MS = 60_000; // Track attempts within 1 minute window
-    
+    private static final int MAX_TRACKED_LOGIN_IPS = 10_000;
+
+    // Public response cache configuration
+    private static final long PUBLIC_CACHE_TTL_MS = 15_000;
+    private static final int MAX_CACHED_RESPONSES = 256;
+
+    // Placeholder passwords shipped in earlier config.yml versions; treated as "not set"
+    private static final Set<String> PLACEHOLDER_PASSWORDS = Set.of(
+            "ChangeThisAdminPassword", "CHANGEME123", "YouShouldChangeThisKey", "changeme", "password", "admin"
+    );
+
+    // Only these file types are served from the bundled /dashboard resources
+    private static final Map<String, String> STATIC_CONTENT_TYPES = Map.of(
+            "html", "text/html; charset=utf-8",
+            "css", "text/css; charset=utf-8",
+            "js", "application/javascript; charset=utf-8",
+            "png", "image/png",
+            "svg", "image/svg+xml",
+            "ico", "image/x-icon"
+    );
+
     public WebDashboardServer(SMPStats plugin, StatsService statsService, Settings settings,
                               MomentService momentService, HeatmapService heatmapService,
                               ServerHealthService serverHealthService) {
@@ -109,34 +139,78 @@ public class WebDashboardServer {
         server.createContext("/api/admin/deaths", new AdminDeathsHandler());
         server.createContext("/api/admin/player", new AdminPlayerHandler());
         
-        server.setExecutor(Executors.newCachedThreadPool());
+        requestExecutor = Executors.newFixedThreadPool(REQUEST_THREADS, daemonThreadFactory("SMPStats-Dashboard"));
+        server.setExecutor(requestExecutor);
         server.start();
-        
-        // Start session cleanup task
-        sessionCleanupExecutor = Executors.newSingleThreadScheduledExecutor();
+
+        // Start session and login-attempt cleanup tasks
+        sessionCleanupExecutor = Executors.newSingleThreadScheduledExecutor(daemonThreadFactory("SMPStats-Dashboard-Cleanup"));
         sessionCleanupExecutor.scheduleAtFixedRate(
             this::cleanupExpiredSessions,
             SESSION_CLEANUP_INTERVAL_MINUTES,
             SESSION_CLEANUP_INTERVAL_MINUTES,
             TimeUnit.MINUTES
         );
-        
+        sessionCleanupExecutor.scheduleAtFixedRate(
+            this::cleanupLoginAttempts,
+            LOGIN_ATTEMPT_CLEANUP_INTERVAL_SECONDS,
+            LOGIN_ATTEMPT_CLEANUP_INTERVAL_SECONDS,
+            TimeUnit.SECONDS
+        );
+
+        if (dashSettings.adminSettings().enabled() && !isAdminAvailable()) {
+            plugin.getLogger().warning("Web Dashboard admin panel is DISABLED because no admin password is set "
+                    + "(dashboard.admin.password is empty or still a default placeholder). "
+                    + "Set a strong password in config.yml and reload to enable it.");
+        }
+
         plugin.getLogger().info("Web Dashboard running on " + dashSettings.bindAddress() + ":" + dashSettings.port());
     }
-    
+
     public void stop() {
         if (sessionCleanupExecutor != null) {
             sessionCleanupExecutor.shutdownNow();
+            sessionCleanupExecutor = null;
         }
         if (server != null) {
             server.stop(0);
+            server = null;
             sessions.clear();
         }
+        if (requestExecutor != null) {
+            requestExecutor.shutdownNow();
+            requestExecutor = null;
+        }
+        responseCache.clear();
     }
-    
+
+    boolean isRunning() {
+        return server != null;
+    }
+
+    private static ThreadFactory daemonThreadFactory(String prefix) {
+        AtomicInteger counter = new AtomicInteger();
+        return runnable -> {
+            Thread thread = new Thread(runnable, prefix + "-" + counter.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        };
+    }
+
     private void cleanupExpiredSessions() {
         sessions.entrySet().removeIf(entry -> entry.getValue().isExpired());
-        cleanupLoginAttempts();
+    }
+
+    /**
+     * The admin area is only usable when enabled AND a real (non-placeholder) password is configured.
+     */
+    private boolean isAdminAvailable() {
+        Settings.AdminSettings admin = settings.getDashboardSettings().adminSettings();
+        return admin.enabled() && !isPlaceholderPassword(admin.password());
+    }
+
+    static boolean isPlaceholderPassword(String password) {
+        return password == null || password.isBlank() || PLACEHOLDER_PASSWORDS.contains(password.trim());
     }
     
     // ============== Helper Methods ==============
@@ -144,7 +218,12 @@ public class WebDashboardServer {
     private void sendJson(HttpExchange exchange, int status, Object body) throws IOException {
         byte[] data = gson.toJson(body).getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json; charset=utf-8");
-        exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+        if (isAdminPath(exchange)) {
+            // Admin data must never be cached or readable cross-origin
+            exchange.getResponseHeaders().add("Cache-Control", "no-store");
+        } else {
+            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+        }
         exchange.sendResponseHeaders(status, data.length);
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(data);
@@ -177,6 +256,7 @@ public class WebDashboardServer {
             }
             byte[] data = is.readAllBytes();
             exchange.getResponseHeaders().add("Content-Type", contentType);
+            exchange.getResponseHeaders().add("X-Content-Type-Options", "nosniff");
             exchange.getResponseHeaders().add("Cache-Control", "public, max-age=3600");
             exchange.sendResponseHeaders(200, data.length);
             try (OutputStream os = exchange.getResponseBody()) {
@@ -185,6 +265,34 @@ public class WebDashboardServer {
         }
     }
     
+    private boolean isAdminPath(HttpExchange exchange) {
+        String path = exchange.getRequestURI().getPath();
+        return path != null && path.startsWith("/api/admin");
+    }
+
+    /**
+     * Returns a cached response body for the key, computing and caching it on a miss.
+     * Entries live for {@link #PUBLIC_CACHE_TTL_MS}; a failed computation is not cached.
+     */
+    private Object cachedResponse(String key, java.util.concurrent.Callable<Object> loader) throws Exception {
+        long now = System.currentTimeMillis();
+        CachedResponse cached = responseCache.get(key);
+        if (cached != null && cached.expiresAt() > now) {
+            return cached.body();
+        }
+        Object body = loader.call();
+        if (responseCache.size() >= MAX_CACHED_RESPONSES) {
+            responseCache.entrySet().removeIf(entry -> entry.getValue().expiresAt() <= now);
+            if (responseCache.size() >= MAX_CACHED_RESPONSES) {
+                responseCache.clear();
+            }
+        }
+        responseCache.put(key, new CachedResponse(now + PUBLIC_CACHE_TTL_MS, body));
+        return body;
+    }
+
+    private record CachedResponse(long expiresAt, Object body) {}
+
     private Optional<String> queryParam(HttpExchange exchange, String name) {
         String query = exchange.getRequestURI().getQuery();
         if (query == null || query.isEmpty()) return Optional.empty();
@@ -225,16 +333,21 @@ public class WebDashboardServer {
     }
     
     private boolean isAdminAuthenticated(HttpExchange exchange) {
-        return getSession(exchange).isPresent();
+        return isAdminAvailable() && getSession(exchange).isPresent();
     }
-    
+
+    private String cookieAttributes() {
+        String attributes = "; Path=/; HttpOnly; SameSite=Strict";
+        return settings.getDashboardSettings().secureCookie() ? attributes + "; Secure" : attributes;
+    }
+
     private void setSessionCookie(HttpExchange exchange, String sessionId, int maxAgeSeconds) {
-        String cookie = SESSION_COOKIE_NAME + "=" + sessionId + "; Path=/; HttpOnly; SameSite=Strict; Secure; Max-Age=" + maxAgeSeconds;
+        String cookie = SESSION_COOKIE_NAME + "=" + sessionId + cookieAttributes() + "; Max-Age=" + maxAgeSeconds;
         exchange.getResponseHeaders().add("Set-Cookie", cookie);
     }
-    
+
     private void clearSessionCookie(HttpExchange exchange) {
-        String cookie = SESSION_COOKIE_NAME + "=; Path=/; HttpOnly; SameSite=Strict; Secure; Max-Age=0";
+        String cookie = SESSION_COOKIE_NAME + "=" + cookieAttributes() + "; Max-Age=0";
         exchange.getResponseHeaders().add("Set-Cookie", cookie);
     }
     
@@ -260,15 +373,15 @@ public class WebDashboardServer {
             this.lockoutUntil = 0;
         }
         
-        boolean isLockedOut() {
+        synchronized boolean isLockedOut() {
             return System.currentTimeMillis() < lockoutUntil;
         }
-        
-        long getRemainingLockoutMs() {
+
+        synchronized long getRemainingLockoutMs() {
             return Math.max(0, lockoutUntil - System.currentTimeMillis());
         }
-        
-        void recordFailedAttempt(int maxAttempts, long lockoutDurationMs, long windowMs) {
+
+        synchronized void recordFailedAttempt(int maxAttempts, long lockoutDurationMs, long windowMs) {
             long now = System.currentTimeMillis();
             
             // Reset if outside the attempt window
@@ -285,12 +398,7 @@ public class WebDashboardServer {
             }
         }
         
-        void reset() {
-            failedAttempts = 0;
-            lockoutUntil = 0;
-        }
-        
-        boolean isStale(long windowMs) {
+        synchronized boolean isStale(long windowMs) {
             long now = System.currentTimeMillis();
             return now - firstAttemptTime > windowMs && !isLockedOut();
         }
@@ -298,15 +406,36 @@ public class WebDashboardServer {
     
     /**
      * Gets the client IP address from the exchange.
+     * X-Forwarded-For is client-controlled, so it is only honoured when dashboard.trust_proxy is enabled.
      */
     private String getClientIp(HttpExchange exchange) {
-        // Check for X-Forwarded-For header (for reverse proxy setups)
-        String forwardedFor = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
-        if (forwardedFor != null && !forwardedFor.isEmpty()) {
-            // Use the first IP in the chain (original client)
-            return forwardedFor.split(",")[0].trim();
+        if (settings.getDashboardSettings().trustProxy()) {
+            String forwardedFor = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
+            if (forwardedFor != null && !forwardedFor.isBlank()) {
+                // Use the first IP in the chain (original client)
+                String first = forwardedFor.split(",")[0].trim();
+                if (!first.isEmpty()) {
+                    return first;
+                }
+            }
         }
-        return exchange.getRemoteAddress().getAddress().getHostAddress();
+        InetSocketAddress remote = exchange.getRemoteAddress();
+        if (remote == null || remote.getAddress() == null) {
+            return "unknown";
+        }
+        return remote.getAddress().getHostAddress();
+    }
+
+    /**
+     * Returns true if a new IP cannot be tracked because the tracker map is full even after
+     * evicting stale entries. Such requests are refused so the map stays bounded.
+     */
+    private boolean isLoginTrackingExhausted(String ip) {
+        if (loginAttempts.containsKey(ip) || loginAttempts.size() < maxTrackedLoginIps) {
+            return false;
+        }
+        cleanupLoginAttempts();
+        return loginAttempts.size() >= maxTrackedLoginIps;
     }
     
     /**
@@ -325,6 +454,9 @@ public class WebDashboardServer {
      * Records a failed login attempt for the given IP.
      */
     private void recordFailedLogin(String ip) {
+        if (isLoginTrackingExhausted(ip)) {
+            return;
+        }
         loginAttempts.computeIfAbsent(ip, k -> new LoginAttemptTracker())
                 .recordFailedAttempt(MAX_FAILED_ATTEMPTS, LOCKOUT_DURATION_MS, ATTEMPT_WINDOW_MS);
     }
@@ -333,10 +465,7 @@ public class WebDashboardServer {
      * Resets the login attempt counter for the given IP after a successful login.
      */
     private void resetLoginAttempts(String ip) {
-        LoginAttemptTracker tracker = loginAttempts.get(ip);
-        if (tracker != null) {
-            tracker.reset();
-        }
+        loginAttempts.remove(ip);
     }
     
     /**
@@ -375,30 +504,27 @@ public class WebDashboardServer {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             String path = exchange.getRequestURI().getPath();
-            
+
             // Default to index.html
-            if (path.equals("/") || path.isEmpty()) {
+            if (path == null || path.equals("/") || path.isEmpty()) {
                 path = "/index.html";
             }
-            
-            // Determine content type
-            String contentType = "text/plain";
-            if (path.endsWith(".html")) {
-                contentType = "text/html; charset=utf-8";
-            } else if (path.endsWith(".css")) {
-                contentType = "text/css; charset=utf-8";
-            } else if (path.endsWith(".js")) {
-                contentType = "application/javascript; charset=utf-8";
-            } else if (path.endsWith(".json")) {
-                contentType = "application/json; charset=utf-8";
-            } else if (path.endsWith(".png")) {
-                contentType = "image/png";
-            } else if (path.endsWith(".svg")) {
-                contentType = "image/svg+xml";
-            } else if (path.endsWith(".ico")) {
-                contentType = "image/x-icon";
+
+            // Reject traversal attempts and anything that is not an allow-listed asset type
+            if (path.contains("..") || path.contains("\\") || path.indexOf('\0') >= 0) {
+                sendText(exchange, 404, "Not Found");
+                return;
             }
-            
+            int dot = path.lastIndexOf('.');
+            String extension = dot >= 0 && dot > path.lastIndexOf('/')
+                    ? path.substring(dot + 1).toLowerCase(Locale.ROOT)
+                    : "";
+            String contentType = STATIC_CONTENT_TYPES.get(extension);
+            if (contentType == null) {
+                sendText(exchange, 404, "Not Found");
+                return;
+            }
+
             sendStatic(exchange, path, contentType);
         }
     }
@@ -410,7 +536,6 @@ public class WebDashboardServer {
         public void handle(HttpExchange exchange) throws IOException {
             Settings.DashboardSettings dash = settings.getDashboardSettings();
             Settings.PublicSettings pub = dash.publicSettings();
-            Settings.AdminSettings admin = dash.adminSettings();
             
             Map<String, Object> config = new LinkedHashMap<>();
             config.put("publicEnabled", pub.enabled());
@@ -418,7 +543,7 @@ public class WebDashboardServer {
             config.put("showLeaderboards", pub.showLeaderboards());
             config.put("showRecentMoments", pub.showRecentMoments());
             config.put("showServerStats", pub.showServerStats());
-            config.put("adminEnabled", admin.enabled());
+            config.put("adminEnabled", isAdminAvailable());
             
             sendJson(exchange, 200, config);
         }
@@ -462,24 +587,29 @@ public class WebDashboardServer {
             limit = Math.min(50, Math.max(1, limit));
             days = Math.min(365, Math.max(1, days));
             
+            final int queryDays = days;
+            final int queryLimit = limit;
             try {
-                List<Map<String, Object>> leaderboard = statsService.getStorage().loadTimelineLeaderboard(days, limit);
-                
-                // Enrich with player names
-                for (Map<String, Object> row : leaderboard) {
-                    try {
-                        UUID uuid = UUID.fromString(row.get("uuid").toString());
-                        Optional<StatsRecord> record = statsService.getStats(uuid);
-                        row.put("name", record.map(StatsRecord::getName).orElse("Unknown"));
-                    } catch (Exception ignored) {
-                        row.put("name", "Unknown");
+                Object response = cachedResponse("leaderboard:" + queryDays + ":" + queryLimit, () -> {
+                    List<Map<String, Object>> leaderboard = statsService.getStorage().loadTimelineLeaderboard(queryDays, queryLimit);
+
+                    // Enrich with player names
+                    for (Map<String, Object> row : leaderboard) {
+                        try {
+                            UUID uuid = UUID.fromString(row.get("uuid").toString());
+                            Optional<StatsRecord> record = statsService.getStats(uuid);
+                            row.put("name", record.map(StatsRecord::getName).orElse("Unknown"));
+                        } catch (Exception ignored) {
+                            row.put("name", "Unknown");
+                        }
                     }
-                }
-                
-                sendJson(exchange, 200, Map.of(
-                    "days", days,
-                    "leaderboard", leaderboard
-                ));
+
+                    return Map.of(
+                        "days", queryDays,
+                        "leaderboard", leaderboard
+                    );
+                });
+                sendJson(exchange, 200, response);
             } catch (Exception e) {
                 plugin.getLogger().warning("Leaderboard query failed: " + e.getMessage());
                 sendJson(exchange, 500, Map.of("error", "Failed to load leaderboard"));
@@ -517,8 +647,20 @@ public class WebDashboardServer {
                 return;
             }
             
+            Object stats;
+            try {
+                stats = cachedResponse("stats", this::aggregateServerStats);
+            } catch (Exception e) {
+                plugin.getLogger().warning("Server stats query failed: " + e.getMessage());
+                sendJson(exchange, 500, Map.of("error", "Failed to load server stats"));
+                return;
+            }
+            sendJson(exchange, 200, stats);
+        }
+
+        private Map<String, Object> aggregateServerStats() {
             List<StatsRecord> allStats = statsService.getAllStats();
-            
+
             // Aggregate server-wide stats
             long totalPlaytime = 0;
             long totalDeaths = 0;
@@ -557,8 +699,8 @@ public class WebDashboardServer {
             List<String> sortedBiomes = new ArrayList<>(allBiomes);
             Collections.sort(sortedBiomes);
             stats.put("biomesList", sortedBiomes);
-            
-            sendJson(exchange, 200, stats);
+
+            return stats;
         }
     }
     
@@ -567,19 +709,22 @@ public class WebDashboardServer {
     private class AdminLoginHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            if (!settings.getDashboardSettings().adminSettings().enabled()) {
+            if (!isAdminAvailable()) {
                 sendJson(exchange, 403, Map.of("error", "Admin panel is disabled"));
                 return;
             }
-            
+
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
                 sendJson(exchange, 405, Map.of("error", "Method not allowed"));
                 return;
             }
-            
+
             // Rate limiting check
             String clientIp = getClientIp(exchange);
             long lockoutSeconds = checkRateLimit(clientIp);
+            if (lockoutSeconds == 0 && isLoginTrackingExhausted(clientIp)) {
+                lockoutSeconds = ATTEMPT_WINDOW_MS / 1000;
+            }
             if (lockoutSeconds > 0) {
                 plugin.getLogger().warning("Rate-limited login attempt from IP: " + clientIp);
                 sendJson(exchange, 429, Map.of(
@@ -638,7 +783,7 @@ public class WebDashboardServer {
             boolean authenticated = isAdminAuthenticated(exchange);
             sendJson(exchange, 200, Map.of(
                 "authenticated", authenticated,
-                "adminEnabled", settings.getDashboardSettings().adminSettings().enabled()
+                "adminEnabled", isAdminAvailable()
             ));
         }
     }
@@ -843,4 +988,6 @@ public class WebDashboardServer {
     HttpHandler adminSocialHandler() { return new AdminSocialHandler(); }
     HttpHandler adminDeathsHandler() { return new AdminDeathsHandler(); }
     HttpHandler adminPlayerHandler() { return new AdminPlayerHandler(); }
+    void setMaxTrackedLoginIps(int max) { this.maxTrackedLoginIps = max; }
+    int trackedLoginIpCount() { return loginAttempts.size(); }
 }

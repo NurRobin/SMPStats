@@ -1034,6 +1034,219 @@ class WebDashboardServerTest {
         assertTrue(exchange.status == 401 || exchange.status == 500);
     }
 
+    // ============== Hardening Tests ==============
+
+    private Settings settingsWithDashboard(Settings.DashboardSettings dashboardSettings) {
+        return new Settings(
+                true, true, true, true, true, true, true,
+                true, "127.0.0.1", 8765, "apiKey", 1, settings.getSkillWeights(),
+                true, 0L, 0L, true, 1, 1.0, List.of(), List.of(),
+                true, 1, 1, true, true, true, 1, 1,
+                true, 1, 0, 0, 0, 0, HealthThresholds.defaults(),
+                true, 1, 1, "", 1, 1,
+                dashboardSettings, true
+        );
+    }
+
+    private Settings.DashboardSettings dashboardSettings(String password, boolean trustProxy, boolean secureCookie) {
+        return new Settings.DashboardSettings(true, "127.0.0.1", 8080,
+                Settings.PublicSettings.defaults(),
+                new Settings.AdminSettings(true, password, 60, true, true, true, true),
+                trustProxy, secureCookie);
+    }
+
+    private WebDashboardServer dashboardWith(Settings.DashboardSettings dashboardSettings) {
+        return new WebDashboardServer(plugin, statsService, settingsWithDashboard(dashboardSettings),
+                momentService, heatmapService, healthService);
+    }
+
+    private FakeExchange failedLogin(String forwardedFor, String remoteIp) {
+        FakeExchange exchange = new FakeExchange("/api/admin/login", null, "{\"password\": \"wrong\"}", "POST");
+        if (forwardedFor != null) {
+            exchange.getRequestHeaders().add("X-Forwarded-For", forwardedFor);
+        }
+        if (remoteIp != null) {
+            exchange.remoteAddress = new InetSocketAddress(remoteIp, 40000);
+        }
+        return exchange;
+    }
+
+    @Test
+    void forwardedForIsIgnoredWithoutTrustProxy() throws Exception {
+        var handler = dashboard.adminLoginHandler();
+        for (int i = 0; i < 5; i++) {
+            FakeExchange exchange = failedLogin("10.0.0." + i, "192.168.1.5");
+            handler.handle(exchange);
+            assertEquals(401, exchange.status);
+        }
+        // Rotating the spoofable header must not reset the rate limit
+        FakeExchange exchange = failedLogin("10.0.0.99", "192.168.1.5");
+        handler.handle(exchange);
+        assertEquals(429, exchange.status);
+    }
+
+    @Test
+    void forwardedForIsUsedWhenTrustProxyEnabled() throws Exception {
+        WebDashboardServer proxied = dashboardWith(dashboardSettings(ADMIN_PASSWORD, true, true));
+        var handler = proxied.adminLoginHandler();
+        for (int i = 0; i < 5; i++) {
+            FakeExchange exchange = failedLogin("10.0.0.1, 172.16.0.1", "127.0.0.1");
+            handler.handle(exchange);
+            assertEquals(401, exchange.status);
+        }
+        FakeExchange locked = failedLogin("10.0.0.1", "127.0.0.1");
+        handler.handle(locked);
+        assertEquals(429, locked.status);
+
+        // A different client behind the same proxy is tracked separately
+        FakeExchange other = failedLogin("10.0.0.2", "127.0.0.1");
+        handler.handle(other);
+        assertEquals(401, other.status);
+    }
+
+    @Test
+    void trackedLoginIpsAreCapped() throws Exception {
+        WebDashboardServer proxied = dashboardWith(dashboardSettings(ADMIN_PASSWORD, true, true));
+        proxied.setMaxTrackedLoginIps(3);
+        var handler = proxied.adminLoginHandler();
+        for (int i = 0; i < 3; i++) {
+            FakeExchange exchange = failedLogin("10.0.1." + i, "127.0.0.1");
+            handler.handle(exchange);
+            assertEquals(401, exchange.status);
+        }
+        // Capacity exhausted: new IPs are refused instead of growing the map
+        FakeExchange overflow = failedLogin("10.0.1.200", "127.0.0.1");
+        handler.handle(overflow);
+        assertEquals(429, overflow.status);
+        assertEquals(3, proxied.trackedLoginIpCount());
+    }
+
+    @Test
+    void placeholderAdminPasswordDisablesAdminArea() throws Exception {
+        for (String password : new String[]{"", "ChangeThisAdminPassword", "  "}) {
+            WebDashboardServer insecure = dashboardWith(dashboardSettings(password, false, true));
+
+            FakeExchange config = new FakeExchange("/api/public/config", null, null, "GET");
+            insecure.publicConfigHandler().handle(config);
+            assertEquals(200, config.status);
+            assertTrue(config.body().replace(" ", "").contains("\"adminEnabled\":false"), config.body());
+
+            FakeExchange login = new FakeExchange("/api/admin/login", null,
+                    "{\"password\": \"" + password + "\"}", "POST");
+            insecure.adminLoginHandler().handle(login);
+            assertEquals(403, login.status);
+            assertFalse(login.responseHeaders.containsKey("Set-Cookie"));
+
+            FakeExchange check = new FakeExchange("/api/admin/check", null, null, "GET");
+            insecure.adminCheckHandler().handle(check);
+            assertTrue(check.body().replace(" ", "").contains("\"adminEnabled\":false"));
+        }
+    }
+
+    @Test
+    void sessionCookieSecureFlagIsConfigurable() throws Exception {
+        FakeExchange secureLogin = new FakeExchange("/api/admin/login", null,
+                "{\"password\": \"" + ADMIN_PASSWORD + "\"}", "POST");
+        dashboard.adminLoginHandler().handle(secureLogin);
+        assertTrue(secureLogin.responseHeaders.getFirst("Set-Cookie").contains("Secure"));
+
+        WebDashboardServer plainHttp = dashboardWith(dashboardSettings(ADMIN_PASSWORD, false, false));
+        FakeExchange plainLogin = new FakeExchange("/api/admin/login", null,
+                "{\"password\": \"" + ADMIN_PASSWORD + "\"}", "POST");
+        plainHttp.adminLoginHandler().handle(plainLogin);
+        assertEquals(200, plainLogin.status);
+        String cookie = plainLogin.responseHeaders.getFirst("Set-Cookie");
+        assertFalse(cookie.contains("Secure"));
+        assertTrue(cookie.contains("HttpOnly"));
+
+        FakeExchange logout = new FakeExchange("/api/admin/logout", cookie, null, "POST");
+        plainHttp.adminLogoutHandler().handle(logout);
+        assertFalse(logout.responseHeaders.getFirst("Set-Cookie").contains("Secure"));
+    }
+
+    @Test
+    void adminResponsesAreNotCachedAndHaveNoCors() throws Exception {
+        FakeExchange login = new FakeExchange("/api/admin/login", null,
+                "{\"password\": \"" + ADMIN_PASSWORD + "\"}", "POST");
+        dashboard.adminLoginHandler().handle(login);
+        assertEquals("no-store", login.responseHeaders.getFirst("Cache-Control"));
+        assertNull(login.responseHeaders.getFirst("Access-Control-Allow-Origin"));
+
+        FakeExchange denied = new FakeExchange("/api/admin/health", null, null, "GET");
+        dashboard.adminHealthHandler().handle(denied);
+        assertEquals("no-store", denied.responseHeaders.getFirst("Cache-Control"));
+        assertNull(denied.responseHeaders.getFirst("Access-Control-Allow-Origin"));
+
+        FakeExchange pub = new FakeExchange("/api/public/config", null, null, "GET");
+        dashboard.publicConfigHandler().handle(pub);
+        assertEquals("*", pub.responseHeaders.getFirst("Access-Control-Allow-Origin"));
+    }
+
+    @Test
+    void staticHandlerRejectsTraversalAndUnknownExtensions() throws Exception {
+        var handler = dashboard.staticHandler();
+        String[] paths = {
+                "/../plugin.yml",
+                "/%2e%2e/plugin.yml",
+                "/css/../index.html",
+                "/css%5Cstyle.css",
+                "/css/",
+                "/js",
+                "/index.html.bak",
+                "/manifest.json"
+        };
+        for (String path : paths) {
+            FakeExchange exchange = new FakeExchange(path, null, null, "GET");
+            handler.handle(exchange);
+            assertEquals(404, exchange.status, "expected 404 for " + path);
+        }
+    }
+
+    @Test
+    void publicStatsResponseIsCached() throws Exception {
+        when(statsService.getAllStats()).thenReturn(List.of(new StatsRecord(UUID.randomUUID(), "A")));
+        var handler = dashboard.publicStatsHandler();
+        for (int i = 0; i < 3; i++) {
+            FakeExchange exchange = new FakeExchange("/api/public/stats", null, null, "GET");
+            handler.handle(exchange);
+            assertEquals(200, exchange.status);
+            assertTrue(exchange.body().contains("totalPlayers"));
+        }
+        verify(statsService, times(1)).getAllStats();
+    }
+
+    @Test
+    void publicLeaderboardResponseIsCachedPerParameters() throws Exception {
+        when(storage.loadTimelineLeaderboard(anyInt(), anyInt())).thenAnswer(inv -> new java.util.ArrayList<>());
+        var handler = dashboard.publicLeaderboardHandler();
+        for (int i = 0; i < 3; i++) {
+            FakeExchange exchange = new FakeExchange("/api/public/leaderboard?days=7&limit=10", null, null, "GET");
+            handler.handle(exchange);
+            assertEquals(200, exchange.status);
+        }
+        FakeExchange other = new FakeExchange("/api/public/leaderboard?days=30&limit=10", null, null, "GET");
+        handler.handle(other);
+        assertEquals(200, other.status);
+
+        verify(storage, times(1)).loadTimelineLeaderboard(7, 10);
+        verify(storage, times(1)).loadTimelineLeaderboard(30, 10);
+    }
+
+    @Test
+    void startAndStopReleaseResources() {
+        WebDashboardServer live = new WebDashboardServer(plugin, statsService,
+                settingsWithDashboard(new Settings.DashboardSettings(true, "127.0.0.1", 0,
+                        Settings.PublicSettings.defaults(),
+                        new Settings.AdminSettings(true, ADMIN_PASSWORD, 60, true, true, true, true))),
+                momentService, heatmapService, healthService);
+        live.start();
+        assertTrue(live.isRunning());
+        live.stop();
+        assertFalse(live.isRunning());
+        // Stopping twice must be harmless
+        live.stop();
+    }
+
     // ============== Test Utility Classes ==============
     
     private static class FakeExchange extends com.sun.net.httpserver.HttpExchange {
@@ -1045,6 +1258,7 @@ class WebDashboardServerTest {
         private final Headers responseHeaders = new Headers();
         private final Headers requestHeaders = new Headers();
         private int status;
+        private InetSocketAddress remoteAddress = new InetSocketAddress(0);
 
         FakeExchange(String path, String cookie, String requestBody, String method) {
             this.uri = URI.create(path);
@@ -1111,7 +1325,7 @@ class WebDashboardServerTest {
 
         @Override
         public InetSocketAddress getRemoteAddress() {
-            return new InetSocketAddress(0);
+            return remoteAddress;
         }
 
         @Override
