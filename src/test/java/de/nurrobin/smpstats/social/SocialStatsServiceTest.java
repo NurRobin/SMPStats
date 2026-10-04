@@ -193,7 +193,7 @@ class SocialStatsServiceTest {
         when(other.getLocation()).thenReturn(bLoc);
         when(world.getPlayers()).thenReturn(List.of(killer, other));
 
-        farService.recordSharedKill(killer, false);
+        farService.recordSharedKill(killer, null, false);
         verify(storage, never()).incrementSocialPair(any(), any(), anyLong(), anyLong(), anyLong(), anyLong());
     }
 }

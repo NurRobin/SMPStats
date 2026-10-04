@@ -39,7 +39,7 @@ public class CombatListener implements Listener {
         if (killer != null) {
             statsService.addPlayerKill(killer.getUniqueId());
             if (socialStatsService != null) {
-                socialStatsService.recordSharedKill(killer, true);
+                socialStatsService.recordSharedKill(killer, victim, true);
             }
         }
     }
@@ -53,7 +53,7 @@ public class CombatListener implements Listener {
         if (killer != null) {
             statsService.addMobKill(killer.getUniqueId());
             if (socialStatsService != null) {
-                socialStatsService.recordSharedKill(killer, false);
+                socialStatsService.recordSharedKill(killer, null, false);
             }
         }
     }

@@ -110,10 +110,6 @@ public class SocialStatsService {
         }
     }
 
-    public void recordSharedKill(Player killer, boolean playerKill) {
-        recordSharedKill(killer, null, playerKill);
-    }
-
     /**
      * Credits a kill to every player near the killer. The victim of a PvP kill is still in the
      * world during the death event and is skipped explicitly.

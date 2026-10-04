@@ -100,7 +100,7 @@ public class ServerHealthService {
         for (World world : Bukkit.getWorlds()) {
             Chunk[] chunks = world.getLoadedChunks();
             int worldChunks = chunks.length;
-            int worldEntities = world.getEntityCount();
+            int worldEntities = world.getEntities().size();
             int worldHoppers = 0;
             int worldRedstone = 0;
             for (Chunk chunk : chunks) {

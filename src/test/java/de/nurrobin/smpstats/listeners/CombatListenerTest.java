@@ -52,7 +52,7 @@ class CombatListenerTest {
 
         verify(stats).addDeath(victim.getUniqueId(), "FALL");
         verify(stats).addPlayerKill(victim.getKiller().getUniqueId());
-        verify(social).recordSharedKill(victim.getKiller(), true);
+        verify(social).recordSharedKill(victim.getKiller(), victim, true);
     }
 
     @Test
@@ -70,7 +70,7 @@ class CombatListenerTest {
 
         listener.onEntityDeath(mobDeath);
         verify(stats).addMobKill(killer.getUniqueId());
-        verify(social).recordSharedKill(killer, false);
+        verify(social).recordSharedKill(killer, null, false);
     }
 
     @Test
@@ -212,7 +212,7 @@ class CombatListenerTest {
         listener.onEntityDeath(playerDeath);
 
         verify(stats, never()).addMobKill(any());
-        verify(social, never()).recordSharedKill(any(), anyBoolean());
+        verify(social, never()).recordSharedKill(any(), any(), anyBoolean());
     }
 
     @Test

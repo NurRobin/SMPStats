@@ -40,7 +40,7 @@ import java.sql.SQLException;
 import java.util.Objects;
 
 public class SMPStats extends JavaPlugin {
-    private static final int CONFIG_VERSION = 7;
+    private static final int CONFIG_VERSION = 8;
     private StatsStorage storage;
     private StatsService statsService;
     private Settings settings;
