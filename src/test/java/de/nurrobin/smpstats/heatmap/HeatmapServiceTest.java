@@ -208,6 +208,19 @@ class HeatmapServiceTest {
     }
 
     @Test
+    void capsWindowWidthButAllowsPastWindows() throws Exception {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        StatsStorage storage = mock(StatsStorage.class);
+        HeatmapService service = new HeatmapService(plugin, storage, settings(true, List.of()));
+
+        long until = System.currentTimeMillis() - 300L * 24 * 3600 * 1000;
+        service.generateHeatmap("MINING", "world", 0, until, 0.0, 16);
+
+        verify(storage).forEachHeatmapEvent(eq("MINING"), eq("world"), eq(until - HeatmapService.MAX_WINDOW_MILLIS), eq(until), any());
+    }
+
+    @Test
     void positionSamplingSkipsPlayersWhoDidNotMove() throws Exception {
         Plugin plugin = mock(Plugin.class);
         when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));

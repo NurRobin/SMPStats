@@ -258,6 +258,64 @@ class StatsServiceTest {
     }
 
     @Test
+    void recoveryHappensOnceAndRepeatedSavesDoNotDoubleCount() throws Exception {
+        UUID uuid = UUID.randomUUID();
+        StatsRecord stored = new StatsRecord(uuid, "Alex");
+        stored.setBlocksBroken(100);
+        StatsStorage storage = mock(StatsStorage.class);
+        when(storage.loadOrCreate(uuid, "Alex"))
+                .thenThrow(new java.sql.SQLException("locked"))
+                .thenReturn(stored);
+
+        StatsService service = new StatsService(pluginWith(Optional.empty()), storage, settings(true, true, true, true, true, true));
+        service.handleJoin(mockPlayer(uuid, "Alex"));
+        service.addBlocksBroken(uuid);
+        service.flushOnline();
+        service.flushOnline();
+
+        verify(storage, times(2)).loadOrCreate(uuid, "Alex");
+        ArgumentCaptor<StatsRecord> saved = ArgumentCaptor.forClass(StatsRecord.class);
+        verify(storage, times(2)).save(saved.capture());
+        assertEquals(101, saved.getAllValues().get(0).getBlocksBroken());
+        assertEquals(101, saved.getAllValues().get(1).getBlocksBroken());
+        assertEquals(101, service.getStats(uuid).orElseThrow().getBlocksBroken());
+    }
+
+    @Test
+    void editOnUnloadedSessionFailsWhileStorageIsDown() throws Exception {
+        UUID uuid = UUID.randomUUID();
+        StatsStorage storage = mock(StatsStorage.class);
+        when(storage.loadOrCreate(uuid, "Alex")).thenThrow(new java.sql.SQLException("locked"));
+
+        StatsService service = new StatsService(pluginWith(Optional.empty()), storage, settings(true, true, true, true, true, true));
+        service.handleJoin(mockPlayer(uuid, "Alex"));
+
+        assertFalse(service.resetStats(uuid));
+        assertFalse(service.setStat(uuid, StatField.DEATHS, 5));
+        verify(storage, never()).save(any(StatsRecord.class));
+    }
+
+    @Test
+    void editOnRecoveredSessionSetsExactValue() throws Exception {
+        UUID uuid = UUID.randomUUID();
+        StatsRecord stored = new StatsRecord(uuid, "Alex");
+        stored.setDeaths(7);
+        StatsStorage storage = mock(StatsStorage.class);
+        when(storage.loadOrCreate(uuid, "Alex"))
+                .thenThrow(new java.sql.SQLException("locked"))
+                .thenReturn(stored);
+
+        StatsService service = new StatsService(pluginWith(Optional.empty()), storage, settings(true, true, true, true, true, true));
+        service.handleJoin(mockPlayer(uuid, "Alex"));
+        service.addDeath(uuid, "FALL");
+
+        assertTrue(service.setStat(uuid, StatField.DEATHS, 5));
+        ArgumentCaptor<StatsRecord> saved = ArgumentCaptor.forClass(StatsRecord.class);
+        verify(storage).save(saved.capture());
+        assertEquals(5, saved.getValue().getDeaths());
+    }
+
+    @Test
     void quitWritesTimelineSnapshot() throws Exception {
         UUID uuid = UUID.randomUUID();
         StatsStorage storage = mock(StatsStorage.class);

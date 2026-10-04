@@ -24,6 +24,7 @@ public class HeatmapService {
     // Last recorded POSITION per player; standing still (AFK farms) adds no rows.
     private final Map<java.util.UUID, Location> lastPositions = new HashMap<>();
     private static final double MIN_POSITION_MOVE_SQUARED = 2.0 * 2.0;
+    static final long MAX_WINDOW_MILLIS = java.util.concurrent.TimeUnit.DAYS.toMillis(90);
     private int flushTaskId = -1;
     private int positionTaskId = -1;
 
@@ -109,10 +110,12 @@ public class HeatmapService {
 
     public List<HeatmapBin> generateHeatmap(String type, String world, long since, long until, double decayHalfLifeHours, int gridSize) {
         int grid = Math.max(1, Math.min(gridSize, 512));
+        // Every scan holds the storage lock, so the window is bounded no matter which caller asks.
+        long from = Math.max(since, until - MAX_WINDOW_MILLIS);
         int retentionDays = settings.getRetentionSettings().heatmapEventsDays();
-        long from = retentionDays > 0
-                ? Math.max(since, System.currentTimeMillis() - java.util.concurrent.TimeUnit.DAYS.toMillis(retentionDays))
-                : since;
+        if (retentionDays > 0) {
+            from = Math.max(from, System.currentTimeMillis() - java.util.concurrent.TimeUnit.DAYS.toMillis(retentionDays));
+        }
         try {
             Map<Long, Double> chunkValues = new HashMap<>();
             long now = System.currentTimeMillis();

@@ -1110,19 +1110,37 @@ public class StatsStorage implements Closeable {
         }
     }
 
-    public synchronized int deleteHeatmapEventsBefore(long timestamp) throws SQLException {
-        return deleteBefore("DELETE FROM heatmap_events WHERE timestamp < ?", timestamp);
+    public int deleteHeatmapEventsBefore(long timestamp) throws SQLException {
+        return deleteBefore("heatmap_events", "timestamp", timestamp);
     }
 
-    public synchronized int deleteMomentsBefore(long timestamp) throws SQLException {
-        return deleteBefore("DELETE FROM moments WHERE started_at < ?", timestamp);
+    public int deleteMomentsBefore(long timestamp) throws SQLException {
+        return deleteBefore("moments", "started_at", timestamp);
     }
 
-    public synchronized int deleteDeathReplaysBefore(long timestamp) throws SQLException {
-        return deleteBefore("DELETE FROM death_replays WHERE ts < ?", timestamp);
+    public int deleteDeathReplaysBefore(long timestamp) throws SQLException {
+        return deleteBefore("death_replays", "ts", timestamp);
     }
 
-    private int deleteBefore(String sql, long timestamp) throws SQLException {
+    private static final int DELETE_BATCH_SIZE = 5000;
+
+    /**
+     * Deletes in small batches and takes the storage lock per batch, so a large cleanup never
+     * blocks main-thread saves for longer than one batch.
+     */
+    private int deleteBefore(String table, String column, long timestamp) throws SQLException {
+        String sql = "DELETE FROM " + table + " WHERE rowid IN (SELECT rowid FROM " + table
+                + " WHERE " + column + " < ? LIMIT " + DELETE_BATCH_SIZE + ")";
+        int total = 0;
+        int deleted;
+        do {
+            deleted = deleteBatch(sql, timestamp);
+            total += deleted;
+        } while (deleted == DELETE_BATCH_SIZE);
+        return total;
+    }
+
+    private synchronized int deleteBatch(String sql, long timestamp) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setLong(1, timestamp);
             return ps.executeUpdate();
