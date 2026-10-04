@@ -4,6 +4,7 @@ import de.nurrobin.smpstats.api.ApiServer;
 import de.nurrobin.smpstats.commands.StatsCommand;
 import de.nurrobin.smpstats.commands.SStatsCommand;
 import de.nurrobin.smpstats.dashboard.WebDashboardServer;
+import de.nurrobin.smpstats.database.RetentionService;
 import de.nurrobin.smpstats.database.StatsStorage;
 import de.nurrobin.smpstats.listeners.BlockListener;
 import de.nurrobin.smpstats.listeners.CombatListener;
@@ -54,6 +55,7 @@ public class SMPStats extends JavaPlugin {
     private StoryService storyService;
     private GuiManager guiManager;
     private AnimatedBorderService animatedBorderService;
+    private RetentionService retentionService;
     private int autosaveTaskId = -1;
 
     @Override
@@ -81,6 +83,7 @@ public class SMPStats extends JavaPlugin {
         this.storyService = new StoryService(this, statsService, storage, momentService, settings);
         this.guiManager = new GuiManager(this);
         this.animatedBorderService = new AnimatedBorderService(this);
+        this.retentionService = new RetentionService(this, storage, settings);
 
         registerListeners();
         registerCommands();
@@ -91,6 +94,7 @@ public class SMPStats extends JavaPlugin {
         momentService.start();
         heatmapService.start();
         socialStatsService.start();
+        retentionService.start();
         if (deathReplayService != null) {
             deathReplayService.start();
         }
@@ -122,6 +126,9 @@ public class SMPStats extends JavaPlugin {
         }
         if (socialStatsService != null) {
             socialStatsService.shutdown();
+        }
+        if (retentionService != null) {
+            retentionService.shutdown();
         }
         if (deathReplayService != null) {
             deathReplayService.shutdown();
@@ -216,6 +223,9 @@ public class SMPStats extends JavaPlugin {
         }
         if (timelineService != null) {
             timelineService.updateSettings(settings);
+        }
+        if (retentionService != null) {
+            retentionService.updateSettings(settings);
         }
         if (deathReplayService != null) {
             deathReplayService.shutdown();
@@ -328,7 +338,11 @@ public class SMPStats extends JavaPlugin {
                 deathReplayEnabled, deathReplayInventoryItems, deathReplayNearbyRadius, deathReplayLimit,
                 healthEnabled, healthSampleMinutes, healthChunkWeight, healthEntityWeight, healthHopperWeight, healthRedstoneWeight, healthThresholds,
                 storyEnabled, storyIntervalDays, storySummaryHour, storyWebhookUrl, storyTopLimit, storyRecentMoments,
-                dashboardSettings, guiAnimatedBordersEnabled);
+                dashboardSettings, guiAnimatedBordersEnabled)
+                .withRetention(new Settings.RetentionSettings(
+                        Math.max(0, config.getInt("retention.heatmap_events_days", 120)),
+                        Math.max(0, config.getInt("retention.moments_days", 0)),
+                        Math.max(0, config.getInt("retention.death_replays_days", 0))));
     }
     
     private Settings.DashboardSettings parseDashboardSettings(FileConfiguration config) {

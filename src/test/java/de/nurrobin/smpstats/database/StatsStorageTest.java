@@ -331,6 +331,117 @@ class StatsStorageTest {
         assertTrue(events.isEmpty(), "Should have rolled back valid entry");
     }
 
+    @Test
+    void timelineLeaderboardMeasuresAgainstBaselineBeforeWindow() throws Exception {
+        StatsStorage storage = newStorage();
+        LocalDate today = LocalDate.now(ZoneId.systemDefault());
+
+        UUID veteran = UUID.randomUUID();
+        StatsRecord v = new StatsRecord(veteran, "Veteran");
+        v.setBlocksBroken(100);
+        v.setPlaytimeMillis(1_000);
+        storage.upsertTimeline(v, today.minusDays(10));
+        v.setBlocksBroken(150);
+        v.setPlaytimeMillis(4_000);
+        storage.upsertTimeline(v, today);
+
+        UUID newcomer = UUID.randomUUID();
+        StatsRecord n = new StatsRecord(newcomer, "Newcomer");
+        n.setBlocksBroken(30);
+        n.setPlaytimeMillis(2_000);
+        storage.upsertTimeline(n, today);
+
+        UUID resetPlayer = UUID.randomUUID();
+        StatsRecord r = new StatsRecord(resetPlayer, "Reset");
+        r.setBlocksBroken(500);
+        r.setPlaytimeMillis(9_000);
+        storage.upsertTimeline(r, today.minusDays(9));
+        r.setBlocksBroken(20);
+        r.setPlaytimeMillis(500);
+        storage.upsertTimeline(r, today);
+
+        Map<String, Map<String, Object>> byUuid = new java.util.HashMap<>();
+        for (Map<String, Object> row : storage.loadTimelineLeaderboard(7, 10)) {
+            byUuid.put((String) row.get("uuid"), row);
+        }
+
+        assertEquals(50L, byUuid.get(veteran.toString()).get("blocks_broken"));
+        assertEquals(3_000L, byUuid.get(veteran.toString()).get("playtime_ms"));
+        assertEquals(30L, byUuid.get(newcomer.toString()).get("blocks_broken"));
+        // A reset makes the counters drop below the baseline; only progress since the reset counts.
+        assertEquals(20L, byUuid.get(resetPlayer.toString()).get("blocks_broken"));
+        assertEquals(500L, byUuid.get(resetPlayer.toString()).get("playtime_ms"));
+
+        List<Map<String, Object>> ordered = storage.loadTimelineLeaderboard(7, 10);
+        assertEquals(veteran.toString(), ordered.getFirst().get("uuid"));
+    }
+
+    @Test
+    void corruptBiomeJsonDoesNotBreakLoading() throws Exception {
+        StatsStorage storage = newStorage();
+        UUID uuid = UUID.randomUUID();
+        StatsRecord record = new StatsRecord(uuid, "Alex");
+        record.setBlocksBroken(7);
+        storage.save(record);
+        Path dbFile;
+        try (var files = Files.walk(tempDir)) {
+            dbFile = files.filter(f -> f.getFileName().toString().equals("stats.db")).findFirst().orElseThrow();
+        }
+        try (var conn = java.sql.DriverManager.getConnection("jdbc:sqlite:" + dbFile);
+             var st = conn.createStatement()) {
+            st.executeUpdate("UPDATE player_stats SET biomes = '{not json' WHERE uuid = '" + uuid + "'");
+        }
+
+        StatsRecord loaded = storage.load(uuid).orElseThrow();
+        assertEquals(7, loaded.getBlocksBroken());
+        assertTrue(loaded.getBiomesVisited().isEmpty());
+    }
+
+    @Test
+    void pruneRemovesOnlyExpiredRows() throws Exception {
+        StatsStorage storage = newStorage();
+        long now = System.currentTimeMillis();
+        long old = now - 100L * 24 * 3600 * 1000;
+        storage.insertHeatmapEntries(List.of(
+                new HeatmapEntry("MINING", "world", 1, 64, 1, 1.0, old),
+                new HeatmapEntry("MINING", "world", 2, 64, 2, 1.0, now)
+        ));
+        UUID uuid = UUID.randomUUID();
+        storage.saveMoment(new MomentEntry(null, uuid, "diamond", "Old", "d", "{}", "world", 0, 0, 0, old, old));
+        storage.saveMoment(new MomentEntry(null, uuid, "diamond", "New", "d", "{}", "world", 0, 0, 0, now, now));
+        storage.saveDeathReplay(new DeathReplayEntry(old, uuid.toString(), "Alex", "FALL", 0, "world", 0, 0, 0, 0, List.of(), List.of(), List.of()));
+        storage.saveDeathReplay(new DeathReplayEntry(now, uuid.toString(), "Alex", "FALL", 0, "world", 0, 0, 0, 0, List.of(), List.of(), List.of()));
+
+        long cutoff = now - 30L * 24 * 3600 * 1000;
+        assertEquals(1, storage.deleteHeatmapEventsBefore(cutoff));
+        assertEquals(1, storage.deleteMomentsBefore(cutoff));
+        assertEquals(1, storage.deleteDeathReplaysBefore(cutoff));
+
+        assertEquals(1, storage.getHeatmapEvents("MINING", "world", 0, now + 1).size());
+        assertEquals(1, storage.loadRecentMoments(10).size());
+        assertEquals(1, storage.loadDeathReplays(10).size());
+    }
+
+    @Test
+    void forEachHeatmapEventStreamsMatchingRows() throws Exception {
+        StatsStorage storage = newStorage();
+        long now = System.currentTimeMillis();
+        storage.insertHeatmapEntries(List.of(
+                new HeatmapEntry("MINING", "world", 1, 64, 1, 2.0, now),
+                new HeatmapEntry("MINING", "world", 5, 64, 5, 3.0, now),
+                new HeatmapEntry("MINING", "world_nether", 5, 64, 5, 3.0, now),
+                new HeatmapEntry("DEATH", "world", 5, 64, 5, 3.0, now)
+        ));
+        double[] total = {0};
+        int[] count = {0};
+        storage.forEachHeatmapEvent("MINING", "world", 0, now + 1, (x, z, value, ts) -> {
+            total[0] += value;
+            count[0]++;
+        });
+        assertEquals(2, count[0]);
+        assertEquals(5.0, total[0], 1e-9);
+    }
+
     private StatsStorage newStorage() throws IOException, java.sql.SQLException {
         Path dataDir = Files.createDirectory(tempDir.resolve("plugin-data-" + UUID.randomUUID()));
         Plugin plugin = mock(Plugin.class);

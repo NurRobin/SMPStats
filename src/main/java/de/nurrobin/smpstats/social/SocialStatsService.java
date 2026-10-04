@@ -16,6 +16,8 @@ public class SocialStatsService {
     private final Map<PairKey, Long> secondsTogether = new ConcurrentHashMap<>();
     private final Map<PairKey, KillTally> sharedKills = new ConcurrentHashMap<>();
     private int taskId = -1;
+    private int flushTaskId = -1;
+    private static final long FLUSH_PERIOD_TICKS = 60L * 20;
 
     public SocialStatsService(Plugin plugin, StatsStorage storage, Settings settings) {
         this.plugin = plugin;
@@ -31,12 +33,17 @@ public class SocialStatsService {
         if (!settings.isSocialEnabled()) return;
         long periodTicks = Math.max(1, settings.getSocialSampleSeconds()) * 20L;
         taskId = Bukkit.getScheduler().runTaskTimer(plugin, this::sample, periodTicks, periodTicks).getTaskId();
+        flushTaskId = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, this::flush, FLUSH_PERIOD_TICKS, FLUSH_PERIOD_TICKS).getTaskId();
     }
 
     public void shutdown() {
         if (taskId != -1) {
             Bukkit.getScheduler().cancelTask(taskId);
             taskId = -1;
+        }
+        if (flushTaskId != -1) {
+            Bukkit.getScheduler().cancelTask(flushTaskId);
+            flushTaskId = -1;
         }
         flush();
     }
@@ -54,7 +61,6 @@ public class SocialStatsService {
                 }
             }
         }
-        flush();
     }
 
     private boolean isNearby(Player a, Player b) {
@@ -68,22 +74,29 @@ public class SocialStatsService {
         return Collections.unmodifiableMap(secondsTogether);
     }
 
-    private void flush() {
-        List<Map.Entry<PairKey, Long>> secondsBatch = new ArrayList<>(secondsTogether.entrySet());
-        secondsTogether.clear();
-        List<Map.Entry<PairKey, KillTally>> killBatch = new ArrayList<>(sharedKills.entrySet());
-        sharedKills.clear();
-        for (Map.Entry<PairKey, Long> entry : secondsBatch) {
+    /**
+     * Persists the accumulated pairs. Runs on an async timer; each key is removed before it is
+     * written so increments made meanwhile by the main thread land in the next batch.
+     */
+    void flush() {
+        for (PairKey key : new ArrayList<>(secondsTogether.keySet())) {
+            Long seconds = secondsTogether.remove(key);
+            if (seconds == null) {
+                continue;
+            }
             try {
-                storage.incrementSocialPair(entry.getKey().a, entry.getKey().b, entry.getValue(), 0, 0, 0);
+                storage.incrementSocialPair(key.a, key.b, seconds, 0, 0, 0);
             } catch (Exception e) {
                 plugin.getLogger().warning("Could not persist social pair: " + e.getMessage());
             }
         }
-        for (Map.Entry<PairKey, KillTally> entry : killBatch) {
-            KillTally tally = entry.getValue();
+        for (PairKey key : new ArrayList<>(sharedKills.keySet())) {
+            KillTally tally = sharedKills.remove(key);
+            if (tally == null) {
+                continue;
+            }
             try {
-                storage.incrementSocialPair(entry.getKey().a, entry.getKey().b, 0, tally.total, tally.playerKills, tally.mobKills);
+                storage.incrementSocialPair(key.a, key.b, 0, tally.total, tally.playerKills, tally.mobKills);
             } catch (Exception e) {
                 plugin.getLogger().warning("Could not persist shared kill pair: " + e.getMessage());
             }
@@ -98,6 +111,14 @@ public class SocialStatsService {
     }
 
     public void recordSharedKill(Player killer, boolean playerKill) {
+        recordSharedKill(killer, null, playerKill);
+    }
+
+    /**
+     * Credits a kill to every player near the killer. The victim of a PvP kill is still in the
+     * world during the death event and is skipped explicitly.
+     */
+    public void recordSharedKill(Player killer, Player victim, boolean playerKill) {
         if (!settings.isSocialEnabled()) {
             return;
         }
@@ -105,7 +126,8 @@ public class SocialStatsService {
         int radius = Math.max(1, settings.getSocialNearbyRadius());
         double maxDistanceSquared = radius * radius;
         for (Player other : worldPlayers) {
-            if (other.getUniqueId().equals(killer.getUniqueId())) {
+            if (other.getUniqueId().equals(killer.getUniqueId())
+                    || (victim != null && other.getUniqueId().equals(victim.getUniqueId()))) {
                 continue;
             }
             if (other.getLocation().distanceSquared(killer.getLocation()) > maxDistanceSquared) {
@@ -123,7 +145,6 @@ public class SocialStatsService {
                 return tally;
             });
         }
-        flush();
     }
 
     private static class KillTally {

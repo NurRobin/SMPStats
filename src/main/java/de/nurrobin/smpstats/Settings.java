@@ -52,6 +52,15 @@ public class Settings {
     
     // GUI settings
     private final boolean guiAnimatedBordersEnabled;
+
+    private RetentionSettings retentionSettings = RetentionSettings.DEFAULTS;
+
+    /**
+     * How long raw event rows are kept. A value of 0 keeps rows forever.
+     */
+    public record RetentionSettings(int heatmapEventsDays, int momentsDays, int deathReplaysDays) {
+        public static final RetentionSettings DEFAULTS = new RetentionSettings(120, 0, 0);
+    }
     
     /**
      * Holds all dashboard-related configuration.
@@ -370,5 +379,14 @@ public class Settings {
     
     public boolean isGuiAnimatedBordersEnabled() {
         return guiAnimatedBordersEnabled;
+    }
+
+    public RetentionSettings getRetentionSettings() {
+        return retentionSettings;
+    }
+
+    public Settings withRetention(RetentionSettings retentionSettings) {
+        this.retentionSettings = retentionSettings;
+        return this;
     }
 }

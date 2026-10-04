@@ -2,7 +2,6 @@ package de.nurrobin.smpstats.heatmap;
 
 import de.nurrobin.smpstats.Settings;
 import de.nurrobin.smpstats.database.HeatmapEntry;
-import de.nurrobin.smpstats.database.HeatmapEvent;
 import de.nurrobin.smpstats.database.StatsStorage;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -22,6 +21,9 @@ public class HeatmapService {
     private List<HotspotDefinition> hotspots;
     private final List<HeatmapEntry> pendingEvents = new ArrayList<>();
     private final Map<HotspotKey, Double> hotspotCounts = new ConcurrentHashMap<>();
+    // Last recorded POSITION per player; standing still (AFK farms) adds no rows.
+    private final Map<java.util.UUID, Location> lastPositions = new HashMap<>();
+    private static final double MIN_POSITION_MOVE_SQUARED = 2.0 * 2.0;
     private int flushTaskId = -1;
     private int positionTaskId = -1;
 
@@ -45,11 +47,8 @@ public class HeatmapService {
         flushTaskId = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, this::flush, periodTicks, periodTicks).getTaskId();
         
         // Track player positions every 5 seconds (100 ticks)
-        positionTaskId = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            for (org.bukkit.entity.Player player : Bukkit.getOnlinePlayers()) {
-                track("POSITION", player.getLocation());
-            }
-        }, 100L, 100L).getTaskId();
+        positionTaskId = Bukkit.getScheduler().runTaskTimer(plugin,
+                () -> samplePositions(Bukkit.getOnlinePlayers()), 100L, 100L).getTaskId();
     }
 
     public void shutdown() {
@@ -62,6 +61,23 @@ public class HeatmapService {
             positionTaskId = -1;
         }
         flush();
+    }
+
+    void samplePositions(java.util.Collection<? extends org.bukkit.entity.Player> players) {
+        java.util.Set<java.util.UUID> online = new java.util.HashSet<>();
+        for (org.bukkit.entity.Player player : players) {
+            online.add(player.getUniqueId());
+            Location location = player.getLocation();
+            Location last = lastPositions.get(player.getUniqueId());
+            boolean moved = last == null
+                    || last.getWorld() != location.getWorld()
+                    || last.distanceSquared(location) >= MIN_POSITION_MOVE_SQUARED;
+            if (moved) {
+                lastPositions.put(player.getUniqueId(), location.clone());
+                track("POSITION", location);
+            }
+        }
+        lastPositions.keySet().retainAll(online);
     }
 
     public void track(String type, Location location) {
@@ -92,32 +108,36 @@ public class HeatmapService {
     }
 
     public List<HeatmapBin> generateHeatmap(String type, String world, long since, long until, double decayHalfLifeHours, int gridSize) {
+        int grid = Math.max(1, Math.min(gridSize, 512));
+        int retentionDays = settings.getRetentionSettings().heatmapEventsDays();
+        long from = retentionDays > 0
+                ? Math.max(since, System.currentTimeMillis() - java.util.concurrent.TimeUnit.DAYS.toMillis(retentionDays))
+                : since;
         try {
-            List<HeatmapEvent> events = storage.getHeatmapEvents(type, world, since, until);
             Map<Long, Double> chunkValues = new HashMap<>();
             long now = System.currentTimeMillis();
             double halfLifeMillis = decayHalfLifeHours * 3600 * 1000;
 
-            for (HeatmapEvent event : events) {
-                int binX = (int) Math.floor(event.x() / gridSize);
-                int binZ = (int) Math.floor(event.z() / gridSize);
+            storage.forEachHeatmapEvent(type, world, from, until, (x, z, eventValue, timestamp) -> {
+                int binX = (int) Math.floor(x / grid);
+                int binZ = (int) Math.floor(z / grid);
                 long chunkKey = ((long) binX & 0xFFFFFFFFL) | (((long) binZ & 0xFFFFFFFFL) << 32);
 
-                double value = event.value();
+                double value = eventValue;
                 if (decayHalfLifeHours > 0) {
-                    long age = now - event.timestamp();
+                    long age = now - timestamp;
                     if (age > 0) {
                         value *= Math.pow(0.5, age / halfLifeMillis);
                     }
                 }
                 chunkValues.merge(chunkKey, value, Double::sum);
-            }
+            });
 
             List<HeatmapBin> bins = new ArrayList<>();
             for (Map.Entry<Long, Double> entry : chunkValues.entrySet()) {
                 int cx = (int) (entry.getKey() & 0xFFFFFFFFL);
                 int cz = (int) (entry.getKey() >>> 32);
-                bins.add(new HeatmapBin(type, world, cx, cz, gridSize, entry.getValue()));
+                bins.add(new HeatmapBin(type, world, cx, cz, grid, entry.getValue()));
             }
             // Sort by value desc
             bins.sort((a, b) -> Double.compare(b.getCount(), a.getCount()));
@@ -156,11 +176,14 @@ public class HeatmapService {
         }
 
         long halfLife = (long) (settings.getHeatmapDecayHalfLifeHours() * 3600 * 1000);
-        List<Map.Entry<HotspotKey, Double>> hotspotBatch = new ArrayList<>(hotspotCounts.entrySet());
-        hotspotCounts.clear();
-        for (Map.Entry<HotspotKey, Double> entry : hotspotBatch) {
+        for (HotspotKey key : new ArrayList<>(hotspotCounts.keySet())) {
+            // remove() hands over exactly the value that is persisted; increments after it start a new entry.
+            Double delta = hotspotCounts.remove(key);
+            if (delta == null) {
+                continue;
+            }
             try {
-                storage.incrementHotspot(entry.getKey().type, entry.getKey().hotspot, entry.getKey().world, entry.getValue(), halfLife);
+                storage.incrementHotspot(key.type, key.hotspot, key.world, delta, halfLife);
             } catch (SQLException e) {
                 plugin.getLogger().warning("Could not persist hotspot bin: " + e.getMessage());
             }

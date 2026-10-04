@@ -19,10 +19,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -208,6 +210,118 @@ class StatsServiceTest {
         assertEquals("Alex", record.getName());
         assertTrue(record.getFirstJoin() > 0);
         assertTrue(record.getLastJoin() > 0);
+    }
+
+    @Test
+    void failedLoadNeverOverwritesStoredStats() throws Exception {
+        UUID uuid = UUID.randomUUID();
+        StatsStorage storage = mock(StatsStorage.class);
+        when(storage.loadOrCreate(uuid, "Alex")).thenThrow(new java.sql.SQLException("locked"));
+
+        StatsService service = new StatsService(pluginWith(Optional.empty()), storage, settings(true, true, true, true, true, true));
+        Player player = mockPlayer(uuid, "Alex");
+        service.handleJoin(player);
+        service.addBlocksBroken(uuid);
+        service.flushOnline();
+        service.handleQuit(player);
+
+        verify(storage, never()).save(any(StatsRecord.class));
+    }
+
+    @Test
+    void failedLoadIsRetriedAndSessionProgressMerged() throws Exception {
+        UUID uuid = UUID.randomUUID();
+        StatsRecord stored = new StatsRecord(uuid, "Alex");
+        stored.setFirstJoin(1000);
+        stored.setBlocksBroken(100);
+        stored.setPlaytimeMillis(50_000);
+        stored.setBiomesVisited(new LinkedHashSet<>(List.of("plains")));
+        StatsStorage storage = mock(StatsStorage.class);
+        when(storage.loadOrCreate(uuid, "Alex"))
+                .thenThrow(new java.sql.SQLException("locked"))
+                .thenReturn(stored);
+
+        StatsService service = new StatsService(pluginWith(Optional.empty()), storage, settings(true, true, true, true, true, true));
+        Player player = mockPlayer(uuid, "Alex");
+        service.handleJoin(player);
+        service.addBlocksBroken(uuid);
+        service.addBiome(uuid, "desert");
+        service.handleQuit(player);
+
+        ArgumentCaptor<StatsRecord> saved = ArgumentCaptor.forClass(StatsRecord.class);
+        verify(storage).save(saved.capture());
+        StatsRecord persisted = saved.getValue();
+        assertEquals(101, persisted.getBlocksBroken());
+        assertEquals(1000, persisted.getFirstJoin());
+        assertTrue(persisted.getPlaytimeMillis() >= 50_000);
+        assertTrue(persisted.getBiomesVisited().containsAll(List.of("plains", "desert")));
+    }
+
+    @Test
+    void quitWritesTimelineSnapshot() throws Exception {
+        UUID uuid = UUID.randomUUID();
+        StatsStorage storage = mock(StatsStorage.class);
+        when(storage.loadOrCreate(uuid, "Alex")).thenReturn(new StatsRecord(uuid, "Alex"));
+        TimelineService timeline = mock(TimelineService.class);
+
+        StatsService service = new StatsService(pluginWith(Optional.of(timeline)), storage, settings(true, true, true, true, true, true));
+        Player player = mockPlayer(uuid, "Alex");
+        service.handleJoin(player);
+        service.addBlocksPlaced(uuid);
+        service.handleQuit(player);
+
+        ArgumentCaptor<StatsRecord> snap = ArgumentCaptor.forClass(StatsRecord.class);
+        verify(timeline).snapshot(snap.capture());
+        assertEquals(1, snap.getValue().getBlocksPlaced());
+    }
+
+    @Test
+    void flushOnlinePersistsDetachedCopy() throws Exception {
+        UUID uuid = UUID.randomUUID();
+        StatsRecord live = new StatsRecord(uuid, "Alex");
+        StatsStorage storage = mock(StatsStorage.class);
+        when(storage.loadOrCreate(uuid, "Alex")).thenReturn(live);
+
+        StatsService service = new StatsService(pluginWith(Optional.empty()), storage, settings(true, true, true, true, true, true));
+        service.handleJoin(mockPlayer(uuid, "Alex"));
+        service.addBlocksBroken(uuid);
+        service.flushOnline();
+        service.addBlocksBroken(uuid);
+
+        ArgumentCaptor<StatsRecord> saved = ArgumentCaptor.forClass(StatsRecord.class);
+        verify(storage).save(saved.capture());
+        assertNotSame(live, saved.getValue());
+        assertEquals(1, saved.getValue().getBlocksBroken());
+    }
+
+    @Test
+    void concurrentFlushAndMutationDoNotThrowOrLosePlaytime() throws Exception {
+        UUID uuid = UUID.randomUUID();
+        StatsRecord live = new StatsRecord(uuid, "Alex");
+        StatsStorage storage = mock(StatsStorage.class);
+        when(storage.loadOrCreate(uuid, "Alex")).thenReturn(live);
+
+        StatsService service = new StatsService(pluginWith(Optional.empty()), storage, settings(true, true, true, true, true, true));
+        service.handleJoin(mockPlayer(uuid, "Alex"));
+
+        java.util.concurrent.atomic.AtomicReference<Throwable> failure = new java.util.concurrent.atomic.AtomicReference<>();
+        Thread flusher = new Thread(() -> {
+            try {
+                for (int i = 0; i < 500; i++) {
+                    service.flushOnline();
+                }
+            } catch (Throwable t) {
+                failure.set(t);
+            }
+        });
+        flusher.start();
+        for (int i = 0; i < 20_000; i++) {
+            service.addBiome(uuid, "biome_" + i);
+        }
+        flusher.join();
+
+        assertNull(failure.get());
+        assertEquals(20_000, service.getStats(uuid).orElseThrow().getBiomesVisited().size());
     }
 
     @Test

@@ -56,6 +56,9 @@ class SocialStatsServiceTest {
             sample.invoke(service);
         }
 
+        // Sampling runs on the main thread and must not touch the database.
+        verify(storage, never()).incrementSocialPair(any(), any(), anyLong(), anyLong(), anyLong(), anyLong());
+        service.flush();
         verify(storage).incrementSocialPair(any(UUID.class), any(UUID.class), eq(5L), eq(0L), eq(0L), eq(0L));
     }
 
@@ -83,9 +86,46 @@ class SocialStatsServiceTest {
         when(world.getPlayers()).thenReturn(List.of(killer, other));
 
         SocialStatsService service = new SocialStatsService(plugin, storage, settings);
-        service.recordSharedKill(killer, true);
+        service.recordSharedKill(killer, null, false);
+        service.flush();
 
-        verify(storage).incrementSocialPair(any(UUID.class), any(UUID.class), eq(0L), eq(1L), eq(1L), eq(0L));
+        verify(storage).incrementSocialPair(any(UUID.class), any(UUID.class), eq(0L), eq(1L), eq(0L), eq(1L));
+    }
+
+    @Test
+    void pvpKillDoesNotPairKillerWithVictim() throws Exception {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        StatsStorage storage = mock(StatsStorage.class);
+        Settings settings = mock(Settings.class);
+        when(settings.isSocialEnabled()).thenReturn(true);
+        when(settings.getSocialNearbyRadius()).thenReturn(5);
+
+        World world = mock(World.class);
+        Player killer = mock(Player.class);
+        Player victim = mock(Player.class);
+        Player ally = mock(Player.class);
+        UUID killerId = UUID.randomUUID();
+        UUID victimId = UUID.randomUUID();
+        UUID allyId = UUID.randomUUID();
+        when(killer.getUniqueId()).thenReturn(killerId);
+        when(victim.getUniqueId()).thenReturn(victimId);
+        when(ally.getUniqueId()).thenReturn(allyId);
+        for (Player p : List.of(killer, victim, ally)) {
+            when(p.getWorld()).thenReturn(world);
+        }
+        when(killer.getLocation()).thenReturn(new Location(world, 0, 64, 0));
+        when(victim.getLocation()).thenReturn(new Location(world, 1, 64, 0));
+        when(ally.getLocation()).thenReturn(new Location(world, 0, 64, 2));
+        when(world.getPlayers()).thenReturn(List.of(killer, victim, ally));
+
+        SocialStatsService service = new SocialStatsService(plugin, storage, settings);
+        service.recordSharedKill(killer, victim, true);
+        service.flush();
+
+        SocialStatsService.PairKey allyPair = SocialStatsService.PairKey.of(killerId, allyId);
+        verify(storage).incrementSocialPair(eq(allyPair.a()), eq(allyPair.b()), eq(0L), eq(1L), eq(1L), eq(0L));
+        verify(storage, times(1)).incrementSocialPair(any(), any(), anyLong(), anyLong(), anyLong(), anyLong());
     }
 
     @Test
@@ -102,6 +142,9 @@ class SocialStatsServiceTest {
         var task = mock(org.bukkit.scheduler.BukkitTask.class);
         when(task.getTaskId()).thenReturn(42);
         when(scheduler.runTaskTimer(eq(plugin), any(Runnable.class), anyLong(), anyLong())).thenReturn(task);
+        var flushTask = mock(org.bukkit.scheduler.BukkitTask.class);
+        when(flushTask.getTaskId()).thenReturn(43);
+        when(scheduler.runTaskTimerAsynchronously(eq(plugin), any(Runnable.class), anyLong(), anyLong())).thenReturn(flushTask);
 
         SocialStatsService service = new SocialStatsService(plugin, storage, settings);
         try (var mocked = mockStatic(Bukkit.class)) {
@@ -110,8 +153,11 @@ class SocialStatsServiceTest {
             service.start();
             verify(scheduler).runTaskTimer(eq(plugin), any(Runnable.class), anyLong(), anyLong());
 
+            verify(scheduler).runTaskTimerAsynchronously(eq(plugin), any(Runnable.class), anyLong(), anyLong());
+
             service.shutdown();
             verify(scheduler).cancelTask(42);
+            verify(scheduler).cancelTask(43);
         }
 
     }
@@ -126,7 +172,7 @@ class SocialStatsServiceTest {
 
         SocialStatsService service = new SocialStatsService(plugin, storage, disabled);
         service.start();
-        service.recordSharedKill(mock(Player.class), true);
+        service.recordSharedKill(mock(Player.class), null, true);
         verify(storage, never()).incrementSocialPair(any(), any(), anyLong(), anyLong(), anyLong(), anyLong());
 
         Settings enabled = mock(Settings.class);

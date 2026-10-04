@@ -54,6 +54,32 @@ public class StatsRecord {
         return copy;
     }
 
+    /**
+     * Adds another record's counters to this one. Used to merge progress tracked while the stored
+     * record was unavailable; join timestamps keep this record's first join and take the later last join.
+     */
+    public void addCountersFrom(StatsRecord other) {
+        name = other.name;
+        lastJoin = Math.max(lastJoin, other.lastJoin);
+        playtimeMillis += other.playtimeMillis;
+        deaths += other.deaths;
+        if (other.lastDeathCause != null) {
+            lastDeathCause = other.lastDeathCause;
+        }
+        playerKills += other.playerKills;
+        mobKills += other.mobKills;
+        blocksPlaced += other.blocksPlaced;
+        blocksBroken += other.blocksBroken;
+        distanceOverworld += other.distanceOverworld;
+        distanceNether += other.distanceNether;
+        distanceEnd += other.distanceEnd;
+        biomesVisited.addAll(other.biomesVisited);
+        damageDealt += other.damageDealt;
+        damageTaken += other.damageTaken;
+        itemsCrafted += other.itemsCrafted;
+        itemsConsumed += other.itemsConsumed;
+    }
+
     public UUID getUuid() {
         return uuid;
     }

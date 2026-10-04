@@ -41,18 +41,22 @@ public class StatsService {
     public void handleJoin(Player player) {
         UUID uuid = player.getUniqueId();
         StatsRecord record;
+        boolean loaded;
         try {
             record = storage.loadOrCreate(uuid, player.getName());
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load stats for " + player.getName() + ": " + e.getMessage());
+            loaded = true;
+        } catch (SQLException | RuntimeException e) {
+            // Track into a blank record but never persist it as-is: saving it would overwrite the
+            // stored history with zeros. The load is retried on the next save and merged then.
+            plugin.getLogger().severe("Could not load stats for " + player.getName() + ": " + e.getMessage()
+                    + " - tracking in memory until the database answers again.");
             record = new StatsRecord(uuid, player.getName());
-            long now = System.currentTimeMillis();
-            record.setFirstJoin(now);
-            record.setLastJoin(now);
+            record.setFirstJoin(System.currentTimeMillis());
+            loaded = false;
         }
 
         record.setLastJoin(System.currentTimeMillis());
-        sessions.put(uuid, new PlayerSession(record));
+        sessions.put(uuid, new PlayerSession(record, loaded));
     }
 
     public void handleQuit(Player player) {
@@ -61,20 +65,30 @@ public class StatsService {
             return;
         }
         long now = System.currentTimeMillis();
-        session.updatePlaytime(now);
-        session.getRecord().setLastJoin(now);
-        save(session.getRecord());
+        StatsRecord copy;
+        synchronized (session) {
+            session.updatePlaytime(now);
+            session.getRecord().setLastJoin(now);
+            copy = session.getRecord().copy();
+        }
+        persist(session, copy);
     }
 
+    /**
+     * Saves every online player. Runs on the autosave thread, so each record is copied under the
+     * session lock and only the copy is handed to the database.
+     */
     public void flushOnline() {
         long now = System.currentTimeMillis();
         for (PlayerSession session : sessions.values()) {
-            session.updatePlaytime(now);
-            save(session.getRecord());
-            plugin.getTimelineService().ifPresent(t -> t.snapshot(session.getRecord()));
+            StatsRecord copy;
+            synchronized (session) {
+                session.updatePlaytime(now);
+                copy = session.getRecord().copy();
+            }
+            persist(session, copy);
         }
     }
-
     public void shutdown() {
         flushOnline();
     }
@@ -174,10 +188,10 @@ public class StatsService {
     }
 
     public boolean resetStats(UUID uuid) {
-        StatsRecord record = getMutableRecord(uuid);
-        if (record == null) {
-            return false;
-        }
+        return editRecord(uuid, StatsService::clearCounters);
+    }
+
+    private static void clearCounters(StatsRecord record) {
         record.setPlaytimeMillis(0);
         record.setDeaths(0);
         record.setLastDeathCause(null);
@@ -193,31 +207,36 @@ public class StatsService {
         record.setDamageTaken(0);
         record.setItemsCrafted(0);
         record.setItemsConsumed(0);
-        save(record);
-        return true;
     }
 
     public boolean setStat(UUID uuid, de.nurrobin.smpstats.commands.StatField field, double value) {
-        StatsRecord record = getMutableRecord(uuid);
-        if (record == null) {
-            return false;
-        }
-        field.apply(record, value);
-        save(record);
-        return true;
+        return editRecord(uuid, record -> field.apply(record, value));
     }
 
-    private StatsRecord getMutableRecord(UUID uuid) {
+    private boolean editRecord(UUID uuid, java.util.function.Consumer<StatsRecord> edit) {
         PlayerSession session = sessions.get(uuid);
         if (session != null) {
-            return session.getRecord();
+            StatsRecord copy;
+            synchronized (session) {
+                session.foldStoredBase();
+                edit.accept(session.getRecord());
+                session.resetSessionStart();
+                copy = session.getRecord().copy();
+            }
+            persist(session, copy);
+            return true;
         }
         try {
             Optional<StatsRecord> fromDb = storage.load(uuid);
-            return fromDb.orElse(null);
+            if (fromDb.isEmpty()) {
+                return false;
+            }
+            edit.accept(fromDb.get());
+            save(fromDb.get());
+            return true;
         } catch (SQLException e) {
             plugin.getLogger().warning("Could not load stats for " + uuid + ": " + e.getMessage());
-            return null;
+            return false;
         }
     }
 
@@ -308,8 +327,28 @@ public class StatsService {
     private void withSession(UUID uuid, java.util.function.Consumer<StatsRecord> consumer) {
         PlayerSession session = sessions.get(uuid);
         if (session != null) {
-            consumer.accept(session.getRecord());
+            synchronized (session) {
+                consumer.accept(session.getRecord());
+            }
         }
+    }
+
+    /**
+     * Writes a detached copy of a session's record plus its timeline row. A session whose initial
+     * load failed retries the load first and is only written once it could be merged.
+     */
+    private void persist(PlayerSession session, StatsRecord copy) {
+        if (!session.isLoaded() && !session.tryRecoverStoredRecord(storage, plugin)) {
+            return;
+        }
+        StatsRecord toSave = copy;
+        if (session.getStoredBase() != null) {
+            toSave = session.getStoredBase().copy();
+            toSave.addCountersFrom(copy);
+        }
+        save(toSave);
+        StatsRecord timelineRecord = toSave;
+        plugin.getTimelineService().ifPresent(t -> t.snapshot(timelineRecord));
     }
 
     private void save(StatsRecord record) {
@@ -322,18 +361,24 @@ public class StatsService {
 
     /**
      * Tracks a player's active session including session-start snapshot for delta calculations.
+     * Every access to the record goes through the session's monitor because the autosave and the
+     * web servers read it from other threads.
      */
     private static class PlayerSession {
-        private final StatsRecord record;
-        private final StatsRecord sessionStartSnapshot;
+        private volatile StatsRecord record;
+        private StatsRecord sessionStartSnapshot;
         private long lastPlaytimeMark;
         private final long sessionStartTime;
+        private volatile boolean loaded;
+        // Stored record found after a failed initial load; the live record then only holds this session's progress.
+        private volatile StatsRecord storedBase;
 
-        PlayerSession(StatsRecord record) {
+        PlayerSession(StatsRecord record, boolean loaded) {
             this.record = record;
             this.sessionStartSnapshot = record.copy();
             this.lastPlaytimeMark = System.currentTimeMillis();
             this.sessionStartTime = System.currentTimeMillis();
+            this.loaded = loaded;
         }
 
         public StatsRecord getRecord() {
@@ -343,8 +388,12 @@ public class StatsService {
         /**
          * Returns the stats snapshot from when the session started.
          */
-        public StatsRecord getSessionStartSnapshot() {
+        public synchronized StatsRecord getSessionStartSnapshot() {
             return sessionStartSnapshot;
+        }
+
+        synchronized void resetSessionStart() {
+            this.sessionStartSnapshot = record.copy();
         }
 
         /**
@@ -354,7 +403,42 @@ public class StatsService {
             return sessionStartTime;
         }
 
-        void updatePlaytime(long now) {
+        boolean isLoaded() {
+            return loaded;
+        }
+
+        StatsRecord getStoredBase() {
+            return storedBase;
+        }
+
+        synchronized boolean tryRecoverStoredRecord(StatsStorage storage, SMPStats plugin) {
+            try {
+                StatsRecord stored = storage.loadOrCreate(record.getUuid(), record.getName());
+                storedBase = stored.copy();
+                sessionStartSnapshot = stored.copy();
+                loaded = true;
+                plugin.getLogger().info("Recovered stored stats for " + record.getName() + "; merging this session's progress.");
+                return true;
+            } catch (SQLException | RuntimeException e) {
+                plugin.getLogger().warning("Stats for " + record.getName() + " still unavailable, not saving: " + e.getMessage());
+                return false;
+            }
+        }
+
+        /**
+         * Turns a recovered session back into a plain one so edits apply to the full record.
+         */
+        synchronized void foldStoredBase() {
+            if (storedBase == null) {
+                return;
+            }
+            StatsRecord merged = storedBase.copy();
+            merged.addCountersFrom(record);
+            record = merged;
+            storedBase = null;
+        }
+
+        synchronized void updatePlaytime(long now) {
             long delta = now - lastPlaytimeMark;
             if (delta > 0) {
                 record.addPlaytimeMillis(delta);
@@ -362,12 +446,17 @@ public class StatsService {
             }
         }
 
-        StatsRecord snapshot() {
+        synchronized StatsRecord snapshot() {
             StatsRecord copy = record.copy();
             long now = System.currentTimeMillis();
             long delta = now - lastPlaytimeMark;
             if (delta > 0) {
                 copy.addPlaytimeMillis(delta);
+            }
+            if (storedBase != null) {
+                StatsRecord merged = storedBase.copy();
+                merged.addCountersFrom(copy);
+                return merged;
             }
             return copy;
         }

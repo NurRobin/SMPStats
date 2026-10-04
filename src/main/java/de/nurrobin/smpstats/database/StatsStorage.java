@@ -28,7 +28,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public class StatsStorage implements Closeable {
-    private static final int SCHEMA_VERSION = 7;
+    private static final int SCHEMA_VERSION = 8;
     private static final Type STRING_SET = new TypeToken<Set<String>>() {
     }.getType();
 
@@ -91,6 +91,10 @@ public class StatsStorage implements Closeable {
             if (currentVersion == 6) {
                 addHeatmapEventsTable();
                 currentVersion = 7;
+            }
+            if (currentVersion == 7) {
+                reindexHeatmapEvents();
+                currentVersion = 8;
             }
             setUserVersion(currentVersion);
             connection.commit();
@@ -408,8 +412,13 @@ public class StatsStorage implements Closeable {
         if (raw == null || raw.isBlank()) {
             return new LinkedHashSet<>();
         }
-        Set<String> biomes = gson.fromJson(raw, STRING_SET);
-        return biomes != null ? biomes : new LinkedHashSet<>();
+        try {
+            Set<String> biomes = gson.fromJson(raw, STRING_SET);
+            return biomes != null ? new LinkedHashSet<>(biomes) : new LinkedHashSet<>();
+        } catch (com.google.gson.JsonParseException e) {
+            plugin.getLogger().warning("Ignoring unreadable biome list in database: " + e.getMessage());
+            return new LinkedHashSet<>();
+        }
     }
 
     public synchronized void saveMoment(MomentEntry entry) throws SQLException {
@@ -750,56 +759,63 @@ public class StatsStorage implements Closeable {
         return result;
     }
 
+    private static final List<String> TIMELINE_LONG_COLUMNS = List.of(
+            "playtime_ms", "blocks_broken", "blocks_placed", "player_kills", "mob_kills", "deaths",
+            "items_crafted", "items_consumed");
+    private static final List<String> TIMELINE_DOUBLE_COLUMNS = List.of(
+            "distance_overworld", "distance_nether", "distance_end", "damage_dealt", "damage_taken");
+
+    /**
+     * Ranks players by their progress inside the last {@code days} days: the latest snapshot in the
+     * window minus the last snapshot before it. Players without an earlier snapshot are measured from
+     * zero. If a counter dropped below its baseline (stats were reset), only the progress since the
+     * reset counts.
+     */
     public synchronized List<Map<String, Object>> loadTimelineLeaderboard(int days, int limit) throws SQLException {
         days = Math.max(1, days);
         String from = java.time.LocalDate.now(java.time.ZoneId.systemDefault()).minusDays(days - 1L).toString();
+        StringBuilder columns = new StringBuilder();
+        for (String column : concat(TIMELINE_LONG_COLUMNS, TIMELINE_DOUBLE_COLUMNS)) {
+            columns.append(",\n       CASE WHEN l.").append(column).append(" < COALESCE(b.").append(column).append(", 0)")
+                    .append(" THEN l.").append(column)
+                    .append(" ELSE l.").append(column).append(" - COALESCE(b.").append(column).append(", 0) END AS ").append(column);
+        }
         String sql = """
-                SELECT uuid,
-                       MAX(playtime_ms) - MIN(playtime_ms) AS playtime_ms,
-                       MAX(blocks_broken) - MIN(blocks_broken) AS blocks_broken,
-                       MAX(blocks_placed) - MIN(blocks_placed) AS blocks_placed,
-                       MAX(player_kills) - MIN(player_kills) AS player_kills,
-                       MAX(mob_kills) - MIN(mob_kills) AS mob_kills,
-                       MAX(deaths) - MIN(deaths) AS deaths,
-                       MAX(distance_overworld) - MIN(distance_overworld) AS distance_overworld,
-                       MAX(distance_nether) - MIN(distance_nether) AS distance_nether,
-                       MAX(distance_end) - MIN(distance_end) AS distance_end,
-                       MAX(damage_dealt) - MIN(damage_dealt) AS damage_dealt,
-                       MAX(damage_taken) - MIN(damage_taken) AS damage_taken,
-                       MAX(items_crafted) - MIN(items_crafted) AS items_crafted,
-                       MAX(items_consumed) - MIN(items_consumed) AS items_consumed
-                FROM timeline_daily
-                WHERE day >= ?
-                GROUP BY uuid
+                SELECT l.uuid%s
+                FROM timeline_daily l
+                LEFT JOIN timeline_daily b
+                       ON b.uuid = l.uuid
+                      AND b.day = (SELECT MAX(day) FROM timeline_daily WHERE uuid = l.uuid AND day < ?)
+                WHERE l.day = (SELECT MAX(day) FROM timeline_daily WHERE uuid = l.uuid AND day >= ?)
                 ORDER BY playtime_ms DESC
                 LIMIT ?
-                """;
+                """.formatted(columns);
         List<Map<String, Object>> list = new ArrayList<>();
         try (PreparedStatement st = connection.prepareStatement(sql)) {
             st.setString(1, from);
-            st.setInt(2, limit);
+            st.setString(2, from);
+            st.setInt(3, limit);
             try (ResultSet rs = st.executeQuery()) {
                 while (rs.next()) {
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("uuid", rs.getString("uuid"));
-                    row.put("playtime_ms", rs.getLong("playtime_ms"));
-                    row.put("blocks_broken", rs.getLong("blocks_broken"));
-                    row.put("blocks_placed", rs.getLong("blocks_placed"));
-                    row.put("player_kills", rs.getLong("player_kills"));
-                    row.put("mob_kills", rs.getLong("mob_kills"));
-                    row.put("deaths", rs.getLong("deaths"));
-                    row.put("distance_overworld", rs.getDouble("distance_overworld"));
-                    row.put("distance_nether", rs.getDouble("distance_nether"));
-                    row.put("distance_end", rs.getDouble("distance_end"));
-                    row.put("damage_dealt", rs.getDouble("damage_dealt"));
-                    row.put("damage_taken", rs.getDouble("damage_taken"));
-                    row.put("items_crafted", rs.getLong("items_crafted"));
-                    row.put("items_consumed", rs.getLong("items_consumed"));
+                    for (String column : TIMELINE_LONG_COLUMNS) {
+                        row.put(column, rs.getLong(column));
+                    }
+                    for (String column : TIMELINE_DOUBLE_COLUMNS) {
+                        row.put(column, rs.getDouble(column));
+                    }
                     list.add(row);
                 }
             }
         }
         return list;
+    }
+
+    private static List<String> concat(List<String> a, List<String> b) {
+        List<String> all = new ArrayList<>(a);
+        all.addAll(b);
+        return all;
     }
 
     public synchronized void saveDeathReplay(de.nurrobin.smpstats.timeline.DeathReplayEntry entry) throws SQLException {
@@ -998,7 +1014,19 @@ public class StatsStorage implements Closeable {
         }
     }
 
-    public void insertHeatmapEvent(String type, String world, double x, double y, double z, double value, long timestamp) throws SQLException {
+    private void reindexHeatmapEvents() throws SQLException {
+        try (Statement st = connection.createStatement()) {
+            // Queries always filter by type and world inside a time range; retention deletes by time only.
+            st.execute("DROP INDEX IF EXISTS idx_heatmap_events_world;");
+            st.execute("DROP INDEX IF EXISTS idx_heatmap_events_type_time;");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_heatmap_events_type_world_time ON heatmap_events(type, world, timestamp);");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_heatmap_events_time ON heatmap_events(timestamp);");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_moments_started ON moments(started_at);");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_death_replays_ts ON death_replays(ts);");
+        }
+    }
+
+    public synchronized void insertHeatmapEvent(String type, String world, double x, double y, double z, double value, long timestamp) throws SQLException {
         String sql = "INSERT INTO heatmap_events (type, world, x, y, z, value, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, type);
@@ -1012,7 +1040,7 @@ public class StatsStorage implements Closeable {
         }
     }
 
-    public void insertHeatmapEntries(List<HeatmapEntry> entries) throws SQLException {
+    public synchronized void insertHeatmapEntries(List<HeatmapEntry> entries) throws SQLException {
         String sql = "INSERT INTO heatmap_events (type, world, x, y, z, value, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)";
         connection.setAutoCommit(false);
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -1036,7 +1064,7 @@ public class StatsStorage implements Closeable {
         }
     }
 
-    public List<HeatmapEvent> getHeatmapEvents(String type, String world, long since, long until) throws SQLException {
+    public synchronized List<HeatmapEvent> getHeatmapEvents(String type, String world, long since, long until) throws SQLException {
         List<HeatmapEvent> events = new ArrayList<>();
         String sql = "SELECT x, y, z, value, timestamp FROM heatmap_events WHERE type = ? AND world = ? AND timestamp >= ? AND timestamp <= ?";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -1057,5 +1085,47 @@ public class StatsStorage implements Closeable {
             }
         }
         return events;
+    }
+
+    /**
+     * Receives heatmap rows one by one so large time ranges never materialise as a list.
+     */
+    @FunctionalInterface
+    public interface HeatmapEventConsumer {
+        void accept(double x, double z, double value, long timestamp);
+    }
+
+    public synchronized void forEachHeatmapEvent(String type, String world, long since, long until, HeatmapEventConsumer consumer) throws SQLException {
+        String sql = "SELECT x, z, value, timestamp FROM heatmap_events WHERE type = ? AND world = ? AND timestamp >= ? AND timestamp <= ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, type);
+            ps.setString(2, world);
+            ps.setLong(3, since);
+            ps.setLong(4, until);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    consumer.accept(rs.getDouble(1), rs.getDouble(2), rs.getDouble(3), rs.getLong(4));
+                }
+            }
+        }
+    }
+
+    public synchronized int deleteHeatmapEventsBefore(long timestamp) throws SQLException {
+        return deleteBefore("DELETE FROM heatmap_events WHERE timestamp < ?", timestamp);
+    }
+
+    public synchronized int deleteMomentsBefore(long timestamp) throws SQLException {
+        return deleteBefore("DELETE FROM moments WHERE started_at < ?", timestamp);
+    }
+
+    public synchronized int deleteDeathReplaysBefore(long timestamp) throws SQLException {
+        return deleteBefore("DELETE FROM death_replays WHERE ts < ?", timestamp);
+    }
+
+    private int deleteBefore(String sql, long timestamp) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, timestamp);
+            return ps.executeUpdate();
+        }
     }
 }
