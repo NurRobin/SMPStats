@@ -4,8 +4,13 @@ import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.StatsService;
 import de.nurrobin.smpstats.social.SocialStatsService;
 import org.bukkit.World;
+import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Boat;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
+import org.bukkit.entity.Zombie;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
@@ -78,8 +83,12 @@ class CombatListenerTest {
         UUID attackerId = UUID.randomUUID();
         when(attacker.getUniqueId()).thenReturn(attackerId);
 
+        Zombie target = mock(Zombie.class);
+        when(target.getHealth()).thenReturn(20.0);
+
         EntityDamageByEntityEvent byPlayer = mock(EntityDamageByEntityEvent.class);
         when(byPlayer.getDamager()).thenReturn(attacker);
+        when(byPlayer.getEntity()).thenReturn(target);
         when(byPlayer.getFinalDamage()).thenReturn(5.0);
         listener.onDamageByEntity(byPlayer);
         verify(stats).addDamageDealt(attackerId, 5.0);
@@ -89,6 +98,7 @@ class CombatListenerTest {
         when(projectile.getShooter()).thenReturn(shooter);
         EntityDamageByEntityEvent byProjectile = mock(EntityDamageByEntityEvent.class);
         when(byProjectile.getDamager()).thenReturn(projectile);
+        when(byProjectile.getEntity()).thenReturn(target);
         when(byProjectile.getFinalDamage()).thenReturn(3.0);
         listener.onDamageByEntity(byProjectile);
         verify(stats).addDamageDealt(attackerId, 3.0);
@@ -96,6 +106,7 @@ class CombatListenerTest {
         Player victim = mock(Player.class);
         UUID victimId = UUID.randomUUID();
         when(victim.getUniqueId()).thenReturn(victimId);
+        when(victim.getHealth()).thenReturn(20.0);
         EntityDamageEvent damageTaken = mock(EntityDamageEvent.class);
         when(damageTaken.getEntity()).thenReturn(victim);
         when(damageTaken.getCause()).thenReturn(EntityDamageEvent.DamageCause.ENTITY_ATTACK);
@@ -108,6 +119,63 @@ class CombatListenerTest {
         when(suicide.getCause()).thenReturn(EntityDamageEvent.DamageCause.SUICIDE);
         listener.onDamageTaken(suicide);
         verify(stats, times(1)).addDamageTaken(victimId, 2.0);
+    }
+
+    @Test
+    void ignoresDamageDealtToNonLivingTargetsAndArmorStands() {
+        StatsService stats = mock(StatsService.class);
+        CombatListener listener = new CombatListener(mock(SMPStats.class), stats, null);
+        Player attacker = mock(Player.class);
+        when(attacker.getUniqueId()).thenReturn(UUID.randomUUID());
+
+        for (Entity target : new Entity[]{mock(ArmorStand.class), mock(Boat.class), mock(ItemFrame.class)}) {
+            EntityDamageByEntityEvent event = mock(EntityDamageByEntityEvent.class);
+            when(event.getDamager()).thenReturn(attacker);
+            when(event.getEntity()).thenReturn(target);
+            when(event.getFinalDamage()).thenReturn(5.0);
+            listener.onDamageByEntity(event);
+        }
+
+        verify(stats, never()).addDamageDealt(any(), anyDouble());
+    }
+
+    @Test
+    void clampsDamageDealtToRemainingHealth() {
+        StatsService stats = mock(StatsService.class);
+        CombatListener listener = new CombatListener(mock(SMPStats.class), stats, null);
+        Player attacker = mock(Player.class);
+        UUID attackerId = UUID.randomUUID();
+        when(attacker.getUniqueId()).thenReturn(attackerId);
+
+        Zombie target = mock(Zombie.class);
+        when(target.getHealth()).thenReturn(4.0);
+        EntityDamageByEntityEvent event = mock(EntityDamageByEntityEvent.class);
+        when(event.getDamager()).thenReturn(attacker);
+        when(event.getEntity()).thenReturn(target);
+        when(event.getFinalDamage()).thenReturn(30.0); // overkill
+
+        listener.onDamageByEntity(event);
+
+        verify(stats).addDamageDealt(attackerId, 4.0);
+    }
+
+    @Test
+    void clampsDamageTakenToRemainingHealth() {
+        StatsService stats = mock(StatsService.class);
+        CombatListener listener = new CombatListener(mock(SMPStats.class), stats, null);
+
+        Player victim = mock(Player.class);
+        UUID victimId = UUID.randomUUID();
+        when(victim.getUniqueId()).thenReturn(victimId);
+        when(victim.getHealth()).thenReturn(3.0);
+        EntityDamageEvent event = mock(EntityDamageEvent.class);
+        when(event.getEntity()).thenReturn(victim);
+        when(event.getCause()).thenReturn(EntityDamageEvent.DamageCause.FALL);
+        when(event.getFinalDamage()).thenReturn(40.0);
+
+        listener.onDamageTaken(event);
+
+        verify(stats).addDamageTaken(victimId, 3.0);
     }
 
     @Test

@@ -2,12 +2,14 @@ package de.nurrobin.smpstats.listeners;
 
 import de.nurrobin.smpstats.SMPStats;
 import de.nurrobin.smpstats.StatsService;
+import org.bukkit.entity.HumanEntity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.inventory.CraftingInventory;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
 public class CraftingListener implements Listener {
@@ -24,10 +26,32 @@ public class CraftingListener implements Listener {
         if (!plugin.getSettings().isTrackCrafting()) {
             return;
         }
-        long crafted = estimateCraftAmount(event);
-        if (crafted > 0) {
-            statsService.addCrafted(event.getWhoClicked().getUniqueId(), crafted);
+        ItemStack result = event.getRecipe().getResult();
+        if (result == null) {
+            return;
         }
+        HumanEntity crafter = event.getWhoClicked();
+        if (!event.isShiftClick()) {
+            statsService.addCrafted(crafter.getUniqueId(), result.getAmount());
+            return;
+        }
+
+        long maxCrafted = (long) result.getAmount() * calculateMaxCrafts(event.getInventory());
+        if (maxCrafted <= 0) {
+            return;
+        }
+        // Shift-click stops crafting once the inventory is full, so count what actually
+        // arrived in the inventory after the click has been processed.
+        ItemStack actualResult = event.getInventory().getResult();
+        ItemStack matchItem = actualResult != null ? actualResult : result;
+        long before = countSimilar(crafter.getInventory(), matchItem);
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            long gained = countSimilar(crafter.getInventory(), matchItem) - before;
+            long crafted = Math.min(gained, maxCrafted);
+            if (crafted > 0) {
+                statsService.addCrafted(crafter.getUniqueId(), crafted);
+            }
+        });
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -38,16 +62,14 @@ public class CraftingListener implements Listener {
         statsService.addConsumed(event.getPlayer().getUniqueId());
     }
 
-    private long estimateCraftAmount(CraftItemEvent event) {
-        ItemStack result = event.getRecipe().getResult();
-        if (result == null) {
-            return 0;
+    private long countSimilar(Inventory inventory, ItemStack match) {
+        long total = 0;
+        for (ItemStack stack : inventory.getStorageContents()) {
+            if (stack != null && stack.isSimilar(match)) {
+                total += stack.getAmount();
+            }
         }
-        int resultAmount = result.getAmount();
-        if (event.isShiftClick()) {
-            return (long) resultAmount * calculateMaxCrafts(event.getInventory());
-        }
-        return resultAmount;
+        return total;
     }
 
     private int calculateMaxCrafts(CraftingInventory inventory) {
