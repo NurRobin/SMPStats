@@ -250,6 +250,93 @@ class MomentServiceTest {
     }
     
     @Test
+    void itemGainWindowCountsStackAmounts() throws Exception {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        StatsStorage storage = mock(StatsStorage.class);
+
+        MomentDefinition gain = new MomentDefinition("gain", MomentDefinition.TriggerType.ITEM_GAIN,
+                "Gained", "Items {count}", 60, false, Set.of(Material.DIAMOND), 0, 0, Set.of(), false, Set.of());
+        MomentService service = new MomentService(plugin, storage, settings(List.of(gain)));
+
+        Player player = mock(Player.class);
+        UUID uuid = UUID.randomUUID();
+        when(player.getUniqueId()).thenReturn(uuid);
+        when(player.getName()).thenReturn("Alex");
+        Location loc = mock(Location.class);
+
+        try (var bukkit = org.mockito.Mockito.mockStatic(org.bukkit.Bukkit.class)) {
+            bukkit.when(() -> org.bukkit.Bukkit.getPlayer(uuid)).thenReturn(player);
+            service.onItemGain(player, Material.DIAMOND, loc, 5);
+            service.onItemGain(player, Material.DIAMOND, loc, 3);
+            service.shutdown();
+        }
+
+        ArgumentCaptor<MomentEntry> captor = ArgumentCaptor.forClass(MomentEntry.class);
+        verify(storage).saveMoment(captor.capture());
+        assertEquals("Items 8", captor.getValue().getDetail());
+    }
+
+    @Test
+    void concurrentFlushNeverLosesOrDuplicatesIncrements() throws Exception {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        StatsStorage storage = mock(StatsStorage.class);
+        java.util.Queue<MomentEntry> saved = new java.util.concurrent.ConcurrentLinkedQueue<>();
+        doAnswer(invocation -> {
+            saved.add(invocation.getArgument(0));
+            return null;
+        }).when(storage).saveMoment(any());
+
+        // mergeSeconds = 0: every window goes stale after 1 ms, so the flusher races the increments.
+        MomentDefinition gain = new MomentDefinition("gain", MomentDefinition.TriggerType.ITEM_GAIN,
+                "Gained", "Items {count}", 0, false, Set.of(Material.DIAMOND), 0, 0, Set.of(), false, Set.of());
+        MomentService service = new MomentService(plugin, storage, settings(List.of(gain)));
+
+        Player player = mock(Player.class);
+        UUID uuid = UUID.randomUUID();
+        when(player.getUniqueId()).thenReturn(uuid);
+        when(player.getName()).thenReturn("Alex");
+        Location loc = mock(Location.class);
+
+        org.bukkit.scheduler.BukkitScheduler scheduler = mock(org.bukkit.scheduler.BukkitScheduler.class);
+        org.bukkit.scheduler.BukkitTask task = mock(org.bukkit.scheduler.BukkitTask.class);
+        AtomicReference<Runnable> flusher = new AtomicReference<>();
+        when(scheduler.runTaskTimerAsynchronously(eq(plugin), any(Runnable.class), anyLong(), anyLong()))
+                .thenAnswer(invocation -> {
+                    flusher.set(invocation.getArgument(1));
+                    return task;
+                });
+
+        int increments = 200_000;
+        try (var bukkit = org.mockito.Mockito.mockStatic(org.bukkit.Bukkit.class)) {
+            bukkit.when(org.bukkit.Bukkit::getScheduler).thenReturn(scheduler);
+            bukkit.when(() -> org.bukkit.Bukkit.getPlayer(uuid)).thenReturn(player);
+            service.start();
+
+            java.util.concurrent.atomic.AtomicBoolean running = new java.util.concurrent.atomic.AtomicBoolean(true);
+            Thread async = new Thread(() -> {
+                while (running.get()) {
+                    flusher.get().run();
+                }
+            });
+            async.start();
+            for (int i = 0; i < increments; i++) {
+                service.onItemGain(player, Material.DIAMOND, loc, 1);
+            }
+            running.set(false);
+            async.join();
+            service.shutdown();
+        }
+
+        long total = 0;
+        for (MomentEntry entry : saved) {
+            total += new com.google.gson.Gson().fromJson(entry.getPayload(), com.google.gson.JsonObject.class).get("count").getAsLong();
+        }
+        assertEquals(increments, total);
+    }
+
+    @Test
     void getRecentMomentsHandlesException() throws Exception {
         Plugin plugin = mock(Plugin.class);
         when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));

@@ -10,17 +10,19 @@ import org.bukkit.plugin.Plugin;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class MomentService {
     private final Plugin plugin;
     private final StatsStorage storage;
     private Settings settings;
     private List<MomentDefinition> definitions = new ArrayList<>();
-    private final Map<Key, ActiveWindow> windows = new ConcurrentHashMap<>();
+    /** Guarded by synchronizing on the map itself; also accessed by the async flush task. */
+    private final Map<Key, ActiveWindow> windows = new HashMap<>();
     private final Gson gson = new Gson();
     private int flushTaskId = -1;
 
@@ -57,7 +59,7 @@ public class MomentService {
         for (MomentDefinition def : definitions) {
             if (def.getTrigger() != MomentDefinition.TriggerType.BLOCK_BREAK) continue;
             if (!def.matchesMaterial(material)) continue;
-            handleWindow(player.getUniqueId(), def, location);
+            handleWindow(player.getUniqueId(), def, location, 1);
         }
     }
 
@@ -100,11 +102,15 @@ public class MomentService {
     }
 
     public void onItemGain(Player player, org.bukkit.Material material, Location location) {
-        if (!settings.isMomentsEnabled()) return;
+        onItemGain(player, material, location, 1);
+    }
+
+    public void onItemGain(Player player, org.bukkit.Material material, Location location, int amount) {
+        if (!settings.isMomentsEnabled() || amount <= 0) return;
         for (MomentDefinition def : definitions) {
             if (def.getTrigger() != MomentDefinition.TriggerType.ITEM_GAIN) continue;
             if (!def.matchesMaterial(material)) continue;
-            handleWindow(player.getUniqueId(), def, location);
+            handleWindow(player.getUniqueId(), def, location, amount);
         }
     }
 
@@ -144,25 +150,34 @@ public class MomentService {
         }
     }
 
+    // Runs on an async scheduler thread while handleWindow runs on the main thread.
     private void flushStale() {
         long now = System.currentTimeMillis();
-        for (Map.Entry<Key, ActiveWindow> entry : windows.entrySet()) {
-            ActiveWindow window = entry.getValue();
-            long windowMillis = window.mergeSeconds * 1000L;
-            if ((now - window.lastUpdate) > windowMillis) {
-                flushWindow(entry.getKey(), window);
+        List<Map.Entry<Key, ActiveWindow>> expired = new ArrayList<>();
+        synchronized (windows) {
+            Iterator<Map.Entry<Key, ActiveWindow>> it = windows.entrySet().iterator();
+            while (it.hasNext()) {
+                Map.Entry<Key, ActiveWindow> entry = it.next();
+                if (entry.getValue().isExpired(now)) {
+                    expired.add(Map.entry(entry.getKey(), entry.getValue()));
+                    it.remove();
+                }
             }
         }
+        expired.forEach(entry -> persistWindow(entry.getKey(), entry.getValue()));
     }
 
     private void flushAll() {
-        for (Map.Entry<Key, ActiveWindow> entry : windows.entrySet()) {
-            flushWindow(entry.getKey(), entry.getValue());
+        List<Map.Entry<Key, ActiveWindow>> all;
+        synchronized (windows) {
+            all = new ArrayList<>(windows.entrySet());
+            windows.clear();
         }
-        windows.clear();
+        all.forEach(entry -> persistWindow(entry.getKey(), entry.getValue()));
     }
 
-    private void flushWindow(Key key, ActiveWindow window) {
+    /** Saves a window that has already been removed from {@link #windows}, so nothing can still increment it. */
+    private void persistWindow(Key key, ActiveWindow window) {
         if (window == null) {
             return;
         }
@@ -171,7 +186,6 @@ public class MomentService {
             String payload = gson.toJson(Map.of("count", window.count));
             saveMoment(MomentEntry.fromLocation(key.playerId, key.definitionId, window.title, detail, payload, window.origin, window.startedAt, window.lastUpdate));
         }
-        windows.remove(key);
     }
 
     private void saveMoment(MomentEntry entry) {
@@ -182,19 +196,22 @@ public class MomentService {
         }
     }
 
-    private void handleWindow(UUID playerId, MomentDefinition def, Location location) {
+    private void handleWindow(UUID playerId, MomentDefinition def, Location location, int amount) {
         long now = System.currentTimeMillis();
         Key key = new Key(playerId, def.getId());
-        ActiveWindow window = windows.get(key);
-        long windowMillis = def.getMergeSeconds() * 1000L;
-        if (window == null || (now - window.lastUpdate) > windowMillis) {
-            flushWindow(key, window);
-            window = new ActiveWindow(def.getId(), def.getTitle(), def.getDetail(), def.getMergeSeconds(), location, now, resolvePlayerName(playerId));
-            windows.put(key, window);
+        ActiveWindow expired = null;
+        synchronized (windows) {
+            ActiveWindow window = windows.get(key);
+            if (window == null || (now - window.lastUpdate) > def.getMergeSeconds() * 1000L) {
+                expired = window;
+                window = new ActiveWindow(def.getId(), def.getTitle(), def.getDetail(), def.getMergeSeconds(), location, now, resolvePlayerName(playerId));
+                windows.put(key, window);
+            }
+            window.count += amount;
+            window.lastUpdate = now;
+            window.lastLocation = location;
         }
-        window.count++;
-        window.lastUpdate = now;
-        window.lastLocation = location;
+        persistWindow(key, expired);
     }
 
     private void handleFirstOnly(Player player, MomentDefinition def, Location location) {
@@ -261,6 +278,10 @@ public class MomentService {
             this.startedAt = startedAt;
             this.lastUpdate = startedAt;
             this.playerName = playerName;
+        }
+
+        boolean isExpired(long now) {
+            return (now - lastUpdate) > mergeSeconds * 1000L;
         }
     }
 }
