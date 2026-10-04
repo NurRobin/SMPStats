@@ -8,13 +8,27 @@ api:
   enabled: true            # Enable HTTP API
   bind_address: "127.0.0.1"  # Bind address, usually 127.0.0.1 for local access (discord bots, etc), if you need external access use 0.0.0.0 or your server IP
   port: 8765               # API port
-  api_key: "YouShouldChangeThisKey" # Set a secret key
+  # Secret key clients must send in the X-API-Key header. REQUIRED: while this is empty
+  # (or still a well-known placeholder) the API does not start and a warning is logged.
+  # Use a long random string, e.g. the output of `openssl rand -hex 32`.
+  api_key: ""
 
 dashboard:
   enabled: true            # Enable web dashboard
-  bind_address: "0.0.0.0"  # Bind address for dashboard (0.0.0.0 for all interfaces)
+  # Bind address for the dashboard. 127.0.0.1 = reachable only from this machine, which is
+  # what you want behind a reverse proxy (nginx, Caddy, ...) on the same host. Set "0.0.0.0"
+  # only if you intentionally expose the dashboard on all network interfaces.
+  bind_address: "127.0.0.1"
   port: 8080               # Dashboard port (separate from API)
-  
+  # Set to true ONLY when the dashboard is reachable exclusively through a reverse proxy
+  # that sets X-Forwarded-For. Otherwise clients could spoof their IP and bypass the
+  # admin login rate limit.
+  trust_proxy: false
+  # Mark the admin session cookie as Secure (sent over HTTPS only). Keep true when serving
+  # the dashboard via HTTPS (e.g. behind a TLS reverse proxy). Set to false if you open the
+  # dashboard over plain http://, otherwise the browser drops the cookie and admin login fails.
+  secure_cookie: true
+
   # Public section - accessible without authentication
   public:
     enabled: true          # Allow public access to basic stats
@@ -26,7 +40,10 @@ dashboard:
   # Admin section - requires authentication
   admin:
     enabled: true          # Enable admin panel
-    password: "ChangeThisAdminPassword"  # Admin password
+    # Admin password. REQUIRED for the admin panel: while this is empty (or still a well-known
+    # placeholder) the admin panel stays disabled and a warning is logged; the public part
+    # keeps working.
+    password: ""
     session_timeout_minutes: 60
     show_health_metrics: true
     show_heatmaps: true

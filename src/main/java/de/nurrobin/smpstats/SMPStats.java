@@ -252,7 +252,7 @@ public class SMPStats extends JavaPlugin {
         boolean apiEnabled = config.getBoolean("api.enabled", false);
         String apiBindAddress = config.getString("api.bind_address", "127.0.0.1");
         int apiPort = config.getInt("api.port", 8765);
-        String apiKey = config.getString("api.api_key", "CHANGEME123");
+        String apiKey = config.getString("api.api_key", "");
         int autosaveMinutes = Math.max(1, config.getInt("autosave_minutes", 5));
 
         SkillWeights skillWeights = new SkillWeights(
@@ -333,7 +333,7 @@ public class SMPStats extends JavaPlugin {
     
     private Settings.DashboardSettings parseDashboardSettings(FileConfiguration config) {
         boolean enabled = config.getBoolean("dashboard.enabled", true);
-        String bindAddress = config.getString("dashboard.bind_address", "0.0.0.0");
+        String bindAddress = config.getString("dashboard.bind_address", "127.0.0.1");
         int port = config.getInt("dashboard.port", 8080);
         
         Settings.PublicSettings publicSettings = new Settings.PublicSettings(
@@ -346,7 +346,7 @@ public class SMPStats extends JavaPlugin {
         
         Settings.AdminSettings adminSettings = new Settings.AdminSettings(
                 config.getBoolean("dashboard.admin.enabled", true),
-                config.getString("dashboard.admin.password", "ChangeThisAdminPassword"),
+                config.getString("dashboard.admin.password", ""),
                 config.getInt("dashboard.admin.session_timeout_minutes", 60),
                 config.getBoolean("dashboard.admin.show_health_metrics", true),
                 config.getBoolean("dashboard.admin.show_heatmaps", true),
@@ -354,7 +354,11 @@ public class SMPStats extends JavaPlugin {
                 config.getBoolean("dashboard.admin.show_death_replays", true)
         );
         
-        return new Settings.DashboardSettings(enabled, bindAddress, port, publicSettings, adminSettings);
+        boolean trustProxy = config.getBoolean("dashboard.trust_proxy", false);
+        boolean secureCookie = config.getBoolean("dashboard.secure_cookie", true);
+
+        return new Settings.DashboardSettings(enabled, bindAddress, port, publicSettings, adminSettings,
+                trustProxy, secureCookie);
     }
     
     private HealthThresholds parseHealthThresholds(FileConfiguration config) {
