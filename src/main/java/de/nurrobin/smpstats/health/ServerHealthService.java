@@ -108,8 +108,7 @@ public class ServerHealthService {
                 int chunkRedstone = 0;
                 Map<UUID, Integer> ownerCounts = new HashMap<>();
                 
-                // No snapshots: copying every block state of every loaded chunk is the expensive part of a sample.
-                for (BlockState state : chunk.getTileEntities(false)) {
+                for (BlockState state : chunk.getTileEntities()) {
                     Material type = state.getType();
                     if (type == Material.HOPPER) {
                         chunkHoppers++;
