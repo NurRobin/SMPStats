@@ -340,7 +340,7 @@ public class SMPStats extends JavaPlugin {
                 storyEnabled, storyIntervalDays, storySummaryHour, storyWebhookUrl, storyTopLimit, storyRecentMoments,
                 dashboardSettings, guiAnimatedBordersEnabled)
                 .withRetention(new Settings.RetentionSettings(
-                        Math.max(0, config.getInt("retention.heatmap_events_days", 120)),
+                        Math.max(0, config.getInt("retention.heatmap_events_days", 0)),
                         Math.max(0, config.getInt("retention.moments_days", 0)),
                         Math.max(0, config.getInt("retention.death_replays_days", 0))));
     }
@@ -554,8 +554,10 @@ public class SMPStats extends JavaPlugin {
         String version = getDescription().getVersion();
         getLogger().info("====================================");
         getLogger().info(" SMPStats " + action + " - v" + version);
-        if (settings.isApiEnabled()) {
-            getLogger().info(" API: enabled on port " + settings.getApiPort());
+        if (apiServer != null && apiServer.isRunning()) {
+            getLogger().info(" API: running on port " + settings.getApiPort());
+        } else if (settings.isApiEnabled()) {
+            getLogger().info(" API: not running (see warning above)");
         } else {
             getLogger().info(" API: disabled");
         }

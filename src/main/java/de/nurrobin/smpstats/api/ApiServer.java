@@ -133,7 +133,7 @@ public class ApiServer {
         }
     }
 
-    boolean isRunning() {
+    public boolean isRunning() {
         return server != null;
     }
 

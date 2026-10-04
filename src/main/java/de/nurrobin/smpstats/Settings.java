@@ -59,7 +59,7 @@ public class Settings {
      * How long raw event rows are kept. A value of 0 keeps rows forever.
      */
     public record RetentionSettings(int heatmapEventsDays, int momentsDays, int deathReplaysDays) {
-        public static final RetentionSettings DEFAULTS = new RetentionSettings(120, 0, 0);
+        public static final RetentionSettings DEFAULTS = new RetentionSettings(0, 0, 0);
     }
     
     /**
