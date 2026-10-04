@@ -1,9 +1,9 @@
 name: SMPStats
-version: 0.14.1
+version: 0.15.0
 main: de.nurrobin.smpstats.SMPStats
-api-version: '1.21'
+api-version: '26.2'
 author: nurrobin
-description: Player statistics plugin for Paper 1.21.x SMP servers.
+description: Player statistics plugin for Paper 26.x SMP servers.
 commands:
   stats:
     description: Zeigt SMPStats Statistiken.

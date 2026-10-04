@@ -5,13 +5,13 @@
 
     <groupId>de.nurrobin</groupId>
     <artifactId>smpstats</artifactId>
-    <version>0.14.0</version>
+    <version>0.15.0</version>
     <name>SMPStats</name>
-    <description>Paper 1.21.x player statistics plugin</description>
+    <description>Paper 26.x player statistics plugin</description>
 
     <properties>
-        <java.version>21</java.version>
-        <maven.compiler.release>21</maven.compiler.release>
+        <java.version>25</java.version>
+        <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -30,7 +30,7 @@
         <dependency>
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
-            <version>1.21.11-R0.1-SNAPSHOT</version>
+            <version>26.2.build.129-stable</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -57,8 +57,8 @@
         </dependency>
         <dependency>
             <groupId>org.mockbukkit.mockbukkit</groupId>
-            <artifactId>mockbukkit-v1.21</artifactId>
-            <version>4.101.0</version>
+            <artifactId>mockbukkit-v26.2</artifactId>
+            <version>4.116.1</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -178,7 +178,7 @@
             <plugin>
                 <groupId>com.github.spotbugs</groupId>
                 <artifactId>spotbugs-maven-plugin</artifactId>
-                <version>4.9.3.0</version>
+                <version>4.10.4.1</version>
                 <configuration>
                     <effort>Max</effort>
                     <threshold>Medium</threshold>

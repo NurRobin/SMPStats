@@ -75,11 +75,11 @@ jobs:
       fail-fast: false  # Continue testing other versions even if one fails
       matrix:
         include:
-          # Paper 1.21.x (Java 21 required)
-          - mcVersion: '1.21.1'
-            javaVersion: '21'
-          - mcVersion: '1.21.10'
-            javaVersion: '21'
+          # Paper 26.x (Java 25 required)
+          - mcVersion: '26.2'
+            javaVersion: '25'
+          - mcVersion: '26.3'
+            javaVersion: '25'
 
     
     steps:        
