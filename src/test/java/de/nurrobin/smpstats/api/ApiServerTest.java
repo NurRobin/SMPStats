@@ -32,6 +32,7 @@ import java.util.UUID;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -383,6 +384,124 @@ class ApiServerTest {
         FakeExchange deathErr = new FakeExchange("/death/replay", API_KEY);
         server.deathReplayHandler().handle(deathErr);
         assertEquals(500, deathErr.status);
+    }
+
+    // ============== Hardening Tests ==============
+
+    private Settings settingsWithKey(String apiKey) {
+        return new Settings(
+                true, true, true, true, true, true, true,
+                true, "127.0.0.1", 0, apiKey, 1, settings.getSkillWeights(),
+                true, 0L, 0L, true, 1, 1.0, List.of(), List.of(), true, 1, 1, true, true, true, 1, 1,
+                true, 1, 0, 0, 0, 0, de.nurrobin.smpstats.health.HealthThresholds.defaults(),
+                true, 1, 1, "", 1, 1, Settings.DashboardSettings.defaults(), true);
+    }
+
+    @Test
+    void placeholderOrEmptyApiKeyPreventsStartup() {
+        for (String key : new String[]{"", "   ", "YouShouldChangeThisKey", "CHANGEME123", null}) {
+            ApiServer insecure = new ApiServer(plugin, stats, settingsWithKey(key), moments, heatmap, timeline, health);
+            insecure.start();
+            assertFalse(insecure.isRunning(), "API must not start with key '" + key + "'");
+            insecure.stop();
+        }
+    }
+
+    @Test
+    void startAndStopWithRealKey() {
+        server.start();
+        assertTrue(server.isRunning());
+        server.stop();
+        assertFalse(server.isRunning());
+        server.stop();
+    }
+
+    @Test
+    void emptyConfiguredKeyRejectsEmptyHeader() throws Exception {
+        ApiServer emptyKey = new ApiServer(plugin, stats, settingsWithKey(""), moments, heatmap, timeline, health);
+        when(stats.getOnlineNames()).thenReturn(List.of("Alex"));
+        FakeExchange exchange = new FakeExchange("/online", "");
+        emptyKey.onlineHandler().handle(exchange);
+        assertEquals(401, exchange.status);
+    }
+
+    @Test
+    void wrongKeyIsRejected() throws Exception {
+        FakeExchange exchange = new FakeExchange("/online", API_KEY + "x");
+        server.onlineHandler().handle(exchange);
+        assertEquals(401, exchange.status);
+        FakeExchange shorter = new FakeExchange("/online", "sec");
+        server.onlineHandler().handle(shorter);
+        assertEquals(401, shorter.status);
+    }
+
+    @Test
+    void malformedNumbersReturnJson400() throws Exception {
+        UUID uuid = UUID.randomUUID();
+        Object[][] cases = {
+                {server.recentMomentsHandler(), "/moments/recent?limit=abc"},
+                {server.recentMomentsHandler(), "/moments/recent?since=abc"},
+                {server.queryMomentsHandler(), "/moments/query?limit=1e9"},
+                {server.queryMomentsHandler(), "/moments/query?since=x"},
+                {server.momentsStreamHandler(), "/moments/stream?limit=abc"},
+                {server.momentsStreamHandler(), "/moments/stream?since=abc"},
+                {server.heatmapHandler(), "/heatmap/break?since=abc"},
+                {server.heatmapHandler(), "/heatmap/break?until=abc"},
+                {server.heatmapHandler(), "/heatmap/break?decay=abc"},
+                {server.heatmapHandler(), "/heatmap/break?decay=NaN"},
+                {server.heatmapHandler(), "/heatmap/break?grid=abc"},
+                {server.timelineHandler(), "/timeline/leaderboard?days=abc"},
+                {server.timelineHandler(), "/timeline/leaderboard?limit=abc"},
+                {server.timelineHandler(), "/timeline/range/" + uuid + "?days=abc"},
+                {server.timelineHandler(), "/timeline/" + uuid + "?limit=abc"},
+                {server.socialTopHandler(), "/social/top?limit=99999999999"},
+                {server.deathReplayHandler(), "/death/replay?limit=abc"},
+        };
+        for (Object[] c : cases) {
+            FakeExchange exchange = new FakeExchange((String) c[1], API_KEY);
+            ((com.sun.net.httpserver.HttpHandler) c[0]).handle(exchange);
+            assertEquals(400, exchange.status, "expected 400 for " + c[1]);
+            JsonObject json = JsonParser.parseString(exchange.body()).getAsJsonObject();
+            assertTrue(json.has("error"), "expected JSON error for " + c[1]);
+        }
+    }
+
+    @Test
+    void numericParametersAreClamped() throws Exception {
+        when(storage.loadTopSocial(anyInt())).thenReturn(List.of());
+        FakeExchange social = new FakeExchange("/social/top?limit=100000", API_KEY);
+        server.socialTopHandler().handle(social);
+        assertEquals(200, social.status);
+        verify(storage).loadTopSocial(500);
+
+        when(storage.loadDeathReplays(anyInt())).thenReturn(List.of());
+        FakeExchange death = new FakeExchange("/death/replay?limit=-4", API_KEY);
+        server.deathReplayHandler().handle(death);
+        verify(storage).loadDeathReplays(1);
+
+        when(moments.getRecentMoments(anyInt())).thenReturn(List.of());
+        FakeExchange recent = new FakeExchange("/moments/recent?limit=900000", API_KEY);
+        server.recentMomentsHandler().handle(recent);
+        verify(moments).getRecentMoments(500);
+
+        when(storage.loadTimelineLeaderboard(anyInt(), anyInt())).thenReturn(List.of());
+        FakeExchange leaderboard = new FakeExchange("/timeline/leaderboard?days=100000&limit=100000", API_KEY);
+        server.timelineHandler().handle(leaderboard);
+        verify(storage).loadTimelineLeaderboard(365, 500);
+
+        UUID uuid = UUID.randomUUID();
+        when(storage.loadTimelineRange(eq(uuid), anyInt())).thenReturn(Map.of());
+        FakeExchange range = new FakeExchange("/timeline/range/" + uuid + "?days=100000", API_KEY);
+        server.timelineHandler().handle(range);
+        verify(storage).loadTimelineRange(uuid, 365);
+
+        long before = System.currentTimeMillis();
+        FakeExchange heat = new FakeExchange("/heatmap/break?since=0&grid=100000", API_KEY);
+        server.heatmapHandler().handle(heat);
+        assertEquals(200, heat.status);
+        verify(heatmap).generateHeatmap(eq("BREAK"), anyString(),
+                longThat(since -> since >= before - 90L * 24 * 3600 * 1000 - 1000),
+                anyLong(), anyDouble(), eq(512));
     }
 
     private static class FakeExchange extends com.sun.net.httpserver.HttpExchange {
