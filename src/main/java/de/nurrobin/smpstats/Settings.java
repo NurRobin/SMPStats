@@ -70,12 +70,22 @@ public class Settings {
             String bindAddress,
             int port,
             PublicSettings publicSettings,
-            AdminSettings adminSettings
+            AdminSettings adminSettings,
+            boolean trustProxy,
+            boolean secureCookie
     ) {
+        /**
+         * Creates dashboard settings with the safe defaults for proxy trust (off) and secure cookies (on).
+         */
+        public DashboardSettings(boolean enabled, String bindAddress, int port,
+                                 PublicSettings publicSettings, AdminSettings adminSettings) {
+            this(enabled, bindAddress, port, publicSettings, adminSettings, false, true);
+        }
+
         public static DashboardSettings defaults() {
             return new DashboardSettings(
                     true,
-                    "0.0.0.0",
+                    "127.0.0.1",
                     8080,
                     PublicSettings.defaults(),
                     AdminSettings.defaults()
@@ -111,7 +121,7 @@ public class Settings {
             boolean showDeathReplays
     ) {
         public static AdminSettings defaults() {
-            return new AdminSettings(true, "ChangeThisAdminPassword", 60, true, true, true, true);
+            return new AdminSettings(true, "", 60, true, true, true, true);
         }
     }
 

@@ -309,7 +309,7 @@ class SMPStatsDashboard {
             listEl.innerHTML = '<p class="placeholder">No biomes discovered yet</p>';
         } else {
             listEl.innerHTML = biomes
-                .map(biome => `<span class="biome-tag">${this.formatBiomeName(biome)}</span>`)
+                .map(biome => `<span class="biome-tag">${this.escapeHtml(this.formatBiomeName(biome))}</span>`)
                 .join('');
         }
     }
@@ -381,7 +381,7 @@ class SMPStatsDashboard {
                     <div class="moment-title">${this.escapeHtml(moment.title)}</div>
                     <div class="moment-detail">${this.escapeHtml(moment.detail)}</div>
                     <div class="moment-meta">
-                        <span>${moment.world} (${moment.x}, ${moment.y}, ${moment.z})</span>
+                        <span>${this.escapeHtml(moment.world)} (${this.escapeHtml(moment.x)}, ${this.escapeHtml(moment.y)}, ${this.escapeHtml(moment.z)})</span>
                         <span>${this.formatTimestamp(moment.endedAt)}</span>
                     </div>
                 </div>
@@ -455,7 +455,7 @@ class SMPStatsDashboard {
         container.innerHTML = '<p class="placeholder">Loading heatmap...</p>';
         
         try {
-            const response = await fetch(`/api/admin/heatmap?type=${type}&world=${world}`);
+            const response = await fetch(`/api/admin/heatmap?type=${encodeURIComponent(type)}&world=${encodeURIComponent(world)}`);
             if (!response.ok) throw new Error('Failed to load heatmap');
             
             const data = await response.json();
@@ -575,7 +575,7 @@ class SMPStatsDashboard {
                         <h4>${this.escapeHtml(death.name)}</h4>
                         <div class="death-details">
                             <div>${this.escapeHtml(death.cause || 'Unknown cause')}</div>
-                            <div>${death.world} (${death.x}, ${death.y}, ${death.z})</div>
+                            <div>${this.escapeHtml(death.world)} (${this.escapeHtml(death.x)}, ${this.escapeHtml(death.y)}, ${this.escapeHtml(death.z)})</div>
                             <div>${this.formatTimestamp(death.timestamp)}</div>
                         </div>
                     </div>
@@ -630,8 +630,11 @@ class SMPStatsDashboard {
     
     // ============== Formatting Helpers ==============
     
-    formatNumber(num) {
-        if (num === null || num === undefined) return '-';
+    formatNumber(value) {
+        if (value === null || value === undefined) return '-';
+        // Coerce so non-numeric server data can never end up as raw markup
+        const num = Number(value);
+        if (!Number.isFinite(num)) return '-';
         if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
         if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
         return num.toLocaleString();
@@ -672,11 +675,15 @@ class SMPStatsDashboard {
         return date.toLocaleDateString();
     }
     
-    escapeHtml(str) {
-        if (!str) return '';
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
+    escapeHtml(value) {
+        // Escapes any value (strings, numbers such as coordinates) for safe use in innerHTML text/attributes
+        if (value === null || value === undefined) return '';
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 }
 

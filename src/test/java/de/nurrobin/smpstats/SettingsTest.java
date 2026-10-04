@@ -96,7 +96,7 @@ class SettingsTest {
     void dashboardSettingsDefaults() {
         Settings.DashboardSettings defaults = Settings.DashboardSettings.defaults();
         assertTrue(defaults.enabled());
-        assertEquals("0.0.0.0", defaults.bindAddress());
+        assertEquals("127.0.0.1", defaults.bindAddress());
         assertEquals(8080, defaults.port());
         assertTrue(defaults.publicSettings().enabled());
         assertTrue(defaults.adminSettings().enabled());
@@ -116,7 +116,7 @@ class SettingsTest {
     void adminSettingsDefaults() {
         Settings.AdminSettings defaults = Settings.AdminSettings.defaults();
         assertTrue(defaults.enabled());
-        assertEquals("ChangeThisAdminPassword", defaults.password());
+        assertEquals("", defaults.password());
         assertEquals(60, defaults.sessionTimeoutMinutes());
         assertTrue(defaults.showHealthMetrics());
         assertTrue(defaults.showHeatmaps());
