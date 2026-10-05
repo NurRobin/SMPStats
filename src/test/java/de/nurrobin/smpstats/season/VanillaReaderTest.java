@@ -88,4 +88,38 @@ class VanillaReaderTest {
         assertTrue(VanillaReader.readUserCache(tempDir.resolve("fehlt.json"), problems).isEmpty());
         assertEquals(1, problems.size(), problems.toString());
     }
+
+    @Test
+    void wronglyShapedFilesAreReportedAndOthersStillImported() throws Exception {
+        UUID bea = UUID.fromString("00000000-0000-0000-0000-00000000000b");
+        Path stats = Files.createDirectories(tempDir.resolve("stats-shape"));
+        Files.writeString(stats.resolve(ALEX + ".json"), "{\"stats\":[]}");
+        Files.writeString(stats.resolve(bea + ".json"), "{\"stats\":{\"minecraft:custom\":{\"minecraft:jump\":1}}}");
+        Path adv = Files.createDirectories(tempDir.resolve("adv-shape"));
+        Files.writeString(adv.resolve(ALEX + ".json"),
+                "{\"a\":{\"criteria\":[],\"done\":true},\"b\":{\"criteria\":{\"x\":\"2025-11-29 09:47:54 +0000\"},\"done\":{}}}");
+        Files.writeString(adv.resolve(bea + ".json"),
+                "{\"minecraft:story/root\":{\"criteria\":{\"x\":\"2025-11-29 09:47:54 +0000\"},\"done\":true}}");
+        List<String> problems = new ArrayList<>();
+
+        Map<UUID, Map<String, Double>> s = VanillaReader.readStats(stats, problems);
+        Map<UUID, Map<String, Long>> a = VanillaReader.readAdvancements(adv, problems);
+
+        assertEquals(Map.of("minecraft:custom/minecraft:jump", 1.0), s.get(bea));
+        assertFalse(s.containsKey(ALEX));
+        assertTrue(a.get(bea).containsKey("minecraft:story/root"));
+        assertFalse(a.containsKey(ALEX));
+        assertEquals(2, problems.size(), problems.toString());
+    }
+
+    @Test
+    void userCacheEntryWithNullNameIsSkipped() throws Exception {
+        UUID bea = UUID.fromString("00000000-0000-0000-0000-00000000000b");
+        Path file = tempDir.resolve("usercache-null.json");
+        Files.writeString(file, "[{\"uuid\":\"" + ALEX + "\",\"name\":null},{\"uuid\":\"" + bea + "\",\"name\":\"Bea\"}]");
+        List<String> problems = new ArrayList<>();
+
+        assertEquals(Map.of(bea, "Bea"), VanillaReader.readUserCache(file, problems));
+        assertTrue(problems.isEmpty(), problems.toString());
+    }
 }

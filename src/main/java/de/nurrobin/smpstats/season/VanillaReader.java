@@ -34,32 +34,41 @@ final class VanillaReader {
             if (uuid.isEmpty() || root.isEmpty()) {
                 continue;
             }
-            JsonObject stats = root.get().getAsJsonObject("stats");
-            if (stats == null) {
-                problems.add(file.getFileName() + ": kein \"stats\"-Objekt");
-                continue;
+            try {
+                readStatsFile(file, root.get(), uuid.get(), out, problems);
+            } catch (RuntimeException e) {
+                problems.add(file.getFileName() + ": unerwartete Struktur (" + e.getClass().getSimpleName() + "), übersprungen");
             }
-            Map<String, Double> values = new HashMap<>();
-            boolean badValue = false;
-            for (Map.Entry<String, JsonElement> category : stats.entrySet()) {
-                if (!category.getValue().isJsonObject()) {
-                    continue;
-                }
-                for (Map.Entry<String, JsonElement> stat : category.getValue().getAsJsonObject().entrySet()) {
-                    JsonElement v = stat.getValue();
-                    if (v.isJsonPrimitive() && v.getAsJsonPrimitive().isNumber()) {
-                        values.put(category.getKey() + "/" + stat.getKey(), v.getAsDouble());
-                    } else {
-                        badValue = true;
-                    }
-                }
-            }
-            if (badValue) {
-                problems.add(file.getFileName() + ": nicht-numerische Werte übersprungen");
-            }
-            out.put(uuid.get(), values);
         }
         return out;
+    }
+
+    private static void readStatsFile(Path file, JsonObject root, UUID uuid, Map<UUID, Map<String, Double>> out,
+                                      List<String> problems) {
+        JsonObject stats = root.getAsJsonObject("stats");
+        if (stats == null) {
+            problems.add(file.getFileName() + ": kein \"stats\"-Objekt");
+            return;
+        }
+        Map<String, Double> values = new HashMap<>();
+        boolean badValue = false;
+        for (Map.Entry<String, JsonElement> category : stats.entrySet()) {
+            if (!category.getValue().isJsonObject()) {
+                continue;
+            }
+            for (Map.Entry<String, JsonElement> stat : category.getValue().getAsJsonObject().entrySet()) {
+                JsonElement v = stat.getValue();
+                if (v.isJsonPrimitive() && v.getAsJsonPrimitive().isNumber()) {
+                    values.put(category.getKey() + "/" + stat.getKey(), v.getAsDouble());
+                } else {
+                    badValue = true;
+                }
+            }
+        }
+        if (badValue) {
+            problems.add(file.getFileName() + ": nicht-numerische Werte übersprungen");
+        }
+        out.put(uuid, values);
     }
 
     static Map<UUID, Map<String, Long>> readAdvancements(Path advancementsDir, List<String> problems) {
@@ -70,32 +79,40 @@ final class VanillaReader {
             if (uuid.isEmpty() || root.isEmpty()) {
                 continue;
             }
-            Map<String, Long> done = new HashMap<>();
-            for (Map.Entry<String, JsonElement> entry : root.get().entrySet()) {
-                if (entry.getKey().startsWith(RECIPES) || !entry.getValue().isJsonObject()) {
-                    continue;
-                }
-                JsonObject adv = entry.getValue().getAsJsonObject();
-                if (!adv.has("done") || !adv.get("done").getAsBoolean() || !adv.has("criteria")) {
-                    continue;
-                }
-                long latest = Long.MIN_VALUE;
-                for (Map.Entry<String, JsonElement> criterion : adv.getAsJsonObject("criteria").entrySet()) {
-                    try {
-                        long t = OffsetDateTime.parse(criterion.getValue().getAsString(), ADVANCEMENT_TIME)
-                                .toInstant().toEpochMilli();
-                        latest = Math.max(latest, t);
-                    } catch (DateTimeParseException | UnsupportedOperationException e) {
-                        problems.add(file.getFileName() + ": Zeitpunkt nicht lesbar bei " + entry.getKey());
-                    }
-                }
-                if (latest != Long.MIN_VALUE) {
-                    done.put(entry.getKey(), latest);
-                }
+            try {
+                out.put(uuid.get(), readAdvancementFile(file, root.get(), problems));
+            } catch (RuntimeException e) {
+                problems.add(file.getFileName() + ": unerwartete Struktur (" + e.getClass().getSimpleName() + "), übersprungen");
             }
-            out.put(uuid.get(), done);
         }
         return out;
+    }
+
+    private static Map<String, Long> readAdvancementFile(Path file, JsonObject root, List<String> problems) {
+        Map<String, Long> done = new HashMap<>();
+        for (Map.Entry<String, JsonElement> entry : root.entrySet()) {
+            if (entry.getKey().startsWith(RECIPES) || !entry.getValue().isJsonObject()) {
+                continue;
+            }
+            JsonObject adv = entry.getValue().getAsJsonObject();
+            if (!adv.has("done") || !adv.get("done").getAsBoolean() || !adv.has("criteria")) {
+                continue;
+            }
+            long latest = Long.MIN_VALUE;
+            for (Map.Entry<String, JsonElement> criterion : adv.getAsJsonObject("criteria").entrySet()) {
+                try {
+                    long t = OffsetDateTime.parse(criterion.getValue().getAsString(), ADVANCEMENT_TIME)
+                            .toInstant().toEpochMilli();
+                    latest = Math.max(latest, t);
+                } catch (DateTimeParseException | UnsupportedOperationException e) {
+                    problems.add(file.getFileName() + ": Zeitpunkt nicht lesbar bei " + entry.getKey());
+                }
+            }
+            if (latest != Long.MIN_VALUE) {
+                done.put(entry.getKey(), latest);
+            }
+        }
+        return done;
     }
 
     static Map<UUID, String> readUserCache(Path file, List<String> problems) {
@@ -109,7 +126,7 @@ final class VanillaReader {
                 JsonObject o = e.getAsJsonObject();
                 try {
                     out.put(UUID.fromString(o.get("uuid").getAsString()), o.get("name").getAsString());
-                } catch (IllegalArgumentException | NullPointerException ignored) {
+                } catch (RuntimeException ignored) {
                     // a broken cache entry only costs us one fallback name
                 }
             }
