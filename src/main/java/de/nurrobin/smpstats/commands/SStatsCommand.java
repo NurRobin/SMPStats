@@ -116,6 +116,9 @@ public class SStatsCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(ChatColor.GREEN + "Saison " + outcome.season() + " importiert: "
                             + outcome.players() + " Spieler, " + outcome.statRows() + " Werte.");
                     if (!outcome.problems().isEmpty()) {
+                        // show the first hints directly, so a missing stats.db is noticed before it costs data
+                        outcome.problems().stream().limit(3)
+                                .forEach(problem -> sender.sendMessage(ChatColor.GRAY + "- " + problem));
                         sender.sendMessage(ChatColor.YELLOW + "" + outcome.problems().size() + " Hinweis(e), Details im Server-Log.");
                     }
                 });

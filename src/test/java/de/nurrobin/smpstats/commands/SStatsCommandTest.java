@@ -503,6 +503,7 @@ class SStatsCommandTest {
         command.onCommand(admin, mock(Command.class), "sstats", new String[]{"season", "import", "2025"});
         verify(admin).sendMessage(ChatColor.GREEN + "Saison 2025 importiert: 69 Spieler, 4300 Werte.");
         verify(admin).sendMessage(ChatColor.YELLOW + "1 Hinweis(e), Details im Server-Log.");
+        verify(admin).sendMessage(ChatColor.GRAY + "- usercache.json fehlt");
     }
 
     @Test
@@ -537,5 +538,23 @@ class SStatsCommandTest {
 
         verify(admin).sendMessage(org.mockito.ArgumentMatchers.contains("69 Spieler, 4300 Werte, Quelle: stats.db"));
         verify(admin).sendMessage(ChatColor.YELLOW + "Saison 2024 ist nicht importiert.");
+    }
+
+    @Test
+    void seasonImportShowsAtMostThreeHintsInChat() throws Exception {
+        SMPStats plugin = pluginWithSettings();
+        SeasonService seasons = mock(SeasonService.class);
+        when(plugin.getSeasonService()).thenReturn(seasons);
+        when(seasons.importSeason("2025")).thenReturn(CompletableFuture.completedFuture(
+                new SeasonService.Outcome("2025", 1, 1, List.of("a", "b", "c", "d", "e"))));
+        SStatsCommand command = new SStatsCommand(plugin, mock(StatsService.class), mock(GuiManager.class), null);
+        CommandSender admin = mock(CommandSender.class);
+        when(admin.hasPermission("smpstats.admin")).thenReturn(true);
+
+        command.onCommand(admin, mock(Command.class), "sstats", new String[]{"season", "import", "2025"});
+
+        verify(admin).sendMessage(ChatColor.GRAY + "- c");
+        verify(admin, never()).sendMessage(ChatColor.GRAY + "- d");
+        verify(admin).sendMessage(ChatColor.YELLOW + "5 Hinweis(e), Details im Server-Log.");
     }
 }
