@@ -28,7 +28,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public class StatsStorage implements Closeable {
-    private static final int SCHEMA_VERSION = 8;
+    private static final int SCHEMA_VERSION = 9;
     private static final Type STRING_SET = new TypeToken<Set<String>>() {
     }.getType();
 
@@ -96,6 +96,10 @@ public class StatsStorage implements Closeable {
                 reindexHeatmapEvents();
                 currentVersion = 8;
             }
+            if (currentVersion == 8) {
+                addSeasonTables();
+                currentVersion = 9;
+            }
             setUserVersion(currentVersion);
             connection.commit();
         } catch (SQLException ex) {
@@ -123,6 +127,66 @@ public class StatsStorage implements Closeable {
         try (Statement st = connection.createStatement()) {
             st.execute("PRAGMA user_version=" + version + ";");
         }
+    }
+
+    private void addSeasonTables() throws SQLException {
+        try (Statement st = connection.createStatement()) {
+            st.execute("""
+                    CREATE TABLE IF NOT EXISTS season_stats (
+                        season TEXT NOT NULL,
+                        uuid TEXT NOT NULL,
+                        stat_key TEXT NOT NULL,
+                        value REAL NOT NULL,
+                        PRIMARY KEY (season, uuid, stat_key)
+                    );
+                    """);
+            st.execute("CREATE INDEX IF NOT EXISTS idx_season_stats_key ON season_stats(season, stat_key, value);");
+            st.execute("""
+                    CREATE TABLE IF NOT EXISTS season_advancements (
+                        season TEXT NOT NULL,
+                        uuid TEXT NOT NULL,
+                        advancement TEXT NOT NULL,
+                        achieved_at INTEGER NOT NULL,
+                        PRIMARY KEY (season, uuid, advancement)
+                    );
+                    """);
+            st.execute("""
+                    CREATE TABLE IF NOT EXISTS season_players (
+                        season TEXT NOT NULL,
+                        uuid TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        playtime_ms INTEGER NOT NULL,
+                        PRIMARY KEY (season, uuid)
+                    );
+                    """);
+            st.execute("""
+                    CREATE TABLE IF NOT EXISTS season_meta (
+                        season TEXT PRIMARY KEY,
+                        imported_at INTEGER NOT NULL,
+                        source TEXT NOT NULL,
+                        players INTEGER NOT NULL,
+                        stat_rows INTEGER NOT NULL
+                    );
+                    """);
+            st.execute("""
+                    CREATE TABLE IF NOT EXISTS throwback_progress (
+                        uuid TEXT PRIMARY KEY,
+                        completed_at INTEGER,
+                        rules_confirmed_at INTEGER,
+                        rules_version TEXT
+                    );
+                    """);
+        }
+    }
+
+    /** Runs {@code work} with the open connection while holding the storage lock. */
+    @FunctionalInterface
+    public interface SqlWork<T> {
+        T run(Connection connection) throws SQLException;
+    }
+
+    public synchronized <T> T withConnection(SqlWork<T> work) throws SQLException {
+        return work.run(connection);
     }
 
     private void createBaseTables() throws SQLException {

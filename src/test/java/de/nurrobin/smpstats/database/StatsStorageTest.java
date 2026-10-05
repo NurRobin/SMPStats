@@ -442,6 +442,62 @@ class StatsStorageTest {
         assertEquals(5.0, total[0], 1e-9);
     }
 
+    @Test
+    void schemaV9CreatesSeasonAndThrowbackTables() throws Exception {
+        StatsStorage storage = newStorage();
+        java.util.Set<String> tables = storage.withConnection(c -> {
+            java.util.Set<String> names = new java.util.HashSet<>();
+            try (java.sql.Statement st = c.createStatement();
+                 java.sql.ResultSet rs = st.executeQuery("SELECT name FROM sqlite_master WHERE type='table'")) {
+                while (rs.next()) {
+                    names.add(rs.getString(1));
+                }
+            }
+            return names;
+        });
+        assertTrue(tables.containsAll(Set.of("season_stats", "season_advancements", "season_players",
+                "season_meta", "throwback_progress")), tables.toString());
+        int version = storage.withConnection(c -> {
+            try (java.sql.Statement st = c.createStatement();
+                 java.sql.ResultSet rs = st.executeQuery("PRAGMA user_version")) {
+                return rs.next() ? rs.getInt(1) : -1;
+            }
+        });
+        assertEquals(9, version);
+    }
+
+    @Test
+    void migratesExistingV8DatabaseToV9() throws Exception {
+        Path dataDir = Files.createDirectory(tempDir.resolve("v8-" + UUID.randomUUID()));
+        try (java.sql.Connection c = java.sql.DriverManager.getConnection("jdbc:sqlite:" + dataDir.resolve("stats.db"));
+             java.sql.Statement st = c.createStatement()) {
+            st.execute("CREATE TABLE player_stats (uuid TEXT PRIMARY KEY, name TEXT NOT NULL)");
+            st.execute("INSERT INTO player_stats(uuid, name) VALUES ('" + UUID.randomUUID() + "', 'Alt')");
+            st.execute("PRAGMA user_version=8");
+        }
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getDataFolder()).thenReturn(dataDir.toFile());
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        StatsStorage storage = new StatsStorage(plugin);
+        storage.init();
+
+        int seasonTables = storage.withConnection(c -> {
+            try (java.sql.Statement st = c.createStatement();
+                 java.sql.ResultSet rs = st.executeQuery(
+                         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name LIKE 'season_%'")) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        });
+        int oldRows = storage.withConnection(c -> {
+            try (java.sql.Statement st = c.createStatement();
+                 java.sql.ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM player_stats")) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        });
+        assertEquals(4, seasonTables);
+        assertEquals(1, oldRows);
+    }
+
     private StatsStorage newStorage() throws IOException, java.sql.SQLException {
         Path dataDir = Files.createDirectory(tempDir.resolve("plugin-data-" + UUID.randomUUID()));
         Plugin plugin = mock(Plugin.class);
