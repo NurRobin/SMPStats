@@ -100,4 +100,41 @@ class LegacyDbReaderTest {
         LegacyDbReader.read(db, new ArrayList<>());
         assertArrayEquals(before, sha(db));
     }
+
+    @Test
+    void readsWalDatabaseFromReadOnlyFolderWithoutSideFiles() throws Exception {
+        Path folder = Files.createDirectory(tempDir.resolve("readonly-" + UUID.randomUUID()));
+        Path db = folder.resolve("stats.db");
+        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + db);
+             Statement st = c.createStatement()) {
+            st.execute("PRAGMA journal_mode=WAL");
+            st.execute("CREATE TABLE player_stats (uuid TEXT PRIMARY KEY, name TEXT NOT NULL, playtime_ms INTEGER)");
+            st.execute("INSERT INTO player_stats VALUES ('" + ALEX + "', 'Alex', 5)");
+        }
+        Files.deleteIfExists(folder.resolve("stats.db-wal"));
+        Files.deleteIfExists(folder.resolve("stats.db-shm"));
+        assertTrue(folder.toFile().setWritable(false));
+        try {
+            List<String> problems = new ArrayList<>();
+            LegacyDbReader.Result r = LegacyDbReader.read(db, problems);
+
+            assertEquals("Alex", r.players().get(UUID.fromString(ALEX)).name());
+            assertTrue(problems.stream().noneMatch(p -> p.contains("CANTOPEN") || p.contains("player_stats nicht lesbar")),
+                    problems.toString());
+            assertFalse(Files.exists(folder.resolve("stats.db-shm")));
+        } finally {
+            folder.toFile().setWritable(true);
+        }
+    }
+
+    @Test
+    void warnsWhenAWalFileWithContentIsNextToTheDatabase() throws Exception {
+        Path db = legacyDb(true);
+        Files.write(db.resolveSibling(db.getFileName() + "-wal"), new byte[]{1, 2, 3});
+        List<String> problems = new ArrayList<>();
+
+        LegacyDbReader.read(db, problems);
+
+        assertTrue(problems.stream().anyMatch(p -> p.contains("-wal")), problems.toString());
+    }
 }

@@ -5,6 +5,8 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import org.sqlite.SQLiteConfig;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -37,15 +39,30 @@ final class LegacyDbReader {
         Map<UUID, SeasonPlayer> players = new HashMap<>();
         Map<UUID, Map<String, Double>> stats = new HashMap<>();
         Map<UUID, Map<String, Long>> firsts = new HashMap<>();
+        warnAboutPendingWal(dbFile, problems);
         SQLiteConfig config = new SQLiteConfig();
         config.setReadOnly(true);
-        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + dbFile.toAbsolutePath(), config.toProperties())) {
+        // immutable: no locks and no -shm/-wal side files, so read-only folders work and the source stays untouched
+        String url = "jdbc:sqlite:" + dbFile.toAbsolutePath().toUri() + "?immutable=1";
+        try (Connection c = DriverManager.getConnection(url, config.toProperties())) {
             readPlayers(c, players, stats, problems);
             readMoments(c, stats, firsts, problems);
         } catch (SQLException e) {
             problems.add("stats.db nicht lesbar: " + e.getMessage());
         }
         return new Result(players, stats, firsts);
+    }
+
+    private static void warnAboutPendingWal(Path dbFile, List<String> problems) {
+        Path wal = dbFile.resolveSibling(dbFile.getFileName() + "-wal");
+        try {
+            if (Files.isRegularFile(wal) && Files.size(wal) > 0) {
+                problems.add("stats.db: " + wal.getFileName() + " ist nicht leer und wird ignoriert;"
+                        + " die DB vorher mit 'sqlite3 stats.db \"PRAGMA wal_checkpoint(TRUNCATE);\"' zusammenführen");
+            }
+        } catch (IOException e) {
+            problems.add("stats.db: " + wal.getFileName() + " nicht prüfbar: " + e.getMessage());
+        }
     }
 
     private static void readPlayers(Connection c, Map<UUID, SeasonPlayer> players,
