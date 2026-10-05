@@ -1,5 +1,8 @@
 package de.nurrobin.smpstats;
 
+import de.nurrobin.smpstats.season.SeasonImporter;
+import de.nurrobin.smpstats.season.SeasonService;
+import de.nurrobin.smpstats.season.SeasonStore;
 import de.nurrobin.smpstats.api.ApiServer;
 import de.nurrobin.smpstats.commands.StatsCommand;
 import de.nurrobin.smpstats.commands.SStatsCommand;
@@ -56,6 +59,7 @@ public class SMPStats extends JavaPlugin {
     private GuiManager guiManager;
     private AnimatedBorderService animatedBorderService;
     private RetentionService retentionService;
+    private SeasonService seasonService;
     private int autosaveTaskId = -1;
 
     @Override
@@ -84,6 +88,9 @@ public class SMPStats extends JavaPlugin {
         this.guiManager = new GuiManager(this);
         this.animatedBorderService = new AnimatedBorderService(this);
         this.retentionService = new RetentionService(this, storage, settings);
+        this.seasonService = new SeasonService(getLogger(), getDataFolder().toPath().resolve("seasons"),
+                new SeasonStore(storage), new SeasonImporter(),
+                task -> Bukkit.getScheduler().runTaskAsynchronously(this, task));
 
         registerListeners();
         registerCommands();
@@ -95,6 +102,7 @@ public class SMPStats extends JavaPlugin {
         heatmapService.start();
         socialStatsService.start();
         retentionService.start();
+        seasonService.autoImport();
         if (deathReplayService != null) {
             deathReplayService.start();
         }
@@ -187,6 +195,10 @@ public class SMPStats extends JavaPlugin {
 
     public java.util.Optional<HeatmapService> getHeatmapService() {
         return java.util.Optional.ofNullable(heatmapService);
+    }
+
+    public SeasonService getSeasonService() {
+        return seasonService;
     }
 
     public StatsService getStatsService() {

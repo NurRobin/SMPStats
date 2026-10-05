@@ -20,6 +20,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.logging.Logger;
+import java.util.concurrent.CompletableFuture;
+import de.nurrobin.smpstats.season.SeasonMeta;
+import de.nurrobin.smpstats.season.SeasonService;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -479,5 +482,60 @@ class SStatsCommandTest {
         
         List<String> messages = captor.getAllValues();
         assertTrue(messages.stream().anyMatch(m -> m.contains("SMPStats")));
+    }
+    @Test
+    void seasonImportRequiresAdminAndReportsOutcome() throws Exception {
+        SMPStats plugin = pluginWithSettings();
+        SeasonService seasons = mock(SeasonService.class);
+        when(plugin.getSeasonService()).thenReturn(seasons);
+        when(seasons.importSeason("2025")).thenReturn(CompletableFuture.completedFuture(
+                new SeasonService.Outcome("2025", 69, 4300, List.of("usercache.json fehlt"))));
+        SStatsCommand command = new SStatsCommand(plugin, mock(StatsService.class), mock(GuiManager.class), null);
+
+        CommandSender noPerm = mock(CommandSender.class);
+        when(noPerm.hasPermission("smpstats.admin")).thenReturn(false);
+        command.onCommand(noPerm, mock(Command.class), "sstats", new String[]{"season", "import", "2025"});
+        verify(noPerm).sendMessage(ChatColor.RED + "Dir fehlt die Berechtigung smpstats.admin");
+        verify(seasons, never()).importSeason(any());
+
+        CommandSender admin = mock(CommandSender.class);
+        when(admin.hasPermission("smpstats.admin")).thenReturn(true);
+        command.onCommand(admin, mock(Command.class), "sstats", new String[]{"season", "import", "2025"});
+        verify(admin).sendMessage(ChatColor.GREEN + "Saison 2025 importiert: 69 Spieler, 4300 Werte.");
+        verify(admin).sendMessage(ChatColor.YELLOW + "1 Hinweis(e), Details im Server-Log.");
+    }
+
+    @Test
+    void seasonImportFailureIsShown() {
+        SMPStats plugin = pluginWithSettings();
+        SeasonService seasons = mock(SeasonService.class);
+        when(plugin.getSeasonService()).thenReturn(seasons);
+        when(seasons.importSeason("2025")).thenReturn(CompletableFuture.failedFuture(
+                new IllegalStateException("Keine Spielerdaten in seasons/2025 gefunden")));
+        SStatsCommand command = new SStatsCommand(plugin, mock(StatsService.class), mock(GuiManager.class), null);
+        CommandSender admin = mock(CommandSender.class);
+        when(admin.hasPermission("smpstats.admin")).thenReturn(true);
+
+        command.onCommand(admin, mock(Command.class), "sstats", new String[]{"season", "import", "2025"});
+
+        verify(admin).sendMessage(ChatColor.RED + "Import fehlgeschlagen: Keine Spielerdaten in seasons/2025 gefunden");
+    }
+
+    @Test
+    void seasonInfoShowsMetaOrMissing() throws Exception {
+        SMPStats plugin = pluginWithSettings();
+        SeasonService seasons = mock(SeasonService.class);
+        when(plugin.getSeasonService()).thenReturn(seasons);
+        when(seasons.meta("2025")).thenReturn(Optional.of(new SeasonMeta("2025", 0L, "stats.db", 69, 4300)));
+        when(seasons.meta("2024")).thenReturn(Optional.empty());
+        SStatsCommand command = new SStatsCommand(plugin, mock(StatsService.class), mock(GuiManager.class), null);
+        CommandSender admin = mock(CommandSender.class);
+        when(admin.hasPermission("smpstats.admin")).thenReturn(true);
+
+        command.onCommand(admin, mock(Command.class), "sstats", new String[]{"season", "info", "2025"});
+        command.onCommand(admin, mock(Command.class), "sstats", new String[]{"season", "info", "2024"});
+
+        verify(admin).sendMessage(org.mockito.ArgumentMatchers.contains("69 Spieler, 4300 Werte, Quelle: stats.db"));
+        verify(admin).sendMessage(ChatColor.YELLOW + "Saison 2024 ist nicht importiert.");
     }
 }

@@ -10,11 +10,11 @@ commands:
     usage: /stats [player|json|dump]
   sstats:
     description: SMPStats Kurz-Command.
-    usage: /sstats [info|reload|user <name> [reset|set <stat> <value>]]
+    usage: /sstats [info|reload|user <name> [reset|set <stat> <value>]|season <import|info> <saison>]
     permission: smpstats.use
   smpstats:
     description: SMPStats Admin-Befehle.
-    usage: /smpstats [info|reload|user <name> [reset|set <stat> <value>]]
+    usage: /smpstats [info|reload|user <name> [reset|set <stat> <value>]|season <import|info> <saison>]
     permission: smpstats.use
 permissions:
   smpstats.reload:

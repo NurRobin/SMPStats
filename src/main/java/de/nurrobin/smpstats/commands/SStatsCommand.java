@@ -6,6 +6,8 @@ import de.nurrobin.smpstats.StatsService;
 import de.nurrobin.smpstats.gui.GuiManager;
 import de.nurrobin.smpstats.gui.MainMenuGui;
 import de.nurrobin.smpstats.health.ServerHealthService;
+import de.nurrobin.smpstats.season.SeasonMeta;
+import de.nurrobin.smpstats.season.SeasonService;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -13,11 +15,16 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 
+import java.sql.SQLException;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletionException;
 
 public class SStatsCommand implements CommandExecutor, TabCompleter {
     private final SMPStats plugin;
@@ -73,11 +80,64 @@ public class SStatsCommand implements CommandExecutor, TabCompleter {
             case "user" -> {
                 return handleUser(sender, args);
             }
+            case "season" -> {
+                return handleSeason(sender, args);
+            }
             default -> {
-                sender.sendMessage(ChatColor.YELLOW + "Nutze: /sstats [info|reload|user <name> [reset|set <stat> <value>]]");
+                sender.sendMessage(ChatColor.YELLOW + "Nutze: /sstats [info|reload|user <name> [reset|set <stat> <value>]|season <import|info> <saison>]");
                 return true;
             }
         }
+    }
+
+    private static final DateTimeFormatter SEASON_TIME = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm").withZone(ZoneId.systemDefault());
+
+    private boolean handleSeason(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("smpstats.admin")) {
+            sender.sendMessage(ChatColor.RED + "Dir fehlt die Berechtigung smpstats.admin");
+            return true;
+        }
+        SeasonService seasons = plugin.getSeasonService();
+        if (seasons == null || args.length < 3) {
+            sender.sendMessage(ChatColor.YELLOW + "Nutze: /sstats season <import|info> <saison>");
+            return true;
+        }
+        String season = args[2];
+        switch (args[1].toLowerCase()) {
+            case "import" -> {
+                sender.sendMessage(ChatColor.GRAY + "Importiere Saison " + season + " …");
+                seasons.importSeason(season).whenComplete((outcome, error) -> {
+                    if (error != null) {
+                        Throwable cause = error instanceof CompletionException && error.getCause() != null
+                                ? error.getCause() : error;
+                        sender.sendMessage(ChatColor.RED + "Import fehlgeschlagen: " + cause.getMessage());
+                        return;
+                    }
+                    sender.sendMessage(ChatColor.GREEN + "Saison " + outcome.season() + " importiert: "
+                            + outcome.players() + " Spieler, " + outcome.statRows() + " Werte.");
+                    if (!outcome.problems().isEmpty()) {
+                        sender.sendMessage(ChatColor.YELLOW + "" + outcome.problems().size() + " Hinweis(e), Details im Server-Log.");
+                    }
+                });
+            }
+            case "info" -> {
+                try {
+                    Optional<SeasonMeta> meta = seasons.meta(season);
+                    if (meta.isEmpty()) {
+                        sender.sendMessage(ChatColor.YELLOW + "Saison " + season + " ist nicht importiert.");
+                    } else {
+                        SeasonMeta m = meta.get();
+                        sender.sendMessage(ChatColor.GREEN + "Saison " + season + ": importiert am "
+                                + SEASON_TIME.format(Instant.ofEpochMilli(m.importedAt())) + ", " + m.players()
+                                + " Spieler, " + m.statRows() + " Werte, Quelle: " + m.source());
+                    }
+                } catch (SQLException e) {
+                    sender.sendMessage(ChatColor.RED + "Datenbankfehler: " + e.getMessage());
+                }
+            }
+            default -> sender.sendMessage(ChatColor.YELLOW + "Nutze: /sstats season <import|info> <saison>");
+        }
+        return true;
     }
 
     private boolean handleUser(CommandSender sender, String[] args) {
@@ -191,6 +251,9 @@ public class SStatsCommand implements CommandExecutor, TabCompleter {
             base.add("info");
             base.add("reload");
             base.add("user");
+            if (sender.hasPermission("smpstats.admin")) {
+                base.add("season");
+            }
             return base;
         }
         if (args.length == 2 && "user".equalsIgnoreCase(args[0])) {
