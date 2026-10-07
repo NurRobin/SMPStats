@@ -145,9 +145,17 @@ class ApiServerTest {
         assertEquals(200, streamReq.status);
         assertTrue(streamReq.body().contains("data:"));
 
+        clearInvocations(moments);
         FakeExchange queryPlayerParam = new FakeExchange("/moments/query?player=not-a-uuid", API_KEY);
         query.handle(queryPlayerParam);
-        assertEquals(200, queryPlayerParam.status);
+        assertEquals(400, queryPlayerParam.status);
+        verify(moments, never()).queryMoments(isNull(), any(), anyLong(), anyInt());
+
+        java.util.UUID valid = java.util.UUID.randomUUID();
+        when(moments.queryMoments(eq(valid), any(), anyLong(), anyInt())).thenReturn(List.of());
+        FakeExchange queryValid = new FakeExchange("/moments/query?player=" + valid, API_KEY);
+        query.handle(queryValid);
+        assertEquals(200, queryValid.status);
     }
 
     @Test
