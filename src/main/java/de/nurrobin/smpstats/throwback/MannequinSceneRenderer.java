@@ -42,13 +42,57 @@ public final class MannequinSceneRenderer implements SceneRenderer {
     private static final long SWING_PERIOD_TICKS = 16L;
     private static final double SWING_RANGE_SQUARED = 24.0 * 24.0;
 
+    /** How entities are hidden and shown; replaced in tests because MockBukkit has no per-player visibility. */
+    interface Visibility {
+        void hideByDefault(Entity entity);
+
+        void show(Player viewer, Plugin plugin, Entity entity);
+
+        default void skin(Mannequin figure, Player viewer) {
+            figure.setProfile(ResolvableProfile.resolvableProfile(viewer.getPlayerProfile()));
+        }
+
+        default void styleText(TextDisplay display, Component text) {
+            display.text(text);
+            display.setBillboard(Display.Billboard.CENTER);
+            display.setBackgroundColor(Color.fromARGB(120, 0, 0, 0));
+            display.setLineWidth(260);
+            display.setShadowed(true);
+            display.setViewRange(0.5f);
+        }
+
+        default void styleInteraction(Interaction interaction, float width, float height) {
+            interaction.setInteractionWidth(width);
+            interaction.setInteractionHeight(height);
+            interaction.setResponsive(true);
+        }
+    }
+
+    private static final Visibility PAPER = new Visibility() {
+        @Override
+        public void hideByDefault(Entity entity) {
+            entity.setVisibleByDefault(false);
+        }
+
+        @Override
+        public void show(Player viewer, Plugin plugin, Entity entity) {
+            viewer.showEntity(plugin, entity);
+        }
+    };
+
     private final Plugin plugin;
+    private final Visibility visibility;
     private final NamespacedKey tag;
     private final NamespacedKey action;
     private final NamespacedKey owner;
 
     public MannequinSceneRenderer(Plugin plugin) {
+        this(plugin, PAPER);
+    }
+
+    MannequinSceneRenderer(Plugin plugin, Visibility visibility) {
         this.plugin = plugin;
+        this.visibility = visibility;
         this.tag = HallWorld.tagKey(plugin);
         this.action = new NamespacedKey(plugin, ACTION_KEY);
         this.owner = new NamespacedKey(plugin, OWNER_KEY);
@@ -84,14 +128,14 @@ public final class MannequinSceneRenderer implements SceneRenderer {
         private <T extends Entity> T spawn(Location at, Class<T> type, Consumer<T> setup) {
             World world = at.getWorld();
             T entity = world.spawn(at, type, e -> {
-                e.setVisibleByDefault(false);
+                visibility.hideByDefault(e);
                 e.setPersistent(false);
                 e.getPersistentDataContainer().set(tag, PersistentDataType.BYTE, (byte) 1);
                 e.getPersistentDataContainer().set(owner, PersistentDataType.STRING, viewer.getUniqueId().toString());
                 setup.accept(e);
             });
             entities.add(entity);
-            viewer.showEntity(plugin, entity);
+            visibility.show(viewer, plugin, entity);
             return entity;
         }
 
@@ -127,7 +171,7 @@ public final class MannequinSceneRenderer implements SceneRenderer {
         }
 
         private void setupFigure(Mannequin m, SceneSpec spec) {
-            m.setProfile(ResolvableProfile.resolvableProfile(viewer.getPlayerProfile()));
+            visibility.skin(m, viewer);
             m.setImmovable(true);
             m.setAI(false);
             m.setGravity(false);
@@ -178,14 +222,7 @@ public final class MannequinSceneRenderer implements SceneRenderer {
             if (closed) {
                 return;
             }
-            spawn(at, TextDisplay.class, t -> {
-                t.text(text);
-                t.setBillboard(Display.Billboard.CENTER);
-                t.setBackgroundColor(Color.fromARGB(120, 0, 0, 0));
-                t.setLineWidth(260);
-                t.setShadowed(true);
-                t.setViewRange(0.5f);
-            });
+            spawn(at, TextDisplay.class, t -> visibility.styleText(t, text));
         }
 
         @Override
@@ -194,9 +231,7 @@ public final class MannequinSceneRenderer implements SceneRenderer {
                 return;
             }
             spawn(at, Interaction.class, i -> {
-                i.setInteractionWidth(width);
-                i.setInteractionHeight(height);
-                i.setResponsive(true);
+                visibility.styleInteraction(i, width, height);
                 i.getPersistentDataContainer().set(action, PersistentDataType.STRING, actionName);
             });
         }

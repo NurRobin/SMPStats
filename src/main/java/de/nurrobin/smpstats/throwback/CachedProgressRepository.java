@@ -11,7 +11,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 /**
- * Keeps progress in memory so the main thread never waits for SQLite. Rows are loaded off-thread before the
+ * Keeps progress in memory so the main thread never waits for SQLite. Entries stay for the whole run (one small
+ * record per player ever seen), because a quick relog must not read a row the writer has not flushed yet. Rows are loaded off-thread before the
  * player joins ({@link #preload}) and written behind on a single thread, which keeps writes in order.
  */
 public final class CachedProgressRepository implements ProgressRepository {
@@ -70,10 +71,6 @@ public final class CachedProgressRepository implements ProgressRepository {
                 logger.warning("Throwback: Fortschritt von " + uuid + " nicht gelöscht: " + e.getMessage());
             }
         });
-    }
-
-    public void evict(UUID uuid) {
-        cache.remove(uuid);
     }
 
     /** Waits for pending writes; called on disable before the database is closed. */

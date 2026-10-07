@@ -60,6 +60,8 @@ public final class ThrowbackService {
     private final Map<UUID, Long> hintCooldown = new ConcurrentHashMap<>();
     private final Set<UUID> leaving = ConcurrentHashMap.newKeySet();
 
+    private java.util.function.BiFunction<Player, Location, java.util.concurrent.CompletableFuture<Boolean>> teleporter =
+            (player, location) -> player.teleportAsync(location);
     private volatile ThrowbackSettings settings;
     private volatile ThrowbackTexts texts;
     private volatile TrophyBoard board;
@@ -119,6 +121,15 @@ public final class ThrowbackService {
         builders.values().forEach(BukkitTask::cancel);
         builders.clear();
         repository.close();
+    }
+
+    /** Test seam: MockBukkit has no teleportAsync. */
+    void teleporter(java.util.function.BiFunction<Player, Location, java.util.concurrent.CompletableFuture<Boolean>> teleporter) {
+        this.teleporter = teleporter;
+    }
+
+    private java.util.concurrent.CompletableFuture<Boolean> teleport(Player player, Location location) {
+        return teleporter.apply(player, location);
     }
 
     private static void cancel(BukkitTask task) {
@@ -249,7 +260,6 @@ public final class ThrowbackService {
         hintCooldown.remove(uuid);
         leaving.remove(uuid);
         restoreMode(p);
-        repository.evict(uuid);
         scheduleUnload();
     }
 
@@ -326,7 +336,7 @@ public final class ThrowbackService {
         closeVisuals(uuid);
         Location start = settings.layout().start().at(world);
         p.sendMessage(texts.message("prepare"));
-        p.teleportAsync(start).thenAccept(ok -> Bukkit.getScheduler().runTask(plugin, () -> {
+        teleport(p, start).thenAccept(ok -> Bukkit.getScheduler().runTask(plugin, () -> {
             if (Boolean.TRUE.equals(ok) && p.isOnline() && flow.inHall(uuid) && hall.isHall(p.getWorld())) {
                 buildScenes(p);
                 startHallTask();
@@ -341,7 +351,7 @@ public final class ThrowbackService {
     private void sendToExit(Player p) {
         Location exit = exitLocation();
         leaving.add(p.getUniqueId());
-        p.teleportAsync(exit).thenAccept(ok -> Bukkit.getScheduler().runTask(plugin, () -> {
+        teleport(p, exit).thenAccept(ok -> Bukkit.getScheduler().runTask(plugin, () -> {
             leaving.remove(p.getUniqueId());
             cleanupAfterLeaving(p);
         }));
@@ -580,7 +590,7 @@ public final class ThrowbackService {
         for (Player p : inHall) {
             Location at = p.getLocation();
             if (at.getY() < layout.start().y() - 30) {
-                p.teleportAsync(layout.start().at(world));
+                teleport(p, layout.start().at(world));
                 continue;
             }
             if (layout.portal().contains(at)) {
@@ -615,7 +625,7 @@ public final class ThrowbackService {
                 closeVisuals(uuid);
                 leaving.add(uuid);
                 portalCooldown.put(uuid, System.currentTimeMillis());
-                p.teleportAsync(target).thenAccept(ok -> Bukkit.getScheduler().runTask(plugin, () -> {
+                teleport(p, target).thenAccept(ok -> Bukkit.getScheduler().runTask(plugin, () -> {
                     leaving.remove(uuid);
                     origins.remove(uuid);
                     restoreMode(p);
@@ -637,7 +647,7 @@ public final class ThrowbackService {
             return;
         }
         Location back = here.clone().add(dx / len * 2.5, 0, dz / len * 2.5);
-        p.teleportAsync(back);
+        teleport(p, back);
     }
 
     /** Entrance portal in the main world; cheap box test for the players of that world only. */
@@ -710,6 +720,14 @@ public final class ThrowbackService {
                 s.rulesVersion(), s.privacyUrl(), s.matchByNameOffline(), s.unloadDelaySeconds(), s.imagesFolder(),
                 s.textsFile(), s.exitWorld(), s.exit(), s.spawnPortal(), next);
         this.content = null;
+    }
+
+    /** Test hook: swap the layout without touching config.yml. */
+    void updateLayoutForTest(HallLayout layout) {
+        ThrowbackSettings s = settings;
+        this.settings = new ThrowbackSettings(s.enabled(), s.world(), s.season(), s.minPlaytimeMinutes(), s.rankBadgeTop(),
+                s.rulesVersion(), s.privacyUrl(), s.matchByNameOffline(), s.unloadDelaySeconds(), s.imagesFolder(),
+                s.textsFile(), s.exitWorld(), s.exit(), s.spawnPortal(), layout);
     }
 
     /** Forgets a player's progress so they go through the mandatory tour again (for testing and corrections). */

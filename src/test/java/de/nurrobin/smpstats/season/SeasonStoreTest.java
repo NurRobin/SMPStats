@@ -105,4 +105,27 @@ class SeasonStoreTest {
         assertEquals(1L, store.meta("2025").orElseThrow().importedAt());
         assertEquals(2, store.statValues("2025", "smpstats:blocks_broken").size());
     }
+
+    @Test
+    void bulkQueriesForTheThrowbackHall() throws Exception {
+        SeasonStore store = newStore();
+        store.replace(sample("2025"), 1L);
+
+        assertEquals(2, store.players("2025").size());
+        assertEquals("Alex", store.players("2025").get(alex).name());
+
+        Map<UUID, Map<String, Double>> byKey = store.statsMatching("2025", List.of("smpstats:blocks_broken"), List.of());
+        assertEquals(500.0, byKey.get(alex).get("smpstats:blocks_broken"));
+        assertEquals(20.0, byKey.get(bea).get("smpstats:blocks_broken"));
+
+        Map<UUID, Map<String, Double>> byPrefix = store.statsMatching("2025", List.of(), List.of("minecraft:custom/"));
+        assertEquals(Map.of("minecraft:custom/minecraft:jump", 0.0), byPrefix.get(alex), "zero rows are returned, callers decide");
+        assertFalse(byPrefix.containsKey(bea));
+
+        assertTrue(store.statsMatching("2025", List.of(), List.of()).isEmpty());
+        assertTrue(store.statsMatching("2025", List.of(), List.of("100%_")).isEmpty(), "LIKE wildcards in a prefix are escaped");
+        assertEquals(1_000L, store.advancementsOf("2025", List.of("minecraft:story/enter_the_nether")).get(alex)
+                .get("minecraft:story/enter_the_nether"));
+        assertTrue(store.advancementsOf("2025", List.of()).isEmpty());
+    }
 }
