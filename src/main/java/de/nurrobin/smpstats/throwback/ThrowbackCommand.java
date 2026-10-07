@@ -22,7 +22,7 @@ import java.util.UUID;
 public final class ThrowbackCommand implements CommandExecutor, TabCompleter {
     private static final String ADMIN = "smpstats.admin";
     private static final List<String> ADMIN_SUBS = List.of("info", "reload", "build", "tp", "setstart", "setstage",
-            "setrules", "portal1", "portal2", "addwall", "walls", "reset");
+            "setrules", "portal1", "portal2", "addwall", "walls", "reset", "skip", "preview");
 
     private final Plugin plugin;
     private final ThrowbackService service;
@@ -68,6 +68,15 @@ public final class ThrowbackCommand implements CommandExecutor, TabCompleter {
                 say(sender, "Throwback-Konfiguration und Texte neu geladen.");
             }
             case "reset" -> reset(sender, args);
+            case "preview" -> preview(sender, args);
+            case "skip" -> {
+                if (args.length < 3) {
+                    say(sender, "Nutze: /throwback admin skip <spieler> (Pflicht-Rundgang als erledigt markieren)");
+                } else {
+                    service.skipTour(Bukkit.getOfflinePlayer(args[2]).getUniqueId());
+                    say(sender, "Rundgang von " + args[2] + " als erledigt markiert.");
+                }
+            }
             case "walls" -> {
                 int shown = service.rebuildWalls();
                 say(sender, "Bilderwände neu aufgebaut, " + shown + " mit Bild. Ist die Halle nicht geladen, passiert nichts (erst /throwback admin tp).");
@@ -210,6 +219,20 @@ public final class ThrowbackCommand implements CommandExecutor, TabCompleter {
         UUID uuid = target.getUniqueId();
         service.resetProgress(uuid);
         say(sender, "Fortschritt von " + args[2] + " gelöscht: Beim nächsten Join gibt es wieder den Pflicht-Rundgang.");
+    }
+
+    private void preview(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            say(sender, "Nutze: /throwback admin preview <name> (Name wie in der Saison)");
+            return;
+        }
+        HallPlan plan = service.previewPlan(args[2]);
+        say(sender, args[2] + ": " + plan.audience() + ", " + plan.stages().size() + " Bühnen");
+        for (StagePlan stage : plan.stages()) {
+            String text = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                    .serialize(stage.text()).replace("\n", " | ");
+            say(sender, (stage.index() + 1) + " [" + stage.scene() + "] " + text);
+        }
     }
 
     private void info(CommandSender sender) {

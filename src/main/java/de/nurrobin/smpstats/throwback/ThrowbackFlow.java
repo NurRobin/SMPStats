@@ -125,6 +125,16 @@ public final class ThrowbackFlow {
         sessions.remove(uuid);
     }
 
+    /**
+     * Staff override: the player counts as having finished the tour without confirming the rules. Any running
+     * tour session ends.
+     */
+    public void markCompleted(UUID uuid) {
+        Progress current = repository.find(uuid).orElseGet(Progress::fresh);
+        repository.save(uuid, current.withCompleted(clock.getAsLong()));
+        sessions.remove(uuid);
+    }
+
     public boolean completed(UUID uuid) {
         return repository.find(uuid).map(Progress::completed).orElse(false);
     }

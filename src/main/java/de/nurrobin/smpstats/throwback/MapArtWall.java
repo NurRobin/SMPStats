@@ -197,7 +197,7 @@ public final class MapArtWall {
             for (int cz = Math.min(wall.z(), z2) >> 4; cz <= Math.max(wall.z(), z2) >> 4; cz++) {
                 Chunk chunk = world.getChunkAt(cx, cz);
                 for (Entity e : chunk.getEntities()) {
-                    if (e.getPersistentDataContainer().has(wallTag, PersistentDataType.STRING)) {
+                    if (wall.name().equals(e.getPersistentDataContainer().get(wallTag, PersistentDataType.STRING))) {
                         e.remove();
                     }
                 }

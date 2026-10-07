@@ -71,6 +71,7 @@ public final class HallWorld implements HallWorlds {
         }
         apply(world);
         removeLeftovers(world);
+        logger.info("Throwback: Hallen-Welt " + name + " geladen");
         return world;
     }
 
@@ -120,6 +121,7 @@ public final class HallWorld implements HallWorlds {
             return true;
         }
         if (!world.getPlayers().isEmpty()) {
+            logger.info("Throwback: Entladen verschoben, " + world.getPlayers().size() + " Spieler sind noch in der Halle");
             return false;
         }
         for (Entity entity : world.getEntities()) {
@@ -128,7 +130,9 @@ public final class HallWorld implements HallWorlds {
             }
         }
         boolean ok = Bukkit.unloadWorld(world, true);
-        if (!ok) {
+        if (ok) {
+            logger.info("Throwback: Hallen-Welt " + name + " entladen (niemand mehr drin)");
+        } else {
             logger.warning("Throwback: Welt " + name + " ließ sich nicht entladen");
         }
         return ok;

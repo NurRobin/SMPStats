@@ -1,10 +1,11 @@
 # Texte der Throwback-Halle (MiniMessage: https://docs.advntr.dev/minimessage/format.html).
+# Hinweis: Die Minecraft-Schrift kennt kaum Emoji aus der Ebene über U+FFFF; nimm einfache Symbole wie ★ ⚔ ⛏ ✈.
 # Platzhalter: <value> Wert mit Einheit, <label> Blockname oder Mob (wird im Client übersetzt),
 # <n> Vergleichszahl, <p> Prozent, <place> und <total> bei der Platzierung, <name> Spielername.
 # Fehlt ein Schlüssel, gilt der Standardtext aus dem Plugin.
 
 # Zeile unter Trophäen der Top-Plätze (Grenze: throwback.rank_badge_top in der config.yml)
-badge: "<gold>🏆 Platz <place> von <total>"
+badge: "<gold>★ Platz <place> von <total>"
 
 # Trophäen: title ist die Hauptzeile. compare.per teilt den Wert in Anzeigeeinheit (Stunden, km, Anzahl);
 # ab 1 wird compare.text gezeigt, darunter compare.small (falls vorhanden), sonst entfällt die Zeile.
@@ -21,13 +22,13 @@ trophies:
       per: 157
       text: "<gray>übereinander gestapelt: <n>× der Kölner Dom"
   distance_foot:
-    title: "<yellow><bold>👣 <white><value> zu Fuß gelaufen"
+    title: "<yellow><bold>➜ <white><value> zu Fuß gelaufen"
     compare:
       per: 475
       text: "<gray>Köln–Berlin: <n>× gelaufen"
       small: "<gray><p> % der Strecke Köln–Berlin"
   elytra:
-    title: "<yellow><bold>🪽 <white><value> mit der Elytra geflogen"
+    title: "<yellow><bold>✈ <white><value> mit der Elytra geflogen"
     compare:
       per: 475
       text: "<gray>Köln–Berlin im Gleitflug: <n>×"
@@ -38,7 +39,7 @@ trophies:
       per: 42.2
       text: "<gray>das sind <n> Marathons in der Luft"
   rides:
-    title: "<yellow><bold>🐎 <white><value> auf Booten und Reittieren"
+    title: "<yellow><bold>⛵ <white><value> auf Booten und Reittieren"
     compare:
       per: 42.2
       text: "<gray>das sind <n> Marathons"
@@ -53,44 +54,44 @@ trophies:
       per: 10
       text: "<gray>so viele Leben wie <n> Katzen"
   nemesis:
-    title: "<yellow><bold>💀 Dein Erzfeind: <white><label>"
+    title: "<yellow><bold>✖ Dein Erzfeind: <white><label>"
     compare:
       per: 1
       text: "<gray>hat dich <value>× erwischt"
   trades:
-    title: "<yellow><bold>💚 <white><value> Handel mit Dorfbewohnern"
+    title: "<yellow><bold>♦ <white><value> Handel mit Dorfbewohnern"
     compare:
       per: 64
       text: "<gray>genug Smaragde für <n> Stacks"
   fish:
-    title: "<yellow><bold>🎣 <white><value> Fische geangelt"
+    title: "<yellow><bold>~ <white><value> Fische geangelt"
     compare:
       per: 1
       text: "<gray>genug für <n> Fischbrötchen"
   fav_block:
-    title: "<yellow><bold>🧱 Lieblingsblock: <white><label>"
+    title: "<yellow><bold>▣ Lieblingsblock: <white><label>"
     compare:
       per: 1
       text: "<gray><value>× abgebaut"
   nether:
-    title: "<yellow><bold>🔥 Im Nether am <white><value>"
+    title: "<yellow><bold>♨ Im Nether am <white><value>"
   end:
-    title: "<yellow><bold>🐉 Im End am <white><value>"
+    title: "<yellow><bold>✧ Im End am <white><value>"
   biomes:
-    title: "<yellow><bold>🗺 <white><value> Biome entdeckt"
+    title: "<yellow><bold>☀ <white><value> Biome entdeckt"
   cake:
-    title: "<yellow><bold>🎂 <white><value> Stücke Kuchen"
+    title: "<yellow><bold>♥ <white><value> Stücke Kuchen"
     compare:
       per: 7
       text: "<gray>das sind <n> ganze Torten"
   bell:
-    title: "<yellow><bold>🔔 <white><value>× die Glocke geläutet"
+    title: "<yellow><bold>♪ <white><value>× die Glocke geläutet"
   raids:
-    title: "<yellow><bold>🛡 <white><value> Raids gewonnen"
+    title: "<yellow><bold>⚑ <white><value> Raids gewonnen"
   sleep:
-    title: "<yellow><bold>🛏 <white><value>× im Bett geschlafen"
+    title: "<yellow><bold>☾ <white><value>× im Bett geschlafen"
   jumps:
-    title: "<yellow><bold>🦘 <white><value> Sprünge"
+    title: "<yellow><bold>↑ <white><value> Sprünge"
     compare:
       per: 1000
       text: "<gray>das sind <n> Tausend Hopser"
