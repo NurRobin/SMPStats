@@ -65,9 +65,24 @@ class StatsCommandTest {
         when(stats.getAllStats()).thenReturn(List.of(new StatsRecord(UUID.randomUUID(), "Alex")));
 
         CommandSender sender = mock(CommandSender.class);
+        when(sender.hasPermission("smpstats.admin")).thenReturn(true);
         command.onCommand(sender, mock(Command.class), "stats", new String[]{"dump"});
 
         verify(sender).sendMessage(ChatColor.GREEN + "Alle Stats wurden in die Konsole geschrieben.");
+    }
+
+    @Test
+    void dumpIsDeniedWithoutAdminPermission() {
+        SMPStats plugin = mock(SMPStats.class);
+        StatsService stats = mock(StatsService.class);
+        StatsCommand command = new StatsCommand(plugin, stats);
+
+        CommandSender sender = mock(CommandSender.class);
+        when(sender.hasPermission("smpstats.admin")).thenReturn(false);
+        command.onCommand(sender, mock(Command.class), "stats", new String[]{"dump"});
+
+        verify(stats, never()).getAllStats();
+        verify(sender, never()).sendMessage(ChatColor.GREEN + "Alle Stats wurden in die Konsole geschrieben.");
     }
 
     @Test
@@ -131,7 +146,9 @@ class StatsCommandTest {
         when(stats.getOnlineNames()).thenReturn(List.of("Alex", "Bea"));
         StatsCommand command = new StatsCommand(plugin, stats);
 
-        List<String> suggestions = command.onTabComplete(mock(CommandSender.class), mock(Command.class), "stats", new String[]{""});
+        CommandSender admin = mock(CommandSender.class);
+        when(admin.hasPermission("smpstats.admin")).thenReturn(true);
+        List<String> suggestions = command.onTabComplete(admin, mock(Command.class), "stats", new String[]{""});
         assertTrue(suggestions.contains("json"));
         assertTrue(suggestions.contains("dump"));
         assertTrue(suggestions.contains("Alex"));
