@@ -21,6 +21,37 @@ public class StatsCommand implements CommandExecutor, TabCompleter {
     private final SMPStats plugin;
     private final StatsService statsService;
     private final Gson gson = new Gson();
+    static final long COOLDOWN_MILLIS = 3_000L;
+    private final java.util.Map<UUID, Long> lastLookup = new java.util.concurrent.ConcurrentHashMap<>();
+    private java.util.function.LongSupplier clock = System::currentTimeMillis;
+
+    void setClock(java.util.function.LongSupplier clock) {
+        this.clock = clock;
+    }
+
+    /** Returns true (and starts the cooldown) if the player may run a lookup now. Console is exempt. */
+    private boolean allowLookup(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            return true;
+        }
+        long now = clock.getAsLong();
+        if (lastLookup.size() > 1000) {
+            lastLookup.values().removeIf(t -> now - t > COOLDOWN_MILLIS);
+        }
+        UUID id = player.getUniqueId();
+        boolean[] allowed = {false};
+        lastLookup.compute(id, (k, prev) -> {
+            if (prev == null || now - prev >= COOLDOWN_MILLIS) {
+                allowed[0] = true;
+                return now;
+            }
+            return prev;
+        });
+        if (!allowed[0]) {
+            sender.sendMessage(ChatColor.RED + "Bitte warte ein paar Sekunden, bevor du die Stats erneut abfragst.");
+        }
+        return allowed[0];
+    }
 
     public StatsCommand(SMPStats plugin, StatsService statsService) {
         this.plugin = plugin;
@@ -42,6 +73,9 @@ public class StatsCommand implements CommandExecutor, TabCompleter {
         if ("json".equalsIgnoreCase(sub)) {
             if (!(sender instanceof Player player)) {
                 sender.sendMessage(ChatColor.RED + "Nur Spieler können /stats json nutzen.");
+                return true;
+            }
+            if (!allowLookup(sender)) {
                 return true;
             }
             statsService.getStats(player.getUniqueId())
@@ -66,6 +100,9 @@ public class StatsCommand implements CommandExecutor, TabCompleter {
         }
 
         // Otherwise try to find stats for the given player name
+        if (!allowLookup(sender)) {
+            return true;
+        }
         String targetName = sub;
         Optional<StatsRecord> target = statsService.getStatsByName(targetName);
         if (target.isPresent()) {

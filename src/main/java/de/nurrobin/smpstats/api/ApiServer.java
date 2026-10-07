@@ -401,6 +401,9 @@ public class ApiServer {
 
             try {
                 sendJson(exchange, 200, heatmapService.generateHeatmap(typeRaw.toUpperCase(), world, since, until, decay, gridSize));
+            } catch (HeatmapService.HeatmapBusyException e) {
+                exchange.getResponseHeaders().set("Retry-After", "5");
+                sendText(exchange, 503, "Heatmap busy, retry shortly");
             } catch (IllegalArgumentException e) {
                 sendText(exchange, 400, "Invalid heatmap type");
             }

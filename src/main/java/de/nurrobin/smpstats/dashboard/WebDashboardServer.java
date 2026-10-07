@@ -73,6 +73,12 @@ public class WebDashboardServer {
     // Public response cache configuration
     private static final long PUBLIC_CACHE_TTL_MS = 15_000;
     private static final int MAX_CACHED_RESPONSES = 256;
+    private static final long PUBLIC_MOMENTS_CACHE_TTL_MS = 30_000;
+    static final int PUBLIC_RATE_PER_SECOND = 10;
+    static final int PUBLIC_RATE_BURST = 20;
+    static final int PUBLIC_MAX_LIMIT = 100;
+    private static final int ALL_DAYS = 3650;
+    private final IpRateLimiter publicRateLimiter = new IpRateLimiter(PUBLIC_RATE_PER_SECOND, PUBLIC_RATE_BURST);
 
     // Placeholder passwords shipped in earlier config.yml versions; treated as "not set"
     private static final Set<String> PLACEHOLDER_PASSWORDS = Set.of(
@@ -121,11 +127,12 @@ public class WebDashboardServer {
         server.createContext("/js/", new StaticHandler());
         
         // Public API endpoints
-        server.createContext("/api/public/online", new PublicOnlineHandler());
-        server.createContext("/api/public/leaderboard", new PublicLeaderboardHandler());
-        server.createContext("/api/public/moments", new PublicMomentsHandler());
-        server.createContext("/api/public/stats", new PublicStatsHandler());
-        server.createContext("/api/public/config", new PublicConfigHandler());
+        com.sun.net.httpserver.Filter rateFilter = publicRateFilter();
+        server.createContext("/api/public/online", new PublicOnlineHandler()).getFilters().add(rateFilter);
+        server.createContext("/api/public/leaderboard", new PublicLeaderboardHandler()).getFilters().add(rateFilter);
+        server.createContext("/api/public/moments", new PublicMomentsHandler()).getFilters().add(rateFilter);
+        server.createContext("/api/public/stats", new PublicStatsHandler()).getFilters().add(rateFilter);
+        server.createContext("/api/public/config", new PublicConfigHandler()).getFilters().add(rateFilter);
         
         // Admin authentication
         server.createContext("/api/admin/login", new AdminLoginHandler());
@@ -182,6 +189,26 @@ public class WebDashboardServer {
             requestExecutor = null;
         }
         responseCache.clear();
+        publicRateLimiter.clear();
+    }
+
+    private com.sun.net.httpserver.Filter publicRateFilter() {
+        return new com.sun.net.httpserver.Filter() {
+            @Override
+            public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
+                if (!publicRateLimiter.tryAcquire(getClientIp(exchange))) {
+                    exchange.getResponseHeaders().add("Retry-After", "1");
+                    sendJson(exchange, 429, Map.of("error", "Too many requests"));
+                    return;
+                }
+                chain.doFilter(exchange);
+            }
+
+            @Override
+            public String description() {
+                return "per-IP rate limit for public endpoints";
+            }
+        };
     }
 
     boolean isRunning() {
@@ -275,6 +302,10 @@ public class WebDashboardServer {
      * Entries live for {@link #PUBLIC_CACHE_TTL_MS}; a failed computation is not cached.
      */
     private Object cachedResponse(String key, java.util.concurrent.Callable<Object> loader) throws Exception {
+        return cachedResponse(key, PUBLIC_CACHE_TTL_MS, loader);
+    }
+
+    private Object cachedResponse(String key, long ttlMs, java.util.concurrent.Callable<Object> loader) throws Exception {
         long now = System.currentTimeMillis();
         CachedResponse cached = responseCache.get(key);
         if (cached != null && cached.expiresAt() > now) {
@@ -287,7 +318,7 @@ public class WebDashboardServer {
                 responseCache.clear();
             }
         }
-        responseCache.put(key, new CachedResponse(now + PUBLIC_CACHE_TTL_MS, body));
+        responseCache.put(key, new CachedResponse(now + ttlMs, body));
         return body;
     }
 
@@ -574,19 +605,27 @@ public class WebDashboardServer {
             }
             
             int limit;
-            int days;
             try {
                 limit = queryParam(exchange, "limit").map(Integer::parseInt).orElse(10);
-                days = queryParam(exchange, "days").map(Integer::parseInt).orElse(7);
             } catch (NumberFormatException e) {
                 sendJson(exchange, 400, Map.of("error", "Invalid parameter format"));
                 return;
             }
-            String sort = queryParam(exchange, "sort").orElse("playtime");
-            
-            limit = Math.min(50, Math.max(1, limit));
-            days = Math.min(365, Math.max(1, days));
-            
+            String daysRaw = queryParam(exchange, "days").orElse("7").trim().toLowerCase(Locale.ROOT);
+            int days;
+            switch (daysRaw) {
+                case "1" -> days = 1;
+                case "7" -> days = 7;
+                case "30" -> days = 30;
+                case "all" -> days = ALL_DAYS;
+                default -> {
+                    sendJson(exchange, 400, Map.of("error", "days must be one of 1, 7, 30, all"));
+                    return;
+                }
+            }
+
+            limit = Math.min(PUBLIC_MAX_LIMIT, Math.max(1, limit));
+
             final int queryDays = days;
             final int queryLimit = limit;
             try {
@@ -605,7 +644,7 @@ public class WebDashboardServer {
                     }
 
                     return Map.of(
-                        "days", queryDays,
+                        "days", queryDays == ALL_DAYS ? "all" : (Object) queryDays,
                         "leaderboard", leaderboard
                     );
                 });
@@ -632,8 +671,21 @@ public class WebDashboardServer {
                 sendJson(exchange, 400, Map.of("error", "Invalid parameter format"));
                 return;
             }
-            limit = Math.min(100, Math.max(1, limit));
-            
+            limit = Math.min(PUBLIC_MAX_LIMIT, Math.max(1, limit));
+            final int queryLimit = limit;
+
+            Object body;
+            try {
+                body = cachedResponse("moments:" + queryLimit, PUBLIC_MOMENTS_CACHE_TTL_MS, () -> buildPublicMoments(queryLimit));
+            } catch (Exception e) {
+                plugin.getLogger().warning("Moments query failed: " + e.getMessage());
+                sendJson(exchange, 500, Map.of("error", "Failed to load moments"));
+                return;
+            }
+            sendJson(exchange, 200, body);
+        }
+
+        private Object buildPublicMoments(int limit) {
             // Public DTO: no player UUID, world, coordinates or payload (would reveal bases, stashes, death spots).
             List<Map<String, Object>> moments = new java.util.ArrayList<>();
             for (var moment : momentService.getRecentMoments(limit)) {
@@ -645,7 +697,7 @@ public class WebDashboardServer {
                 dto.put("endedAt", moment.getEndedAt());
                 moments.add(dto);
             }
-            sendJson(exchange, 200, Map.of("moments", moments));
+            return Map.of("moments", moments);
         }
     }
     
@@ -862,9 +914,12 @@ public class WebDashboardServer {
                 sendJson(exchange, 200, Map.of(
                     "type", type.toUpperCase(),
                     "world", world,
-                    "gridSize", gridSize,
+                    "gridSize", Math.max(HeatmapService.MIN_GRID, Math.min(gridSize, HeatmapService.MAX_GRID)),
                     "bins", heatmap
                 ));
+            } catch (HeatmapService.HeatmapBusyException e) {
+                exchange.getResponseHeaders().set("Retry-After", "5");
+                sendJson(exchange, 503, Map.of("error", "Heatmap busy, retry shortly"));
             } catch (IllegalArgumentException e) {
                 sendJson(exchange, 400, Map.of("error", "Invalid heatmap type: " + type));
             }

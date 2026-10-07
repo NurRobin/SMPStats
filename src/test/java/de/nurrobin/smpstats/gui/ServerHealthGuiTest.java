@@ -133,6 +133,7 @@ class ServerHealthGuiTest {
             50, 100, 10, 20, 5.0, Collections.emptyMap(), Collections.emptyList()
         );
         when(healthService.getLatest()).thenReturn(snapshot);
+        when(healthService.sampleNow()).thenReturn(true);
         
         ServerHealthGui gui = new ServerHealthGui(plugin, guiManager, healthService);
         

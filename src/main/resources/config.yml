@@ -149,7 +149,7 @@ retention:
   death_replays_days: 0
 health:
   enabled: true
-  sample_minutes: 5
+  sample_minutes: 15
   weights:
     chunk: 0.02
     entity: 0.005

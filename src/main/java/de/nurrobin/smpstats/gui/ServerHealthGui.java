@@ -216,10 +216,14 @@ public class ServerHealthGui implements InventoryGui, InventoryHolder {
             case 22 -> guiManager.openGui(player, new MainMenuGui(plugin, guiManager, plugin.getStatsService(), healthService));
             case 26 -> {
                 // Refresh - trigger immediate sample and refresh display
-                healthService.sampleNow();
-                playSuccessSound(player);
-                initializeItems();
-                player.sendMessage(Component.text("Server health refreshed!", NamedTextColor.GREEN));
+                if (healthService.sampleNow()) {
+                    playSuccessSound(player);
+                    initializeItems();
+                    player.sendMessage(Component.text("Server health refreshed!", NamedTextColor.GREEN));
+                } else {
+                    player.sendMessage(Component.text("Refresh is on cooldown, try again in "
+                            + healthService.refreshCooldownSeconds() + " s.", NamedTextColor.RED));
+                }
             }
         }
     }

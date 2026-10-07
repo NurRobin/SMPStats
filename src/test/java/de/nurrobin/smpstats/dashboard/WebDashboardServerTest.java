@@ -1254,6 +1254,35 @@ class WebDashboardServerTest {
     }
 
     @Test
+    void publicLeaderboardOnlyAcceptsAllowedDaysAndCapsLimit() throws Exception {
+        when(storage.loadTimelineLeaderboard(anyInt(), anyInt())).thenAnswer(inv -> new java.util.ArrayList<>());
+        var handler = dashboard.publicLeaderboardHandler();
+        for (String days : new String[]{"1", "7", "30", "all"}) {
+            FakeExchange ok = new FakeExchange("/api/public/leaderboard?days=" + days + "&limit=500", null, null, "GET");
+            handler.handle(ok);
+            assertEquals(200, ok.status, days);
+        }
+        for (String days : new String[]{"2", "365", "0", "-1", "ALLES"}) {
+            FakeExchange bad = new FakeExchange("/api/public/leaderboard?days=" + days, null, null, "GET");
+            handler.handle(bad);
+            assertEquals(400, bad.status, days);
+        }
+        verify(storage, times(1)).loadTimelineLeaderboard(7, 100);
+        verify(storage, times(1)).loadTimelineLeaderboard(3650, 100);
+    }
+
+    @Test
+    void publicMomentsAreCachedAndLimitCapped() throws Exception {
+        var handler = dashboard.publicMomentsHandler();
+        for (int i = 0; i < 3; i++) {
+            FakeExchange exchange = new FakeExchange("/api/public/moments?limit=1000", null, null, "GET");
+            handler.handle(exchange);
+            assertEquals(200, exchange.status);
+        }
+        verify(momentService, times(1)).getRecentMoments(100);
+    }
+
+    @Test
     void startAndStopReleaseResources() {
         WebDashboardServer live = new WebDashboardServer(plugin, statsService,
                 settingsWithDashboard(new Settings.DashboardSettings(true, "127.0.0.1", 0,
