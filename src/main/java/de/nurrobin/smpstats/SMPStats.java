@@ -65,6 +65,15 @@ public class SMPStats extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        String configError = validateConfigFile();
+        if (configError != null) {
+            // Leave the broken file untouched (api_key / admin password are in there) and keep a copy.
+            backupConfig("config.yml.broken");
+            getLogger().severe("config.yml is not valid YAML, SMPStats stays disabled: " + configError);
+            getLogger().severe("Fix config.yml (a copy was saved as config.yml.broken) and restart the server.");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
         ensureConfigVersion();
         this.settings = loadSettings();
 
@@ -214,6 +223,12 @@ public class SMPStats extends JavaPlugin {
     }
 
     public void reloadPluginConfig(CommandSender sender) {
+        String configError = validateConfigFile();
+        if (configError != null) {
+            getLogger().severe("Reload aborted, config.yml is not valid YAML: " + configError);
+            sender.sendMessage(ChatColor.RED + "config.yml ist ungültig, Reload abgebrochen (alte Einstellungen bleiben aktiv): " + configError);
+            return;
+        }
         reloadConfig();
         ensureConfigVersion();
         this.settings = loadSettings();
@@ -307,7 +322,7 @@ public class SMPStats extends JavaPlugin {
 
         MomentConfigParser parser = new MomentConfigParser();
         java.util.List<de.nurrobin.smpstats.moments.MomentDefinition> momentDefinitions = parser.parse(config.getConfigurationSection("moments"));
-        java.util.List<HotspotDefinition> hotspots = parseHotspots(config.getConfigurationSection("heatmap.hotspots"));
+        java.util.List<HotspotDefinition> hotspots = parseHotspots(config);
 
         boolean socialEnabled = config.getBoolean("social.enabled", true);
         int socialSampleSeconds = Math.max(1, config.getInt("social.sample_seconds", 5));
@@ -352,7 +367,7 @@ public class SMPStats extends JavaPlugin {
                 storyEnabled, storyIntervalDays, storySummaryHour, storyWebhookUrl, storyTopLimit, storyRecentMoments,
                 dashboardSettings, guiAnimatedBordersEnabled)
                 .withRetention(new Settings.RetentionSettings(
-                        Math.max(0, config.getInt("retention.heatmap_events_days", 0)),
+                        Math.max(0, config.getInt("retention.heatmap_events_days", 21)),
                         Math.max(0, config.getInt("retention.moments_days", 0)),
                         Math.max(0, config.getInt("retention.death_replays_days", 0))));
     }
@@ -442,6 +457,38 @@ public class SMPStats extends JavaPlugin {
         return new HealthThresholds(tps, memory, chunks, entities, hoppers, redstone, costIndex);
     }
 
+    /**
+     * Parses config.yml strictly. Bukkit's own loader swallows YAML errors and hands back an empty
+     * configuration, which the migration would then fill with defaults and write over the file.
+     *
+     * @return null when the file is readable, otherwise a short error description
+     */
+    String validateConfigFile() {
+        java.io.File file = new java.io.File(getDataFolder(), "config.yml");
+        if (!file.exists()) {
+            return null;
+        }
+        try {
+            new YamlConfiguration().load(file);
+            return null;
+        } catch (java.io.IOException | org.bukkit.configuration.InvalidConfigurationException e) {
+            return String.valueOf(e.getMessage()).lines().findFirst().orElse("unknown error");
+        }
+    }
+
+    private void backupConfig(String targetName) {
+        java.io.File file = new java.io.File(getDataFolder(), "config.yml");
+        if (!file.exists()) {
+            return;
+        }
+        try {
+            java.nio.file.Files.copy(file.toPath(), file.toPath().resolveSibling(targetName),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            getLogger().warning("Could not write " + targetName + ": " + e.getMessage());
+        }
+    }
+
     private void ensureConfigVersion() {
         FileConfiguration config = getConfig();
         int current = config.getInt("config_version", 1);
@@ -459,6 +506,7 @@ public class SMPStats extends JavaPlugin {
                 }
             }
             config.set("config_version", CONFIG_VERSION);
+            backupConfig("config.yml.bak");
             saveConfig();
         }
     }

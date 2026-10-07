@@ -14,6 +14,8 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SMPStatsConfigTest {
@@ -26,10 +28,18 @@ class SMPStatsConfigTest {
         }
     }
 
+    /** MockBukkit names the data folder "<name>-<version>", so derive it from plugin.yml. */
+    private Path pluginDir() throws Exception {
+        try (var in = SMPStats.class.getResourceAsStream("/plugin.yml")) {
+            var desc = new org.bukkit.plugin.PluginDescriptionFile(in);
+            return server.getPluginsFolder().toPath().resolve(desc.getName() + "-" + desc.getVersion());
+        }
+    }
+
     @Test
     void upgradesOldConfigAndParsesHotspotsFallback() throws Exception {
         server = MockBukkit.mock();
-        Path pluginDir = server.getPluginsFolder().toPath().resolve("SMPStats");
+        Path pluginDir = pluginDir();
         Files.createDirectories(pluginDir);
         Files.writeString(pluginDir.resolve("config.yml"), """
                 config_version: 1
@@ -69,6 +79,10 @@ class SMPStatsConfigTest {
         assertTrue(plugin.getServerHealthService().isPresent());
         assertTrue(plugin.getStoryService().isPresent());
 
+        // The real loadSettings() path must pick the configured hotspot up, not only the helper.
+        assertEquals(1, plugin.getSettings().getHeatmapHotspots().size());
+        assertEquals("Spawn", plugin.getSettings().getHeatmapHotspots().getFirst().getName());
+
         List<HotspotDefinition> parsed = invokeParseHotspots(plugin, plugin.getConfig());
         assertEquals(1, parsed.size());
         assertEquals("Spawn", parsed.getFirst().getName());
@@ -86,6 +100,49 @@ class SMPStatsConfigTest {
         List<HotspotDefinition> fallback = invokeParseHotspots(plugin, yaml);
         assertEquals("Fallback", fallback.getFirst().getName());
 
+        plugin.onDisable();
+    }
+
+    private static final String BROKEN_YAML = """
+            api:
+              enabled: true
+              api_key: "secret-key"
+             broken: [unclosed
+            dashboard:
+              admin:
+                password: hunter2
+            """;
+
+    @Test
+    void brokenConfigIsNeverOverwrittenOnStartup() throws Exception {
+        server = MockBukkit.mock();
+        Path pluginDir = pluginDir();
+        Files.createDirectories(pluginDir);
+        Files.writeString(pluginDir.resolve("config.yml"), BROKEN_YAML);
+
+        SMPStats plugin = MockBukkit.load(SMPStats.class);
+
+        assertEquals(BROKEN_YAML, Files.readString(pluginDir.resolve("config.yml")));
+        assertEquals(BROKEN_YAML, Files.readString(pluginDir.resolve("config.yml.broken")));
+        assertFalse(plugin.isEnabled());
+    }
+
+    @Test
+    void brokenConfigAbortsReloadAndKeepsSettings() throws Exception {
+        server = MockBukkit.mock();
+        Path pluginDir = pluginDir();
+        Files.createDirectories(pluginDir);
+        Files.writeString(pluginDir.resolve("config.yml"), "config_version: 8\napi:\n  enabled: false\n");
+        SMPStats plugin = MockBukkit.load(SMPStats.class);
+        Settings before = plugin.getSettings();
+
+        Files.writeString(pluginDir.resolve("config.yml"), BROKEN_YAML);
+        org.bukkit.command.CommandSender sender = org.mockito.Mockito.mock(org.bukkit.command.CommandSender.class);
+        plugin.reloadPluginConfig(sender);
+
+        assertEquals(BROKEN_YAML, Files.readString(pluginDir.resolve("config.yml")));
+        assertSame(before, plugin.getSettings());
+        org.mockito.Mockito.verify(sender).sendMessage(org.mockito.ArgumentMatchers.contains("ungültig"));
         plugin.onDisable();
     }
 
