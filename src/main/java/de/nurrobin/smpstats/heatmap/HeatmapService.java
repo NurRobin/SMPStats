@@ -24,6 +24,7 @@ public class HeatmapService {
     // Last recorded POSITION per player; standing still (AFK farms) adds no rows.
     private final Map<java.util.UUID, Location> lastPositions = new HashMap<>();
     private static final double MIN_POSITION_MOVE_SQUARED = 2.0 * 2.0;
+    static final int MAX_PENDING_EVENTS = 200_000;
     static final long MAX_WINDOW_MILLIS = java.util.concurrent.TimeUnit.DAYS.toMillis(90);
     private int flushTaskId = -1;
     private int positionTaskId = -1;
@@ -175,6 +176,14 @@ public class HeatmapService {
                 storage.insertHeatmapEntries(batch);
             } catch (SQLException e) {
                 plugin.getLogger().warning("Could not persist heatmap events: " + e.getMessage());
+                synchronized (pendingEvents) {
+                    // Keep the batch for the next flush instead of losing it; cap so a dead DB cannot grow the list forever.
+                    pendingEvents.addAll(0, batch);
+                    int excess = pendingEvents.size() - MAX_PENDING_EVENTS;
+                    if (excess > 0) {
+                        pendingEvents.subList(0, excess).clear();
+                    }
+                }
             }
         }
 

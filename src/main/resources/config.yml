@@ -140,11 +140,11 @@ death_replay:
   nearby_radius: 16   # Radius to include nearby entities (blocks)
   limit: 50           # Number of death reports kept in memory for the GUI
 
-# How long raw event rows stay in the database. 0 = keep forever (default).
+# How long raw event rows stay in the database. 0 = keep forever. heatmap_events defaults to 21 days (POSITION rows grow fast).
 # Deletion is permanent and also applies to data from earlier seasons in the same database.
 # For a server that runs all year, heatmap_events is the table worth bounding (e.g. 120).
 retention:
-  heatmap_events_days: 0
+  heatmap_events_days: 21
   moments_days: 0
   death_replays_days: 0
 health:

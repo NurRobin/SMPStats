@@ -247,6 +247,26 @@ class HeatmapServiceTest {
         assertEquals(2, batch.getValue().size());
     }
 
+    @Test
+    void failedFlushKeepsBatchForNextAttempt() throws Exception {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        StatsStorage storage = mock(StatsStorage.class);
+        doThrow(new java.sql.SQLException("locked")).doNothing().when(storage).insertHeatmapEntries(anyList());
+        HeatmapService service = new HeatmapService(plugin, storage, settings(true, List.of()));
+
+        World world = mock(World.class);
+        when(world.getName()).thenReturn("world");
+        service.track("BREAK", new Location(world, 32, 64, 48));
+        service.shutdown(); // first flush fails
+        service.shutdown(); // second flush must retry the same row
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<List<de.nurrobin.smpstats.database.HeatmapEntry>> batch = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(storage, times(2)).insertHeatmapEntries(batch.capture());
+        assertEquals(1, batch.getAllValues().get(1).size());
+    }
+
     private static void stubEvents(StatsStorage storage, HeatmapEvent... events) throws Exception {
         doAnswer(invocation -> {
             StatsStorage.HeatmapEventConsumer consumer = invocation.getArgument(4);
