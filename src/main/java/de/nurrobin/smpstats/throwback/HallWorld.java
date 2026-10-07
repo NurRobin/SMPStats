@@ -71,6 +71,7 @@ public final class HallWorld implements HallWorlds {
         }
         apply(world);
         removeLeftovers(world);
+        logger.info("Throwback: Hallen-Welt " + name + " geladen");
         return world;
     }
 
@@ -128,7 +129,9 @@ public final class HallWorld implements HallWorlds {
             }
         }
         boolean ok = Bukkit.unloadWorld(world, true);
-        if (!ok) {
+        if (ok) {
+            logger.info("Throwback: Hallen-Welt " + name + " entladen (niemand mehr drin)");
+        } else {
             logger.warning("Throwback: Welt " + name + " ließ sich nicht entladen");
         }
         return ok;

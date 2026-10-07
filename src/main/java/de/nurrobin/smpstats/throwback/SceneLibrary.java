@@ -34,7 +34,7 @@ public final class SceneLibrary {
                     Prop.block(Material.GRASS_BLOCK, 0, -0.01, 0.8, 0.5f), Prop.block(Material.OAK_FENCE, 1.1, 0, -0.4, 0.4f),
                     Prop.block(Material.OAK_SIGN, -1.0, 0.4, 0.2, 0.4f));
             case ELYTRA -> scene(Pose.FALL_FLYING, null, null, null, Material.ELYTRA, 1.0, null,
-                    Prop.item(Material.FIREWORK_ROCKET, 0.0, 1.2, -1.2, 0.5f), Prop.block(Material.WHITE_WOOL, -1.0, 1.4, -0.4, 0.5f),
+                    Prop.item(Material.FEATHER, 0.0, 1.2, -1.2, 0.5f), Prop.block(Material.WHITE_WOOL, -1.0, 1.4, -0.4, 0.5f),
                     Prop.block(Material.WHITE_WOOL, 1.0, 0.9, 0.6, 0.6f));
             case GHAST -> scene(Pose.STANDING, Material.LEAD, null, null, null, 1.5, null,
                     Prop.block(Material.WHITE_WOOL, 0, 0.0, 0, 1.5f), Prop.block(Material.WHITE_CONCRETE, 0.45, 0.0, 0.2, 0.3f),

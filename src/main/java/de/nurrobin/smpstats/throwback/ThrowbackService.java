@@ -63,6 +63,7 @@ public final class ThrowbackService {
     private java.util.function.BiFunction<Player, Location, java.util.concurrent.CompletableFuture<Boolean>> teleporter =
             (player, location) -> player.teleportAsync(location);
     private volatile ThrowbackSettings settings;
+    private World wallsWorld;
     private volatile ThrowbackTexts texts;
     private volatile TrophyBoard board;
     private volatile ThrowbackContent content;
@@ -220,8 +221,11 @@ public final class ThrowbackService {
         return c;
     }
 
-    public HallPlan planFor(UUID uuid, String name) {
-        return content().plan(uuid, name, Math.max(HallLayout.MAX_STAGES, 0));
+    /** What the player named {@code name} (as listed in the season) would see; unknown names get the newcomer tour. */
+    public HallPlan previewPlan(String name) {
+        TrophyBoard b = board;
+        UUID uuid = b == null ? UUID.randomUUID() : b.playerByName(name).map(p -> p.uuid()).orElse(UUID.randomUUID());
+        return content().plan(uuid, name, settings.layout().stages().isEmpty() ? HallLayout.MAX_STAGES : settings.layout().stages().size());
     }
 
     // ------------------------------------------------------------------ joining and leaving
@@ -317,9 +321,23 @@ public final class ThrowbackService {
         return spawn.clone();
     }
 
+    /** Loads the hall world and, when it was not loaded before, puts the picture walls up again (renderers are not saved). */
+    private World loadHall() {
+        World world = hall.load();
+        if (world != null && world != wallsWorld) {
+            wallsWorld = world;
+            try {
+                wall.build(world, settings.layout().walls(), dataFolder.resolve(settings.imagesFolder()));
+            } catch (RuntimeException e) {
+                logger.log(java.util.logging.Level.WARNING, "Throwback: Bilderwände konnten nicht aufgebaut werden", e);
+            }
+        }
+        return world;
+    }
+
     private void enterHall(Player p, Location origin) {
         UUID uuid = p.getUniqueId();
-        World world = hall.load();
+        World world = loadHall();
         if (world == null) {
             flow.end(uuid);
             p.sendMessage(texts.message("hall_closed"));
@@ -683,7 +701,9 @@ public final class ThrowbackService {
         }
         unloadTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             unloadTask = null;
-            hall.unload();
+            if (hall.unload()) {
+                wallsWorld = null;
+            }
         }, settings.unloadDelaySeconds() * 20L);
     }
 
@@ -700,11 +720,10 @@ public final class ThrowbackService {
 
     /** Loads the hall world (for building and for the walls) and (re)builds the picture walls. */
     public World loadForAdmin() {
-        World world = hall.load();
+        World world = loadHall();
         if (world != null) {
             cancel(unloadTask);
             unloadTask = null;
-            wall.build(world, settings.layout().walls(), dataFolder.resolve(settings.imagesFolder()));
         }
         return world;
     }
@@ -728,6 +747,17 @@ public final class ThrowbackService {
         this.settings = new ThrowbackSettings(s.enabled(), s.world(), s.season(), s.minPlaytimeMinutes(), s.rankBadgeTop(),
                 s.rulesVersion(), s.privacyUrl(), s.matchByNameOffline(), s.unloadDelaySeconds(), s.imagesFolder(),
                 s.textsFile(), s.exitWorld(), s.exit(), s.spawnPortal(), layout);
+    }
+
+    /** Staff override: marks the tour as done; a player who is in the hall right now is sent out. */
+    public void skipTour(UUID uuid) {
+        boolean inHall = flow.inHall(uuid);
+        flow.markCompleted(uuid);
+        Player p = Bukkit.getPlayer(uuid);
+        if (p != null && inHall) {
+            closeVisuals(uuid);
+            sendToExit(p);
+        }
     }
 
     /** Forgets a player's progress so they go through the mandatory tour again (for testing and corrections). */
