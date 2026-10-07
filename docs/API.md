@@ -362,7 +362,7 @@ Returns leaderboards for various statistics.
 ```
 
 #### GET `/api/public/moments`
-Returns recent moments.
+Returns recent moments. Public and unauthenticated, so it deliberately omits player UUIDs, world, coordinates and payload.
 
 **Query Parameters:**
 - `limit` (int, default 20): Maximum moments to return
@@ -372,15 +372,9 @@ Returns recent moments.
 {
   "moments": [
     {
-      "id": 1,
-      "playerId": "uuid",
       "type": "KILL_STREAK",
       "title": "Player1 achieved a 5-kill streak!",
       "detail": "5 kills in 30 seconds",
-      "world": "world",
-      "x": 100,
-      "y": 64,
-      "z": -200,
       "startedAt": 1234567890000,
       "endedAt": 1234567920000
     }

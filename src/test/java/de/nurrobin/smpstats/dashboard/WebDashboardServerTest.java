@@ -187,6 +187,27 @@ class WebDashboardServerTest {
         assertTrue(body.contains("moments"));
     }
 
+    @Test
+    void publicMomentsHandlerDoesNotLeakIdentityOrCoordinates() throws Exception {
+        UUID playerId = UUID.randomUUID();
+        MomentEntry moment = new MomentEntry(7L, playerId, "DIAMOND_RUN", "Alex found diamonds", "12 diamonds",
+                "{\"secret\":1}", "world", 1234, 12, -5678, 1000L, 2000L);
+        when(momentService.getRecentMoments(20)).thenReturn(List.of(moment));
+
+        var handler = dashboard.publicMomentsHandler();
+        FakeExchange exchange = new FakeExchange("/api/public/moments?limit=20", null, null, "GET");
+        handler.handle(exchange);
+
+        assertEquals(200, exchange.status);
+        String body = exchange.body();
+        assertTrue(body.contains("Alex found diamonds"));
+        assertFalse(body.contains(playerId.toString()));
+        assertFalse(body.contains("1234"));
+        assertFalse(body.contains("5678"));
+        assertFalse(body.contains("secret"));
+        assertFalse(body.contains("\"world\""));
+    }
+
     // ============== Public Stats Handler Tests ==============
     
     @Test

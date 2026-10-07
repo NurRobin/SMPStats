@@ -381,7 +381,7 @@ class SMPStatsDashboard {
                     <div class="moment-title">${this.escapeHtml(moment.title)}</div>
                     <div class="moment-detail">${this.escapeHtml(moment.detail)}</div>
                     <div class="moment-meta">
-                        <span>${this.escapeHtml(moment.world)} (${this.escapeHtml(moment.x)}, ${this.escapeHtml(moment.y)}, ${this.escapeHtml(moment.z)})</span>
+                        <span>${this.escapeHtml(moment.type)}</span>
                         <span>${this.formatTimestamp(moment.endedAt)}</span>
                     </div>
                 </div>
