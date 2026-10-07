@@ -443,6 +443,43 @@ class StatsStorageTest {
     }
 
     @Test
+    void heatmapScanDoesNotBlockMainConnection() throws Exception {
+        StatsStorage storage = newStorage();
+        long now = System.currentTimeMillis();
+        storage.insertHeatmapEntries(List.of(new HeatmapEntry("POSITION", "world", 1, 64, 1, 1.0, now)));
+        java.util.concurrent.CountDownLatch inScan = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        Thread scan = new Thread(() -> {
+            try {
+                storage.forEachHeatmapEvent("POSITION", "world", 0, now + 1, (x, z, v, ts) -> {
+                    inScan.countDown();
+                    try {
+                        release.await(10, java.util.concurrent.TimeUnit.SECONDS);
+                    } catch (InterruptedException ignored) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+            } catch (java.sql.SQLException ignored) {
+            }
+        });
+        scan.start();
+        assertTrue(inScan.await(5, java.util.concurrent.TimeUnit.SECONDS));
+        java.util.concurrent.CompletableFuture<Void> write = java.util.concurrent.CompletableFuture.runAsync(() -> {
+            try {
+                storage.save(new StatsRecord(UUID.randomUUID(), "Writer"));
+            } catch (java.sql.SQLException e) {
+                throw new RuntimeException(e);
+            }
+        });
+        try {
+            write.get(3, java.util.concurrent.TimeUnit.SECONDS);
+        } finally {
+            release.countDown();
+            scan.join(5000);
+        }
+    }
+
+    @Test
     void schemaV9CreatesSeasonAndThrowbackTables() throws Exception {
         StatsStorage storage = newStorage();
         java.util.Set<String> tables = storage.withConnection(c -> {
