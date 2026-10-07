@@ -1,4 +1,4 @@
-config_version: 8
+config_version: 9
 
 # GUI settings
 gui:
@@ -201,3 +201,31 @@ story:
   webhook_url: ""           # Optional HTTP endpoint for JSON export
   top_limit: 5              # Top players included in summary
   recent_moments: 10        # Moments included with the summary
+
+# Throwback-Halle: Rückblick auf die Saison 2025 beim ersten Join (eigene Void-Welt).
+# Die Halle läuft erst, wenn Start, Regeltafel und Portal eingemessen sind (/throwback admin build erzeugt
+# einen Platzhalter-Gang zum Testen). Die Welt gehört nicht auf die BlueMap (in der BlueMap-Config nicht eintragen).
+throwback:
+  enabled: true
+  world: throwback_hall
+  season: "2025"                 # Saison aus plugins/SMPStats/seasons/<saison>/
+  min_playtime_minutes: 60       # ab so viel Spielzeit 2025 gibt es Trophäen
+  rank_badge_top: 15             # "Platz X von N" nur bis zu diesem Platz
+  rules_version: "2026-1"        # bei neuem Regeltext hochzählen; wird bei der Bestätigung mitgespeichert
+  privacy_url: "https://christmas.nurrobin.de/datenschutz"
+  match_by_name_offline: true    # nur Testserver im Offline-Modus: Spieler der Saison per Name statt UUID finden
+  unload_delay_seconds: 60       # so lange nach dem letzten Besucher bleibt die Welt geladen
+  images_folder: "throwback/images"   # PNGs der Bilderwand "Bauten 2025", relativ zu plugins/SMPStats
+  texts_file: "throwback/texts.yml"   # Texte, Regeln, Vergleiche (wird beim ersten Start angelegt)
+  # exit:                        # Ziel nach dem Pflicht-Rundgang; sonst der Spawn der ersten Welt
+  #   world: world
+  #   x: 0.5
+  #   y: 80
+  #   z: 0.5
+  #   yaw: 0
+  # spawn_portal:                # Eingang im Spawn: wer hineinläuft, besucht die Halle freiwillig
+  #   world: world
+  #   min: {x: 0, y: 80, z: 0}
+  #   max: {x: 2, y: 83, z: 0}
+  #   exit: {x: 0.5, y: 80, z: 4.5, yaw: 0}   # wohin Besucher zurückkehren
+  layout: {}                     # wird mit /throwback admin ... eingemessen

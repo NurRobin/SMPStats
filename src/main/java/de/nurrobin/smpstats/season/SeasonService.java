@@ -29,6 +29,7 @@ public final class SeasonService {
     private final SeasonImporter importer;
     private final Executor async;
     private final Set<String> running = ConcurrentHashMap.newKeySet();
+    private volatile java.util.function.Consumer<String> onImported = season -> { };
 
     public SeasonService(Logger logger, Path seasonsRoot, SeasonStore store, SeasonImporter importer, Executor async) {
         this.logger = logger;
@@ -36,6 +37,11 @@ public final class SeasonService {
         this.store = store;
         this.importer = importer;
         this.async = async;
+    }
+
+    /** Called (on the import thread) after a season was written successfully. */
+    public void onImported(java.util.function.Consumer<String> listener) {
+        this.onImported = listener;
     }
 
     public static boolean isValidName(String season) {
@@ -118,6 +124,11 @@ public final class SeasonService {
         logger.info("Saison " + season + " importiert: " + read.data().players().size() + " Spieler, " + rows
                 + " Werte, Quelle: " + read.data().source());
         read.problems().forEach(p -> logger.warning("[Saison " + season + "] " + p));
+        try {
+            onImported.accept(season);
+        } catch (RuntimeException e) {
+            logger.warning("Saison-Import-Hook fehlgeschlagen: " + e.getMessage());
+        }
         return new Outcome(season, read.data().players().size(), rows, List.copyOf(read.problems()));
     }
 }

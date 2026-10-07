@@ -179,6 +179,87 @@ public final class SeasonStore {
         });
     }
 
+    /** All players of a season, keyed by uuid. */
+    public Map<UUID, SeasonPlayer> players(String season) throws SQLException {
+        return storage.withConnection(c -> {
+            Map<UUID, SeasonPlayer> out = new HashMap<>();
+            try (PreparedStatement st = c.prepareStatement(
+                    "SELECT uuid, name, playtime_ms FROM season_players WHERE season = ?")) {
+                st.setString(1, season);
+                try (ResultSet rs = st.executeQuery()) {
+                    while (rs.next()) {
+                        UUID uuid = UUID.fromString(rs.getString(1));
+                        out.put(uuid, new SeasonPlayer(uuid, rs.getString(2), rs.getLong(3)));
+                    }
+                }
+            }
+            return out;
+        });
+    }
+
+    /**
+     * Stat rows of a season whose key equals one of {@code exactKeys} or starts with one of {@code prefixes},
+     * grouped per player. Zero values are included, callers decide what they mean.
+     */
+    public Map<UUID, Map<String, Double>> statsMatching(String season, java.util.Collection<String> exactKeys,
+                                                         java.util.Collection<String> prefixes) throws SQLException {
+        return storage.withConnection(c -> {
+            Map<UUID, Map<String, Double>> out = new HashMap<>();
+            StringBuilder sql = new StringBuilder("SELECT uuid, stat_key, value FROM season_stats WHERE season = ? AND (0");
+            for (int i = 0; i < exactKeys.size(); i++) {
+                sql.append(" OR stat_key = ?");
+            }
+            for (int i = 0; i < prefixes.size(); i++) {
+                sql.append(" OR stat_key LIKE ? ESCAPE '\\'");
+            }
+            sql.append(")");
+            try (PreparedStatement st = c.prepareStatement(sql.toString())) {
+                int idx = 1;
+                st.setString(idx++, season);
+                for (String key : exactKeys) {
+                    st.setString(idx++, key);
+                }
+                for (String prefix : prefixes) {
+                    st.setString(idx++, prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%");
+                }
+                try (ResultSet rs = st.executeQuery()) {
+                    while (rs.next()) {
+                        out.computeIfAbsent(UUID.fromString(rs.getString(1)), k -> new HashMap<>())
+                                .put(rs.getString(2), rs.getDouble(3));
+                    }
+                }
+            }
+            return out;
+        });
+    }
+
+    /** Completion times of the given advancements (or moment keys), grouped per player. */
+    public Map<UUID, Map<String, Long>> advancementsOf(String season, java.util.Collection<String> keys) throws SQLException {
+        return storage.withConnection(c -> {
+            Map<UUID, Map<String, Long>> out = new HashMap<>();
+            if (keys.isEmpty()) {
+                return out;
+            }
+            String marks = String.join(",", java.util.Collections.nCopies(keys.size(), "?"));
+            try (PreparedStatement st = c.prepareStatement(
+                    "SELECT uuid, advancement, achieved_at FROM season_advancements WHERE season = ? AND advancement IN ("
+                            + marks + ")")) {
+                int idx = 1;
+                st.setString(idx++, season);
+                for (String key : keys) {
+                    st.setString(idx++, key);
+                }
+                try (ResultSet rs = st.executeQuery()) {
+                    while (rs.next()) {
+                        out.computeIfAbsent(UUID.fromString(rs.getString(1)), k -> new HashMap<>())
+                                .put(rs.getString(2), rs.getLong(3));
+                    }
+                }
+            }
+            return out;
+        });
+    }
+
     public Optional<SeasonPlayer> player(String season, UUID uuid) throws SQLException {
         return storage.withConnection(c -> {
             try (PreparedStatement st = c.prepareStatement(
