@@ -1,6 +1,7 @@
 package de.nurrobin.smpstats;
 
 import de.nurrobin.smpstats.database.StatsStorage;
+import de.nurrobin.smpstats.database.WriteQueue;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import de.nurrobin.smpstats.skills.SkillCalculator;
@@ -21,8 +22,14 @@ public class StatsService {
     private Settings settings;
     private SkillCalculator skillCalculator;
     private final Map<UUID, PlayerSession> sessions = new ConcurrentHashMap<>();
+    private final WriteQueue writeQueue;
 
     public StatsService(SMPStats plugin, StatsStorage storage, Settings settings) {
+        this(plugin, storage, settings, WriteQueue.inline());
+    }
+
+    public StatsService(SMPStats plugin, StatsStorage storage, Settings settings, WriteQueue writeQueue) {
+        this.writeQueue = writeQueue;
         this.plugin = plugin;
         this.storage = storage;
         this.settings = settings;
@@ -69,7 +76,7 @@ public class StatsService {
             session.updatePlaytime(now);
             session.getRecord().setLastJoin(now);
         }
-        persist(session);
+        writeQueue.submit(() -> persist(session));
     }
 
     /**
@@ -82,7 +89,7 @@ public class StatsService {
             synchronized (session) {
                 session.updatePlaytime(now);
             }
-            persist(session);
+            writeQueue.submit(() -> persist(session));
         }
     }
 

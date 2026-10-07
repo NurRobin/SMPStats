@@ -235,6 +235,8 @@ public class StatsStorage implements Closeable {
                     );
                     """);
             st.execute("CREATE INDEX IF NOT EXISTS idx_player_name ON player_stats(name);");
+            // Case-insensitive name lookup (/stats <name>) must not scan the table.
+            st.execute("CREATE INDEX IF NOT EXISTS idx_player_name_lower ON player_stats(lower(name));");
         }
     }
 

@@ -294,4 +294,92 @@ class HeatmapServiceTest {
                 false, 1, 1, "", 1, 1,
                 Settings.DashboardSettings.defaults(), true);
     }
+
+    @Test
+    void gridBelowMinimumIsRaisedToEight() throws Exception {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        StatsStorage storage = mock(StatsStorage.class);
+        HeatmapService service = new HeatmapService(plugin, storage, settings(true, List.of()));
+        stubEvents(storage, new HeatmapEvent(1, 64, 1, 1.0, System.currentTimeMillis()));
+
+        List<HeatmapBin> bins = service.generateHeatmap("BREAK", "world", 0, System.currentTimeMillis(), 0, 1);
+
+        assertEquals(1, bins.size());
+        assertEquals(HeatmapService.MIN_GRID, bins.get(0).getGridSize());
+    }
+
+    @Test
+    void resultIsCappedAtMaxBinsKeepingTheHeaviest() throws Exception {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        StatsStorage storage = mock(StatsStorage.class);
+        HeatmapService service = new HeatmapService(plugin, storage, settings(true, List.of()));
+        long now = System.currentTimeMillis();
+        int total = HeatmapService.MAX_BINS + 500;
+        HeatmapEvent[] events = new HeatmapEvent[total];
+        for (int i = 0; i < total; i++) {
+            // one bin per event (8-block grid), weight grows with i
+            events[i] = new HeatmapEvent(i * 8.0 + 1, 64, 1, i + 1.0, now);
+        }
+        stubEvents(storage, events);
+
+        List<HeatmapBin> bins = service.generateHeatmap("BREAK", "world", 0, now, 0, 8);
+
+        assertEquals(HeatmapService.MAX_BINS, bins.size());
+        assertEquals(total, bins.get(0).getCount(), 0.001);
+        assertEquals(total - HeatmapService.MAX_BINS + 1, bins.get(bins.size() - 1).getCount(), 0.001);
+    }
+
+    @Test
+    void identicalRequestsAreServedFromCacheForSixtySeconds() throws Exception {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        StatsStorage storage = mock(StatsStorage.class);
+        HeatmapService service = new HeatmapService(plugin, storage, settings(true, List.of()));
+        long[] clock = {1_000_000_000L};
+        service.setClock(() -> clock[0]);
+        stubEvents(storage, new HeatmapEvent(1, 64, 1, 1.0, clock[0]));
+
+        service.generateHeatmap("BREAK", "world", 0, clock[0], 0, 16);
+        clock[0] += 59_000L;
+        service.generateHeatmap("BREAK", "world", 0, clock[0] - 59_000L, 0, 16);
+        verify(storage, times(1)).forEachHeatmapEvent(anyString(), anyString(), anyLong(), anyLong(), any());
+
+        clock[0] += 2_000L;
+        service.generateHeatmap("BREAK", "world", 0, clock[0] - 61_000L, 0, 16);
+        verify(storage, times(2)).forEachHeatmapEvent(anyString(), anyString(), anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void onlyOneHeatmapCalculationRunsAtATime() throws Exception {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        StatsStorage storage = mock(StatsStorage.class);
+        HeatmapService service = new HeatmapService(plugin, storage, settings(true, List.of()));
+        java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicInteger concurrent = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger maxConcurrent = new java.util.concurrent.atomic.AtomicInteger();
+        doAnswer(inv -> {
+            int now = concurrent.incrementAndGet();
+            maxConcurrent.accumulateAndGet(now, Math::max);
+            entered.countDown();
+            release.await(10, java.util.concurrent.TimeUnit.SECONDS);
+            concurrent.decrementAndGet();
+            return null;
+        }).when(storage).forEachHeatmapEvent(anyString(), anyString(), anyLong(), anyLong(), any());
+
+        Thread first = new Thread(() -> service.generateHeatmap("BREAK", "world", 0, 5_000, 0, 16));
+        first.start();
+        assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS));
+        Thread second = new Thread(() -> service.generateHeatmap("MINING", "world", 0, 5_000, 0, 16));
+        second.start();
+        Thread.sleep(300);
+        assertEquals(1, concurrent.get());
+        release.countDown();
+        first.join(5000);
+        second.join(5000);
+        assertEquals(1, maxConcurrent.get());
+    }
 }

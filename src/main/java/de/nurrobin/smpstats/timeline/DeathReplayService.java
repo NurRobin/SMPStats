@@ -2,6 +2,7 @@ package de.nurrobin.smpstats.timeline;
 
 import de.nurrobin.smpstats.Settings;
 import de.nurrobin.smpstats.database.StatsStorage;
+import de.nurrobin.smpstats.database.WriteQueue;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
@@ -22,7 +23,14 @@ public class DeathReplayService {
     private Settings settings;
     private final Deque<DeathReplayEntry> buffer = new ArrayDeque<>();
 
+    private final WriteQueue writeQueue;
+
     public DeathReplayService(Plugin plugin, StatsStorage storage, Settings settings) {
+        this(plugin, storage, settings, WriteQueue.inline());
+    }
+
+    public DeathReplayService(Plugin plugin, StatsStorage storage, Settings settings, WriteQueue writeQueue) {
+        this.writeQueue = writeQueue;
         this.plugin = plugin;
         this.storage = storage;
         this.settings = settings;
@@ -87,11 +95,13 @@ public class DeathReplayService {
         while (buffer.size() > settings.getDeathReplayLimit()) {
             buffer.removeLast();
         }
-        try {
-            storage.saveDeathReplay(entry);
-        } catch (SQLException e) {
-            plugin.getLogger().warning("Could not save death replay: " + e.getMessage());
-        }
+        writeQueue.submit(() -> {
+            try {
+                storage.saveDeathReplay(entry);
+            } catch (SQLException e) {
+                plugin.getLogger().warning("Could not save death replay: " + e.getMessage());
+            }
+        });
     }
 
     public List<DeathReplayEntry> recent(int limit) {

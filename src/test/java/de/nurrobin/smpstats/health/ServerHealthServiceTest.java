@@ -46,7 +46,7 @@ class ServerHealthServiceTest {
         service.start();
         
         // Let the scheduler tick to trigger the sample task
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         HealthSnapshot snapshot = service.getLatest();
         assertNotNull(snapshot);
@@ -94,7 +94,7 @@ class ServerHealthServiceTest {
         ServerHealthService service = new ServerHealthService(plugin, settings);
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         assertNotNull(service.getLatest());
         
         service.shutdown();
@@ -109,7 +109,7 @@ class ServerHealthServiceTest {
         ServerHealthService service = new ServerHealthService(plugin, settings);
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         HealthSnapshot snapshot = service.getLatest();
         assertNotNull(snapshot);
@@ -124,7 +124,7 @@ class ServerHealthServiceTest {
         
         long before = System.currentTimeMillis();
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         long after = System.currentTimeMillis();
         
         HealthSnapshot snapshot = service.getLatest();
@@ -141,7 +141,7 @@ class ServerHealthServiceTest {
         ServerHealthService service = new ServerHealthService(plugin, settings);
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         HealthSnapshot snapshot = service.getLatest();
         assertNotNull(snapshot);
@@ -158,7 +158,7 @@ class ServerHealthServiceTest {
         ServerHealthService service = new ServerHealthService(plugin, settings);
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         HealthSnapshot snapshot = service.getLatest();
         assertNotNull(snapshot);
@@ -175,14 +175,14 @@ class ServerHealthServiceTest {
         ServerHealthService service = new ServerHealthService(plugin, settings);
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         assertNotNull(service.getLatest());
         
         service.shutdown();
         
         // Start again
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         assertNotNull(service.getLatest());
         
         service.shutdown();
@@ -197,7 +197,7 @@ class ServerHealthServiceTest {
         ServerHealthService service = new ServerHealthService(plugin, settings);
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         HealthSnapshot snapshot = service.getLatest();
         assertNotNull(snapshot);
@@ -223,7 +223,7 @@ class ServerHealthServiceTest {
         ServerHealthService service = new ServerHealthService(plugin, settings);
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         // Get last 60 minutes of history
         List<HealthSnapshot> history = service.getHistory(60);
@@ -245,12 +245,15 @@ class ServerHealthServiceTest {
         ServerHealthService service = new ServerHealthService(plugin, settings);
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
-        // Trigger additional samples
-        service.sampleNow();
-        service.sampleNow();
-        service.sampleNow();
+        // Trigger additional samples (refresh cooldown is driven by a test clock)
+        long[] now = {System.currentTimeMillis() + 60_000L};
+        service.setClock(() -> now[0]);
+        for (int i = 0; i < 3; i++) {
+            assertTrue(service.sampleNow());
+            now[0] += ServerHealthService.REFRESH_COOLDOWN_MILLIS;
+        }
         
         List<HealthSnapshot> history = service.getHistory(60);
         assertNotNull(history);
@@ -279,7 +282,7 @@ class ServerHealthServiceTest {
         ServerHealthService service = new ServerHealthService(plugin, settings);
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         HealthSnapshot firstSnapshot = service.getLatest();
         assertNotNull(firstSnapshot);
@@ -302,7 +305,7 @@ class ServerHealthServiceTest {
         ServerHealthService service = new ServerHealthService(plugin, settings);
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         HealthSnapshot snapshot = service.getLatest();
         assertNotNull(snapshot);
@@ -322,7 +325,7 @@ class ServerHealthServiceTest {
         ServerHealthService service = new ServerHealthService(plugin, settings);
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         HealthSnapshot snapshot = service.getLatest();
         assertNotNull(snapshot);
@@ -340,7 +343,7 @@ class ServerHealthServiceTest {
         ServerHealthService service = new ServerHealthService(plugin, settings);
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         HealthSnapshot snapshot = service.getLatest();
         assertNotNull(snapshot);
@@ -362,7 +365,7 @@ class ServerHealthServiceTest {
         ServerHealthService service = new ServerHealthService(plugin, settings);
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         HealthSnapshot snapshot = service.getLatest();
         assertNotNull(snapshot);
@@ -384,7 +387,7 @@ class ServerHealthServiceTest {
         ServerHealthService service = new ServerHealthService(plugin, settings);
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         service.sampleNow();
         service.sampleNow();
         
@@ -451,7 +454,7 @@ class ServerHealthServiceTest {
         }
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         HealthSnapshot snapshot = service.getLatest();
         assertNotNull(snapshot);
@@ -478,7 +481,7 @@ class ServerHealthServiceTest {
         }
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         HealthSnapshot snapshot = service.getLatest();
         assertNotNull(snapshot);
@@ -509,7 +512,7 @@ class ServerHealthServiceTest {
         }
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         HealthSnapshot snapshot = service.getLatest();
         assertNotNull(snapshot);
@@ -531,7 +534,7 @@ class ServerHealthServiceTest {
         }
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         HealthSnapshot snapshot = service.getLatest();
         assertNotNull(snapshot);
@@ -555,7 +558,7 @@ class ServerHealthServiceTest {
         }
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         HealthSnapshot snapshot = service.getLatest();
         assertNotNull(snapshot);
@@ -595,7 +598,7 @@ class ServerHealthServiceTest {
         }
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         HealthSnapshot snapshot = service.getLatest();
         assertNotNull(snapshot);
@@ -619,7 +622,7 @@ class ServerHealthServiceTest {
         ServerHealthService service = new ServerHealthService(plugin, settings);
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         HealthSnapshot snapshot = service.getLatest();
         assertNotNull(snapshot);
@@ -645,7 +648,7 @@ class ServerHealthServiceTest {
         }
         
         service.start();
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         HealthSnapshot snapshot = service.getLatest();
         assertNotNull(snapshot);
@@ -686,7 +689,7 @@ class ServerHealthServiceTest {
         service.start();
         service.start();
         
-        server.getScheduler().performOneTick();
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS);
         
         // Should still work correctly
         HealthSnapshot snapshot = service.getLatest();
@@ -777,5 +780,30 @@ class ServerHealthServiceTest {
                 enabled, 1, 0.2, 0.02, 0.2, 0.1, de.nurrobin.smpstats.health.HealthThresholds.defaults(),
                 false, 1, 0, "", 1, 1,
                 Settings.DashboardSettings.defaults(), true);
+    }
+
+    @Test
+    void startTakesNoSampleBeforeTheFirstDelay() {
+        ServerHealthService service = new ServerHealthService(plugin, settings(true));
+        service.start();
+        assertNull(service.getLatest());
+        server.getScheduler().performTicks(ServerHealthService.FIRST_SAMPLE_DELAY_TICKS - 1);
+        assertNull(service.getLatest());
+        server.getScheduler().performTicks(1);
+        assertNotNull(service.getLatest());
+        service.shutdown();
+    }
+
+    @Test
+    void refreshIsRejectedDuringCooldown() {
+        ServerHealthService service = new ServerHealthService(plugin, settings(true));
+        long[] now = {1_000_000L};
+        service.setClock(() -> now[0]);
+        assertTrue(service.sampleNow());
+        now[0] += 10_000L;
+        assertFalse(service.sampleNow());
+        assertEquals(20L, service.refreshCooldownSeconds());
+        now[0] += 20_000L;
+        assertTrue(service.sampleNow());
     }
 }

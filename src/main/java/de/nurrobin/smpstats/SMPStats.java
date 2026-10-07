@@ -71,6 +71,7 @@ public class SMPStats extends JavaPlugin {
     private SeasonService seasonService;
     private ThrowbackService throwbackService;
     private MannequinSceneRenderer throwbackRenderer;
+    private de.nurrobin.smpstats.database.WriteQueue writeQueue;
     private int autosaveTaskId = -1;
 
     @Override
@@ -97,12 +98,13 @@ public class SMPStats extends JavaPlugin {
             return;
         }
 
-        this.statsService = new StatsService(this, storage, settings);
+        this.writeQueue = de.nurrobin.smpstats.database.WriteQueue.async(getLogger());
+        this.statsService = new StatsService(this, storage, settings, writeQueue);
         this.momentService = new MomentService(this, storage, settings);
         this.heatmapService = new HeatmapService(this, storage, settings);
         this.socialStatsService = new SocialStatsService(this, storage, settings);
         this.timelineService = new TimelineService(this, storage, settings);
-        this.deathReplayService = new DeathReplayService(this, storage, settings);
+        this.deathReplayService = new DeathReplayService(this, storage, settings, writeQueue);
         this.serverHealthService = new ServerHealthService(this, settings);
         this.storyService = new StoryService(this, statsService, storage, momentService, settings);
         this.guiManager = new GuiManager(this);
@@ -183,6 +185,12 @@ public class SMPStats extends JavaPlugin {
         }
         if (dashboardServer != null) {
             dashboardServer.stop();
+        }
+        if (writeQueue != null) {
+            int lost = writeQueue.shutdown(10_000L);
+            if (lost > 0) {
+                getLogger().warning(lost + " queued database write(s) could not be flushed on shutdown.");
+            }
         }
         if (storage != null) {
             try {
@@ -362,7 +370,7 @@ public class SMPStats extends JavaPlugin {
         int deathReplayLimit = Math.max(1, config.getInt("death_replay.limit", 20));
 
         boolean healthEnabled = config.getBoolean("health.enabled", true);
-        int healthSampleMinutes = Math.max(1, config.getInt("health.sample_minutes", 5));
+        int healthSampleMinutes = Math.max(1, config.getInt("health.sample_minutes", 15));
         double healthChunkWeight = config.getDouble("health.weights.chunk", 0.02);
         double healthEntityWeight = config.getDouble("health.weights.entity", 0.005);
         double healthHopperWeight = config.getDouble("health.weights.hopper", 0.2);

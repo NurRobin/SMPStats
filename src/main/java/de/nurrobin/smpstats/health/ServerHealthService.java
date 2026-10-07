@@ -34,6 +34,10 @@ public class ServerHealthService {
     private final AtomicReference<HealthSnapshot> latest = new AtomicReference<>();
     private final Deque<HealthSnapshot> history = new LinkedList<>();
     private int taskId = -1;
+    static final long FIRST_SAMPLE_DELAY_TICKS = 2L * 60L * 20L;
+    static final long REFRESH_COOLDOWN_MILLIS = 30_000L;
+    private volatile long lastSampleMillis;
+    private volatile java.util.function.LongSupplier clock = System::currentTimeMillis;
 
     public ServerHealthService(Plugin plugin, Settings settings) {
         this.plugin = plugin;
@@ -52,8 +56,18 @@ public class ServerHealthService {
         if (taskId != -1) {
             Bukkit.getScheduler().cancelTask(taskId);
         }
-        taskId = Bukkit.getScheduler().runTaskTimer(plugin, this::sample, 20L, periodTicks).getTaskId();
-        sample();
+        // No sample at start or reload: sampling walks every loaded chunk, which is the busiest moment.
+        taskId = Bukkit.getScheduler().runTaskTimer(plugin, this::sample, FIRST_SAMPLE_DELAY_TICKS, periodTicks).getTaskId();
+    }
+
+    void setClock(java.util.function.LongSupplier clock) {
+        this.clock = clock;
+    }
+
+    /** Seconds until the refresh button works again; 0 if a sample may be taken now. */
+    public long refreshCooldownSeconds() {
+        long remaining = REFRESH_COOLDOWN_MILLIS - (clock.getAsLong() - lastSampleMillis);
+        return remaining <= 0 ? 0 : (remaining + 999) / 1000;
     }
 
     public void shutdown() {
@@ -84,11 +98,16 @@ public class ServerHealthService {
     /**
      * Triggers an immediate sample. Called by refresh button in GUI.
      */
-    public void sampleNow() {
+    public boolean sampleNow() {
+        if (refreshCooldownSeconds() > 0) {
+            return false;
+        }
         sample();
+        return true;
     }
 
     private void sample() {
+        lastSampleMillis = clock.getAsLong();
         int totalChunks = 0;
         int totalEntities = 0;
         int totalHoppers = 0;

@@ -370,10 +370,14 @@ public class HealthChartGui implements InventoryGui, InventoryHolder {
             }
         } else if (slot == 53) {
             // Refresh
-            healthService.sampleNow();
-            playSuccessSound(player);
-            initializeItems();
-            player.sendMessage(Component.text("Data refreshed!", NamedTextColor.GREEN));
+            if (healthService.sampleNow()) {
+                playSuccessSound(player);
+                initializeItems();
+                player.sendMessage(Component.text("Data refreshed!", NamedTextColor.GREEN));
+            } else {
+                player.sendMessage(Component.text("Refresh is on cooldown, try again in "
+                        + healthService.refreshCooldownSeconds() + " s.", NamedTextColor.RED));
+            }
         }
     }
 }

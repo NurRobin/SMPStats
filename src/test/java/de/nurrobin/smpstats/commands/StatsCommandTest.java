@@ -153,4 +153,36 @@ class StatsCommandTest {
         assertTrue(suggestions.contains("dump"));
         assertTrue(suggestions.contains("Alex"));
     }
+
+    @Test
+    void lookupsAreRateLimitedPerPlayerFor3Seconds() {
+        SMPStats plugin = mock(SMPStats.class);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
+        StatsService stats = mock(StatsService.class);
+        StatsCommand command = new StatsCommand(plugin, stats);
+        long[] now = {10_000L};
+        command.setClock(() -> now[0]);
+
+        Player sender = mock(Player.class);
+        when(sender.getUniqueId()).thenReturn(UUID.randomUUID());
+        when(stats.getStatsByName("Bob")).thenReturn(Optional.empty());
+
+        command.onCommand(sender, mock(Command.class), "stats", new String[]{"Bob"});
+        command.onCommand(sender, mock(Command.class), "stats", new String[]{"Bob"});
+        command.onCommand(sender, mock(Command.class), "stats", new String[]{"json"});
+        verify(stats, times(1)).getStatsByName("Bob");
+
+        now[0] += StatsCommand.COOLDOWN_MILLIS;
+        command.onCommand(sender, mock(Command.class), "stats", new String[]{"Bob"});
+        verify(stats, times(2)).getStatsByName("Bob");
+
+        // another player is unaffected, console is exempt
+        Player other = mock(Player.class);
+        when(other.getUniqueId()).thenReturn(UUID.randomUUID());
+        command.onCommand(other, mock(Command.class), "stats", new String[]{"Bob"});
+        CommandSender console = mock(CommandSender.class);
+        command.onCommand(console, mock(Command.class), "stats", new String[]{"Bob"});
+        command.onCommand(console, mock(Command.class), "stats", new String[]{"Bob"});
+        verify(stats, times(5)).getStatsByName("Bob");
+    }
 }

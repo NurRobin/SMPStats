@@ -26,6 +26,16 @@ public class HeatmapService {
     private static final double MIN_POSITION_MOVE_SQUARED = 2.0 * 2.0;
     static final int MAX_PENDING_EVENTS = 200_000;
     static final long MAX_WINDOW_MILLIS = java.util.concurrent.TimeUnit.DAYS.toMillis(90);
+    public static final int MIN_GRID = 8;
+    public static final int MAX_GRID = 512;
+    static final int MAX_BINS = 5000;
+    static final long CACHE_TTL_MILLIS = 60_000L;
+    static final long BUSY_WAIT_MILLIS = 5_000L;
+    private static final int MAX_CACHE_ENTRIES = 64;
+    // At most one heatmap scan at a time: every scan holds the storage lock.
+    private final java.util.concurrent.locks.ReentrantLock computeLock = new java.util.concurrent.locks.ReentrantLock();
+    private final Map<String, CachedHeatmap> heatmapCache = new ConcurrentHashMap<>();
+    private volatile java.util.function.LongSupplier clock = System::currentTimeMillis;
     private int flushTaskId = -1;
     private int positionTaskId = -1;
 
@@ -36,8 +46,20 @@ public class HeatmapService {
         this.hotspots = settings.getHeatmapHotspots();
     }
 
+    /** Thrown when another heatmap calculation is running and did not finish in time. */
+    public static class HeatmapBusyException extends RuntimeException {
+        public HeatmapBusyException() {
+            super("Heatmap calculation busy, try again shortly");
+        }
+    }
+
+    void setClock(java.util.function.LongSupplier clock) {
+        this.clock = clock;
+    }
+
     public void updateSettings(Settings settings) {
         this.settings = settings;
+        heatmapCache.clear();
         this.hotspots = settings.getHeatmapHotspots();
     }
 
@@ -110,7 +132,50 @@ public class HeatmapService {
     }
 
     public List<HeatmapBin> generateHeatmap(String type, String world, long since, long until, double decayHalfLifeHours, int gridSize) {
-        int grid = Math.max(1, Math.min(gridSize, 512));
+        int grid = Math.max(MIN_GRID, Math.min(gridSize, MAX_GRID));
+        long nowMs = clock.getAsLong();
+        // since/until default to "now" in the callers; bucket them so identical views share a cache entry.
+        String cacheKey = type + '|' + world + '|' + (since / 60_000L) + '|' + (until / 60_000L) + '|' + decayHalfLifeHours + '|' + grid;
+        CachedHeatmap cached = heatmapCache.get(cacheKey);
+        if (cached != null && nowMs - cached.createdAt < CACHE_TTL_MILLIS) {
+            return cached.bins;
+        }
+        boolean locked;
+        try {
+            locked = computeLock.tryLock(BUSY_WAIT_MILLIS, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new HeatmapBusyException();
+        }
+        if (!locked) {
+            throw new HeatmapBusyException();
+        }
+        try {
+            // Another request may have filled the cache while this one waited for the lock.
+            cached = heatmapCache.get(cacheKey);
+            if (cached != null && clock.getAsLong() - cached.createdAt < CACHE_TTL_MILLIS) {
+                return cached.bins;
+            }
+            List<HeatmapBin> bins = computeHeatmap(type, world, since, until, decayHalfLifeHours, grid);
+            if (bins != null) {
+                if (heatmapCache.size() >= MAX_CACHE_ENTRIES) {
+                    long cutoff = clock.getAsLong() - CACHE_TTL_MILLIS;
+                    heatmapCache.values().removeIf(c -> c.createdAt < cutoff);
+                    if (heatmapCache.size() >= MAX_CACHE_ENTRIES) {
+                        heatmapCache.clear();
+                    }
+                }
+                heatmapCache.put(cacheKey, new CachedHeatmap(clock.getAsLong(), bins));
+                return bins;
+            }
+            return List.of();
+        } finally {
+            computeLock.unlock();
+        }
+    }
+
+    // Returns null on a storage error so failures are not cached.
+    private List<HeatmapBin> computeHeatmap(String type, String world, long since, long until, double decayHalfLifeHours, int grid) {
         // Every scan holds the storage lock, so the window is bounded no matter which caller asks.
         long from = Math.max(since, until - MAX_WINDOW_MILLIS);
         int retentionDays = settings.getRetentionSettings().heatmapEventsDays();
@@ -143,12 +208,15 @@ public class HeatmapService {
                 int cz = (int) (entry.getKey() >>> 32);
                 bins.add(new HeatmapBin(type, world, cx, cz, grid, entry.getValue()));
             }
-            // Sort by value desc
+            // Sort by value desc, keep only the heaviest bins
             bins.sort((a, b) -> Double.compare(b.getCount(), a.getCount()));
-            return bins;
+            if (bins.size() > MAX_BINS) {
+                bins = new ArrayList<>(bins.subList(0, MAX_BINS));
+            }
+            return List.copyOf(bins);
         } catch (SQLException e) {
             plugin.getLogger().warning("Could not generate heatmap: " + e.getMessage());
-            return List.of();
+            return null;
         }
     }
 
@@ -200,6 +268,9 @@ public class HeatmapService {
                 plugin.getLogger().warning("Could not persist hotspot bin: " + e.getMessage());
             }
         }
+    }
+
+    private record CachedHeatmap(long createdAt, List<HeatmapBin> bins) {
     }
 
     private record HotspotKey(String type, String hotspot, String world) {
