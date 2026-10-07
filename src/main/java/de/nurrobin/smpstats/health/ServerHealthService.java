@@ -100,7 +100,7 @@ public class ServerHealthService {
         for (World world : Bukkit.getWorlds()) {
             Chunk[] chunks = world.getLoadedChunks();
             int worldChunks = chunks.length;
-            int worldEntities = world.getEntities().size();
+            int worldEntities = entityCount(world);
             int worldHoppers = 0;
             int worldRedstone = 0;
             for (Chunk chunk : chunks) {
@@ -108,7 +108,7 @@ public class ServerHealthService {
                 int chunkRedstone = 0;
                 Map<UUID, Integer> ownerCounts = new HashMap<>();
                 
-                for (BlockState state : chunk.getTileEntities()) {
+                for (BlockState state : tileEntities(chunk)) {
                     Material type = state.getType();
                     if (type == Material.HOPPER) {
                         chunkHoppers++;
@@ -196,6 +196,28 @@ public class ServerHealthService {
             while (history.size() > MAX_HISTORY_SIZE) {
                 history.removeFirst();
             }
+        }
+    }
+
+    /**
+     * Live tile entities without the per-block snapshot copy (the expensive part of a sample on a
+     * big server). Falls back to the snapshot variant where the non-snapshot one is not implemented
+     * (MockBukkit).
+     */
+    private static BlockState[] tileEntities(Chunk chunk) {
+        try {
+            return chunk.getTileEntities(false);
+        } catch (UnsupportedOperationException e) {
+            return chunk.getTileEntities();
+        }
+    }
+
+    /** O(1) counter instead of copying the whole entity list. */
+    private static int entityCount(World world) {
+        try {
+            return world.getEntityCount();
+        } catch (UnsupportedOperationException e) {
+            return world.getEntities().size();
         }
     }
 

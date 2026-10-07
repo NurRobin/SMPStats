@@ -399,6 +399,46 @@ class ServerHealthServiceTest {
     }
     
     @Test
+    void sampleUsesNonSnapshotTileEntitiesAndEntityCounter() {
+        Chunk chunk = mock(Chunk.class);
+        Hopper hopper = mock(Hopper.class);
+        when(hopper.getType()).thenReturn(Material.HOPPER);
+        when(hopper.getPersistentDataContainer()).thenReturn(mock(org.bukkit.persistence.PersistentDataContainer.class));
+        when(chunk.getTileEntities(false)).thenReturn(new BlockState[]{hopper});
+        when(chunk.getEntities()).thenReturn(new org.bukkit.entity.Entity[0]);
+        int[] entityListCalls = {0};
+        WorldMock world = new WorldMock() {
+            @Override
+            public Chunk[] getLoadedChunks() {
+                return new Chunk[]{chunk};
+            }
+
+            @Override
+            public int getEntityCount() {
+                return 42;
+            }
+
+            @Override
+            public List<org.bukkit.entity.Entity> getEntities() {
+                entityListCalls[0]++;
+                return List.of();
+            }
+        };
+        when(chunk.getWorld()).thenReturn(world);
+        server.addWorld(world);
+
+        ServerHealthService service = new ServerHealthService(plugin, settings(true));
+        service.sampleNow();
+
+        verify(chunk).getTileEntities(false);
+        verify(chunk, never()).getTileEntities();
+        assertEquals(0, entityListCalls[0]);
+        HealthSnapshot snapshot = service.getLatest();
+        assertTrue(snapshot.hoppers() >= 1);
+        assertTrue(snapshot.entities() >= 42);
+    }
+
+    @Test
     void sampleCountsHoppersInTileEntities() {
         Settings settings = settings(true);
         ServerHealthService service = new ServerHealthService(plugin, settings);
