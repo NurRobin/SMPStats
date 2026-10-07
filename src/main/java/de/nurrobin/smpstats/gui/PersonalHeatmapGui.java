@@ -47,8 +47,8 @@ public class PersonalHeatmapGui implements InventoryGui, InventoryHolder {
         Material.LIGHT_BLUE_STAINED_GLASS_PANE // 90-100% - Peak
     };
     
-    private static final String[] ACTIVITY_TYPES = {"POSITION", "DEATH", "KILL", "BREAK", "PLACE"};
-    private static final String[] ACTIVITY_LABELS = {"Movement", "Deaths", "Kills", "Mining", "Building"};
+    private static final String[] ACTIVITY_TYPES = {"POSITION", "MINING", "DEATH", "DAMAGE"};
+    private static final String[] ACTIVITY_LABELS = {"Movement", "Mining", "Deaths", "Damage"};
     
     private final SMPStats plugin;
     private final GuiManager guiManager;
@@ -59,6 +59,8 @@ public class PersonalHeatmapGui implements InventoryGui, InventoryHolder {
     private Inventory inventory;
     private int currentActivityIndex = 0;
     private String currentWorld;
+    private int renderSeq = 0;
+    private boolean loading = false;
     
     public PersonalHeatmapGui(SMPStats plugin, GuiManager guiManager, StatsService statsService,
                               Player viewer, UUID targetUuid, String targetName) {
@@ -86,7 +88,42 @@ public class PersonalHeatmapGui implements InventoryGui, InventoryHolder {
         return inventory;
     }
     
+    /**
+     * Draws the empty grid at once and aggregates the heatmap data on an async task, so opening or
+     * clicking never runs the DB scan on the main thread.
+     */
     private void renderGrid() {
+        final int seq = ++renderSeq;
+        applyGrid(List.of());
+
+        HeatmapService heatmapService = plugin.getHeatmapService().orElse(null);
+        if (heatmapService == null) {
+            return;
+        }
+        final String activityType = ACTIVITY_TYPES[currentActivityIndex];
+        final String world = currentWorld;
+        long now = System.currentTimeMillis();
+        long weekAgo = now - (7L * 24 * 3600 * 1000);
+        loading = true;
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            List<HeatmapBin> bins;
+            try {
+                bins = heatmapService.generateHeatmap(activityType, world, weekAgo, now, 0);
+            } catch (RuntimeException e) {
+                bins = List.of();
+            }
+            final List<HeatmapBin> result = bins;
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (seq != renderSeq) {
+                    return;
+                }
+                loading = false;
+                applyGrid(result);
+            });
+        });
+    }
+
+    private void applyGrid(List<HeatmapBin> bins) {
         // Clear grid area
         for (int row = 0; row < GRID_HEIGHT; row++) {
             for (int col = 0; col < GRID_WIDTH; col++) {
@@ -94,45 +131,32 @@ public class PersonalHeatmapGui implements InventoryGui, InventoryHolder {
                 inventory.setItem(slot, null);
             }
         }
-        
+
         // Get player's current chunk position
         Location loc = viewer.getLocation();
         int centerChunkX = loc.getBlockX() >> 4;
         int centerChunkZ = loc.getBlockZ() >> 4;
-        
+
         // Calculate grid bounds (7x5 chunks centered on player)
         int startChunkX = centerChunkX - (GRID_WIDTH / 2);
         int startChunkZ = centerChunkZ - (GRID_HEIGHT / 2);
-        
-        // Get heatmap data for the activity type
-        String activityType = ACTIVITY_TYPES[currentActivityIndex];
-        
+
         // Build a map of chunk -> intensity from the bins
         Map<Long, Double> chunkIntensities = new HashMap<>();
         double maxIntensity = 1.0;
-        
-        // Query heatmap bins if service is available
-        HeatmapService heatmapService = plugin.getHeatmapService().orElse(null);
-        if (heatmapService != null) {
-            long now = System.currentTimeMillis();
-            long weekAgo = now - (7L * 24 * 3600 * 1000);
-            List<HeatmapBin> bins = heatmapService.generateHeatmap(activityType, currentWorld, weekAgo, now, 0);
-            
-            for (HeatmapBin bin : bins) {
-                // Check if this bin is within our grid
-                int binX = bin.getChunkX();
-                int binZ = bin.getChunkZ();
-                if (binX >= startChunkX && binX < startChunkX + GRID_WIDTH &&
-                    binZ >= startChunkZ && binZ < startChunkZ + GRID_HEIGHT) {
-                    long key = ((long) binX << 32) | (binZ & 0xFFFFFFFFL);
-                    chunkIntensities.put(key, bin.getCount());
-                    if (bin.getCount() > maxIntensity) {
-                        maxIntensity = bin.getCount();
-                    }
+        for (HeatmapBin bin : bins) {
+            int binX = bin.getChunkX();
+            int binZ = bin.getChunkZ();
+            if (binX >= startChunkX && binX < startChunkX + GRID_WIDTH &&
+                binZ >= startChunkZ && binZ < startChunkZ + GRID_HEIGHT) {
+                long key = ((long) binX << 32) | (binZ & 0xFFFFFFFFL);
+                chunkIntensities.put(key, bin.getCount());
+                if (bin.getCount() > maxIntensity) {
+                    maxIntensity = bin.getCount();
                 }
             }
         }
-        
+
         // Render grid with normalized intensities
         for (int row = 0; row < GRID_HEIGHT; row++) {
             for (int col = 0; col < GRID_WIDTH; col++) {
@@ -245,6 +269,9 @@ public class PersonalHeatmapGui implements InventoryGui, InventoryHolder {
         
         int slot = event.getRawSlot();
         
+        if ((slot == 0 || slot == 8) && loading) {
+            return; // a scan is still running; ignore spam clicks
+        }
         if (slot == 0) {
             // Cycle activity type
             currentActivityIndex = (currentActivityIndex + 1) % ACTIVITY_TYPES.length;
