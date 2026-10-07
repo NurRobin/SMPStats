@@ -16,7 +16,13 @@ commands:
     description: SMPStats Admin-Befehle.
     usage: /smpstats [info|reload|user <name> [reset|set <stat> <value>]|season <import|info> <saison>]
     permission: smpstats.use
+  throwback:
+    description: Besuche die Throwback-Halle.
+    usage: /throwback [leave]
 permissions:
+  smpstats.throwback.bypass:
+    description: Darf die Halle auch während des Pflicht-Rundgangs ohne Portal verlassen (Teleport).
+    default: false
   smpstats.reload:
     description: Erlaubt das Neuladen der SMPStats-Konfiguration.
     default: op
@@ -60,3 +66,4 @@ permissions:
       smpstats.gui.health: true
       smpstats.gui.health.manage: true
       smpstats.health: true
+      smpstats.throwback.bypass: true

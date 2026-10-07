@@ -3,6 +3,15 @@ package de.nurrobin.smpstats;
 import de.nurrobin.smpstats.season.SeasonImporter;
 import de.nurrobin.smpstats.season.SeasonService;
 import de.nurrobin.smpstats.season.SeasonStore;
+import de.nurrobin.smpstats.throwback.CachedProgressRepository;
+import de.nurrobin.smpstats.throwback.HallWorld;
+import de.nurrobin.smpstats.throwback.MannequinSceneRenderer;
+import de.nurrobin.smpstats.throwback.MapArtWall;
+import de.nurrobin.smpstats.throwback.ThrowbackCommand;
+import de.nurrobin.smpstats.throwback.ThrowbackListener;
+import de.nurrobin.smpstats.throwback.ThrowbackService;
+import de.nurrobin.smpstats.throwback.ThrowbackSettings;
+import de.nurrobin.smpstats.throwback.ThrowbackStore;
 import de.nurrobin.smpstats.api.ApiServer;
 import de.nurrobin.smpstats.commands.StatsCommand;
 import de.nurrobin.smpstats.commands.SStatsCommand;
@@ -43,7 +52,7 @@ import java.sql.SQLException;
 import java.util.Objects;
 
 public class SMPStats extends JavaPlugin {
-    private static final int CONFIG_VERSION = 8;
+    private static final int CONFIG_VERSION = 9;
     private StatsStorage storage;
     private StatsService statsService;
     private Settings settings;
@@ -60,6 +69,8 @@ public class SMPStats extends JavaPlugin {
     private AnimatedBorderService animatedBorderService;
     private RetentionService retentionService;
     private SeasonService seasonService;
+    private ThrowbackService throwbackService;
+    private MannequinSceneRenderer throwbackRenderer;
     private int autosaveTaskId = -1;
 
     @Override
@@ -101,6 +112,8 @@ public class SMPStats extends JavaPlugin {
                 new SeasonStore(storage), new SeasonImporter(),
                 task -> Bukkit.getScheduler().runTaskAsynchronously(this, task));
 
+        startThrowback();
+
         registerListeners();
         registerCommands();
         for (Player online : Bukkit.getOnlinePlayers()) {
@@ -112,6 +125,9 @@ public class SMPStats extends JavaPlugin {
         socialStatsService.start();
         retentionService.start();
         seasonService.autoImport();
+        if (throwbackService != null) {
+            throwbackService.start();
+        }
         if (deathReplayService != null) {
             deathReplayService.start();
         }
@@ -132,6 +148,9 @@ public class SMPStats extends JavaPlugin {
     @Override
     public void onDisable() {
         cancelAutosave();
+        if (throwbackService != null) {
+            throwbackService.shutdown();
+        }
         if (statsService != null) {
             statsService.shutdown();
         }
@@ -206,6 +225,10 @@ public class SMPStats extends JavaPlugin {
         return java.util.Optional.ofNullable(heatmapService);
     }
 
+    public ThrowbackService getThrowbackService() {
+        return throwbackService;
+    }
+
     public SeasonService getSeasonService() {
         return seasonService;
     }
@@ -268,6 +291,9 @@ public class SMPStats extends JavaPlugin {
             storyService.shutdown();
             storyService.updateSettings(settings);
             storyService.start();
+        }
+        if (throwbackService != null) {
+            throwbackService.reload(readThrowbackSettings());
         }
         startAutosave();
         restartApiServer();
@@ -538,6 +564,33 @@ public class SMPStats extends JavaPlugin {
         return list;
     }
 
+    private ThrowbackSettings readThrowbackSettings() {
+        return ThrowbackSettings.read(getConfig().getConfigurationSection("throwback"), getLogger());
+    }
+
+    private void startThrowback() {
+        try {
+            ThrowbackSettings throwbackSettings = readThrowbackSettings();
+            ThrowbackStore progressStore = new ThrowbackStore(storage);
+            MannequinSceneRenderer renderer = new MannequinSceneRenderer(this);
+            long hallTime = 18000L;
+            this.throwbackService = new ThrowbackService(this, seasonService,
+                    new CachedProgressRepository(progressStore, getLogger()), throwbackSettings, renderer,
+                    new HallWorld(this, throwbackSettings.world(), hallTime),
+                    new MapArtWall(this, getDataFolder().toPath().resolve("throwback").resolve("mapwall.yml")),
+                    () -> !Bukkit.getOnlineMode(), System::currentTimeMillis);
+            this.throwbackRenderer = renderer;
+            seasonService.onImported(season -> {
+                if (season.equals(throwbackService.settings().season())) {
+                    throwbackService.invalidateBoard();
+                }
+            });
+        } catch (RuntimeException e) {
+            getLogger().log(java.util.logging.Level.SEVERE, "Throwback-Halle konnte nicht gestartet werden, sie bleibt aus", e);
+            this.throwbackService = null;
+        }
+    }
+
     private void registerListeners() {
         PluginManager pm = getServer().getPluginManager();
         pm.registerEvents(new JoinQuitListener(statsService), this);
@@ -548,6 +601,9 @@ public class SMPStats extends JavaPlugin {
         pm.registerEvents(new MomentListener(momentService, deathReplayService), this);
         pm.registerEvents(new HeatmapListener(heatmapService), this);
         pm.registerEvents(guiManager, this);
+        if (throwbackService != null) {
+            pm.registerEvents(new ThrowbackListener(this, throwbackService, throwbackRenderer), this);
+        }
     }
 
     private void registerCommands() {
@@ -559,6 +615,11 @@ public class SMPStats extends JavaPlugin {
         Objects.requireNonNull(getCommand("sstats")).setTabCompleter(adminCommand);
         Objects.requireNonNull(getCommand("smpstats")).setExecutor(adminCommand);
         Objects.requireNonNull(getCommand("smpstats")).setTabCompleter(adminCommand);
+        if (throwbackService != null && getCommand("throwback") != null) {
+            ThrowbackCommand throwbackCommand = new ThrowbackCommand(this, throwbackService, this::readThrowbackSettings);
+            Objects.requireNonNull(getCommand("throwback")).setExecutor(throwbackCommand);
+            Objects.requireNonNull(getCommand("throwback")).setTabCompleter(throwbackCommand);
+        }
     }
 
     private void startAutosave() {

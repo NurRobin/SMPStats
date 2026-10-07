@@ -71,7 +71,7 @@ class SMPStatsConfigTest {
                 """);
 
         SMPStats plugin = MockBukkit.load(SMPStats.class);
-        assertEquals(8, plugin.getConfig().getInt("config_version"));
+        assertEquals(9, plugin.getConfig().getInt("config_version"));
 
         assertTrue(plugin.getSettings().isHeatmapEnabled());
         assertTrue(plugin.getTimelineService().isPresent());

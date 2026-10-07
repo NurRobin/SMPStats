@@ -1,0 +1,193 @@
+# Texte der Throwback-Halle (MiniMessage: https://docs.advntr.dev/minimessage/format.html).
+# Platzhalter: <value> Wert mit Einheit, <label> Blockname oder Mob (wird im Client übersetzt),
+# <n> Vergleichszahl, <p> Prozent, <place> und <total> bei der Platzierung, <name> Spielername.
+# Fehlt ein Schlüssel, gilt der Standardtext aus dem Plugin.
+
+# Zeile unter Trophäen der Top-Plätze (Grenze: throwback.rank_badge_top in der config.yml)
+badge: "<gold>🏆 Platz <place> von <total>"
+
+# Trophäen: title ist die Hauptzeile. compare.per teilt den Wert in Anzeigeeinheit (Stunden, km, Anzahl);
+# ab 1 wird compare.text gezeigt, darunter compare.small (falls vorhanden), sonst entfällt die Zeile.
+trophies:
+  playtime:
+    title: "<yellow><bold>⏱ <white><value> gespielt"
+    compare:
+      per: 24
+      text: "<gray>das sind <n> Tage am Stück"
+      small: "<gray>ein <p> % eines ganzen Tages"
+  blocks_broken:
+    title: "<yellow><bold>⛏ <white><value> Blöcke abgebaut"
+    compare:
+      per: 157
+      text: "<gray>übereinander gestapelt: <n>× der Kölner Dom"
+  distance_foot:
+    title: "<yellow><bold>👣 <white><value> zu Fuß gelaufen"
+    compare:
+      per: 475
+      text: "<gray>Köln–Berlin: <n>× gelaufen"
+      small: "<gray><p> % der Strecke Köln–Berlin"
+  elytra:
+    title: "<yellow><bold>🪽 <white><value> mit der Elytra geflogen"
+    compare:
+      per: 475
+      text: "<gray>Köln–Berlin im Gleitflug: <n>×"
+      small: "<gray><p> % der Strecke Köln–Berlin"
+  happy_ghast:
+    title: "<yellow><bold>☁ <white><value> auf dem Happy Ghast"
+    compare:
+      per: 42.2
+      text: "<gray>das sind <n> Marathons in der Luft"
+  rides:
+    title: "<yellow><bold>🐎 <white><value> auf Booten und Reittieren"
+    compare:
+      per: 42.2
+      text: "<gray>das sind <n> Marathons"
+  mob_kills:
+    title: "<yellow><bold>⚔ <white><value> Monster besiegt"
+    compare:
+      per: 100
+      text: "<gray>eine Armee von <n> Hundertschaften"
+  deaths:
+    title: "<yellow><bold>☠ <white><value>× gestorben"
+    compare:
+      per: 10
+      text: "<gray>so viele Leben wie <n> Katzen"
+  nemesis:
+    title: "<yellow><bold>💀 Dein Erzfeind: <white><label>"
+    compare:
+      per: 1
+      text: "<gray>hat dich <value>× erwischt"
+  trades:
+    title: "<yellow><bold>💚 <white><value> Handel mit Dorfbewohnern"
+    compare:
+      per: 64
+      text: "<gray>genug Smaragde für <n> Stacks"
+  fish:
+    title: "<yellow><bold>🎣 <white><value> Fische geangelt"
+    compare:
+      per: 1
+      text: "<gray>genug für <n> Fischbrötchen"
+  fav_block:
+    title: "<yellow><bold>🧱 Lieblingsblock: <white><label>"
+    compare:
+      per: 1
+      text: "<gray><value>× abgebaut"
+  nether:
+    title: "<yellow><bold>🔥 Im Nether am <white><value>"
+  end:
+    title: "<yellow><bold>🐉 Im End am <white><value>"
+  biomes:
+    title: "<yellow><bold>🗺 <white><value> Biome entdeckt"
+  cake:
+    title: "<yellow><bold>🎂 <white><value> Stücke Kuchen"
+    compare:
+      per: 7
+      text: "<gray>das sind <n> ganze Torten"
+  bell:
+    title: "<yellow><bold>🔔 <white><value>× die Glocke geläutet"
+  raids:
+    title: "<yellow><bold>🛡 <white><value> Raids gewonnen"
+  sleep:
+    title: "<yellow><bold>🛏 <white><value>× im Bett geschlafen"
+  jumps:
+    title: "<yellow><bold>🦘 <white><value> Sprünge"
+    compare:
+      per: 1000
+      text: "<gray>das sind <n> Tausend Hopser"
+
+welcome:
+  statue: "<gray>Du, Weihnachten <season>"
+  # Wer 2025 lange genug dabei war
+  trophy:
+    - "<gold><bold>Willkommen zurück, <name>!"
+    - "<gray>Das war dein Weihnachts-SMP 2025."
+    - "<gray>Geh den Gang entlang, links und rechts stehen deine Werte."
+  # Wer 2025 kurz dabei war: bewusst neutral
+  returning:
+    - "<gold><bold>Willkommen zurück, <name>!"
+    - "<gray>Schön, dass du wieder dabei bist."
+    - "<gray>Geh den Gang entlang, hier erfährst du alles zum Event."
+  newcomer:
+    - "<gold><bold>Willkommen auf dem Christmas SMP, <name>!"
+    - "<gray>Geh den Gang entlang, hier erfährst du alles zum Event."
+
+rules:
+  title: "<red><bold>Regeln <gray>(Stand <version>)"
+  lines:
+    - "<white>1. Respektvoll miteinander: keine Beleidigungen, keine Hassrede."
+    - "<white>2. Nicht griefen, nicht stehlen. Bauen geht nur in eigenen Claims."
+    - "<white>3. PvP ist aus, Streit klären wir ohne Waffen."
+    - "<white>4. Farmen und Redstone haben Limits. Wer riesige Anlagen baut, legt den Server lahm."
+    - "<white>5. Fairplay: keine Cheats, keine Dupes, keine Exploits."
+    - "<white>6. Handel nur ehrlich, Scamming wird bestraft."
+    - "<white>7. Den Anweisungen des Teams ist Folge zu leisten."
+    - "<gray>Gäste ohne Discord-Verknüpfung können nur eingeschränkt bauen. Den Verknüpfungsschritt findest du auf der Website."
+  button: "<green><bold>[Regeln gelesen]"
+  privacy:
+    - "<gray>Hinweis zum Datenschutz: Der Server erfasst Statistiken zu deinem Spiel."
+    - "<gray>Alle Infos stehen hier: <aqua><url>"
+
+# Infotafeln: Neue sehen sie an allen Bühnen, Spieler mit Trophäen an den Bühnen, für die es keine Trophäe gibt.
+info:
+  - title: "<gold><bold>Der Ablauf"
+    lines:
+      - "<white>13.11. Start in der Overworld"
+      - "<white>21.11. Der Nether öffnet"
+      - "<white>01.12. Adventskalender bis 24.12."
+      - "<white>06.12. Das End öffnet (Nikolaus)"
+  - title: "<gold><bold>Der Drache"
+    lines:
+      - "<white>12.12. Erster gemeinsamer Bosskampf"
+      - "<white>Danach wiederholbar ab 13.12."
+  - title: "<gold><bold>Der Adventskalender"
+    lines:
+      - "<white>Vom 1. bis 24. Dezember wartet jeden Tag"
+      - "<white>eine Überraschung auf dich."
+  - title: "<gold><bold>Weihnachten"
+    lines:
+      - "<white>Vom 24. bis 26.12. feiern wir gemeinsam."
+      - "<white>Silvester gibt es ein Feuerwerk."
+  - title: "<gold><bold>Gemeinsam bauen"
+    lines:
+      - "<white>Schütze deine Bauten mit Claims."
+      - "<white>Mit Freunden teilst du sie per Trust."
+  - title: "<gold><bold>Der Spawn"
+    lines:
+      - "<white>Am Spawn findest du den Weihnachtsmarkt"
+      - "<white>und den Weg zu allen Zielen."
+  - title: "<gold><bold>Wirtschaft"
+    lines:
+      - "<white>Handle mit anderen Spielern."
+      - "<white>Faire Preise halten den Markt lebendig."
+  - title: "<gold><bold>Discord"
+    lines:
+      - "<white>Verknüpfe deinen Account auf der Website"
+      - "<white>und werde vom Gast zum vollen Spieler."
+  - title: "<gold><bold>Farmen"
+    lines:
+      - "<white>Farmen haben Limits pro Chunk."
+      - "<white>Prüfe die Regeln, bevor du baust."
+  - title: "<gold><bold>Statistiken"
+    lines:
+      - "<white>Mit <aqua>/stats</aqua> siehst du deine Werte."
+      - "<white>Am Ende gibt es einen Rückblick."
+  - title: "<gold><bold>Dieser Gang"
+    lines:
+      - "<white>Du kannst jederzeit zurückkehren:"
+      - "<white><aqua>/throwback</aqua> oder das Portal am Spawn."
+  - title: "<gold><bold>Viel Spaß!"
+    lines:
+      - "<white>Am Ende des Gangs wartet das Portal"
+      - "<white>zum Spawn. Erst die Regeln lesen."
+
+messages:
+  portal_blocked: "<red>Das Portal bleibt zu. Lies zuerst die Regeln und klicke auf <green>[Regeln gelesen]</green>."
+  rules_confirmed: "<green>Danke! Die Regeln sind bestätigt, das Portal ist offen."
+  rules_hint: "<gray>Hinweis: Klicke auf den Knopf an der Regeltafel oder auf <click:run_command:'/throwback confirm'><green><underlined>[Regeln gelesen]</underlined></green></click>."
+  tour_done: "<gold>Viel Spaß auf dem Christmas SMP!"
+  visit_left: "<gray>Zurück am Spawn."
+  hall_closed: "<red>Die Halle ist gerade nicht erreichbar."
+  not_in_hall: "<red>Du bist nicht in der Halle."
+  too_far: "<red>Geh erst zur Regeltafel."
+  rules_already: "<gray>Du hast die Regeln schon bestätigt."
+  prepare: "<gray>Die Halle wird für dich aufgebaut …"
