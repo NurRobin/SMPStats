@@ -257,6 +257,7 @@ public final class ThrowbackService {
     /** Main thread, on PlayerQuitEvent. */
     public void onQuit(Player p) {
         UUID uuid = p.getUniqueId();
+        boolean wasInHall = flow.inHall(uuid) || hall.isHall(p.getWorld());
         closeVisuals(uuid);
         flow.end(uuid);
         origins.remove(uuid);
@@ -264,7 +265,9 @@ public final class ThrowbackService {
         hintCooldown.remove(uuid);
         leaving.remove(uuid);
         restoreMode(p);
-        scheduleUnload();
+        if (wasInHall) {
+            scheduleUnload();
+        }
     }
 
     /** Main thread, on PlayerChangedWorldEvent: the player left the hall some other way than the portal. */
@@ -470,6 +473,7 @@ public final class ThrowbackService {
             steps.add(() -> buildStage(session, world, layout.stages().get(stage.index()), stage));
         }
         int[] next = {0};
+        long[] spent = {0, 0};
         BukkitTask[] self = new BukkitTask[1];
         self[0] = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (visuals.get(uuid) != session || !p.isOnline() || !hall.isHall(p.getWorld())) {
@@ -477,10 +481,16 @@ public final class ThrowbackService {
                 builders.remove(uuid, self[0]);
                 return;
             }
+            long began = System.nanoTime();
             steps.get(next[0]++).run();
+            long took = System.nanoTime() - began;
+            spent[0] += took;
+            spent[1] = Math.max(spent[1], took);
             if (next[0] >= steps.size()) {
                 self[0].cancel();
                 builders.remove(uuid, self[0]);
+                logger.info(String.format("Throwback: Szenen für %s aufgebaut (%d Schritte, %d Entities), Main-Thread gesamt %.1f ms, größter Tick %.1f ms",
+                        p.getName(), steps.size(), session.entityCount(), spent[0] / 1e6, spent[1] / 1e6));
             }
         }, 1L, 1L);
         builders.put(uuid, self[0]);
@@ -699,6 +709,7 @@ public final class ThrowbackService {
         if (world == null || !world.getPlayers().isEmpty()) {
             return;
         }
+        logger.info("Throwback: Hallen-Welt wird in " + settings.unloadDelaySeconds() + " s entladen, falls dann niemand drin ist");
         unloadTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             unloadTask = null;
             if (hall.unload()) {

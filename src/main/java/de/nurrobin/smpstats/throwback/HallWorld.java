@@ -121,6 +121,7 @@ public final class HallWorld implements HallWorlds {
             return true;
         }
         if (!world.getPlayers().isEmpty()) {
+            logger.info("Throwback: Entladen verschoben, " + world.getPlayers().size() + " Spieler sind noch in der Halle");
             return false;
         }
         for (Entity entity : world.getEntities()) {
