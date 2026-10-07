@@ -36,6 +36,12 @@ public class StatsStorage implements Closeable {
     private final Path databaseFile;
     private final Gson gson = new Gson();
     private Connection connection;
+    /**
+     * Separate read-only connection for long heatmap scans. WAL lets it read concurrently with the
+     * writer, so a scan no longer holds the monitor that join/quit/death saves on the main thread need.
+     */
+    private Connection readConnection;
+    private final Object readLock = new Object();
 
     public StatsStorage(Plugin plugin) {
         this.plugin = plugin;
@@ -52,6 +58,20 @@ public class StatsStorage implements Closeable {
             pragma.execute("PRAGMA synchronous=NORMAL;");
         }
         applyMigrations();
+        openReadConnection();
+    }
+
+    private void openReadConnection() {
+        try {
+            Connection read = DriverManager.getConnection("jdbc:sqlite:" + databaseFile.toAbsolutePath());
+            try (Statement pragma = read.createStatement()) {
+                pragma.execute("PRAGMA query_only=ON;");
+            }
+            this.readConnection = read;
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Could not open read-only database connection, heatmap scans use the shared connection: " + e.getMessage());
+            this.readConnection = null;
+        }
     }
 
     private void applyMigrations() throws SQLException {
@@ -596,7 +616,21 @@ public class StatsStorage implements Closeable {
     }
 
     @Override
-    public synchronized void close() throws IOException {
+    public void close() throws IOException {
+        synchronized (readLock) {
+            if (readConnection != null) {
+                try {
+                    readConnection.close();
+                } catch (SQLException e) {
+                    plugin.getLogger().warning("Failed to close read-only database connection: " + e.getMessage());
+                }
+                readConnection = null;
+            }
+        }
+        closeMain();
+    }
+
+    private synchronized void closeMain() {
         if (connection != null) {
             try {
                 connection.close();
@@ -1128,10 +1162,21 @@ public class StatsStorage implements Closeable {
         }
     }
 
-    public synchronized List<HeatmapEvent> getHeatmapEvents(String type, String world, long since, long until) throws SQLException {
+    public List<HeatmapEvent> getHeatmapEvents(String type, String world, long since, long until) throws SQLException {
+        synchronized (readLock) {
+            if (readConnection != null) {
+                return queryHeatmapEvents(readConnection, type, world, since, until);
+            }
+        }
+        synchronized (this) {
+            return queryHeatmapEvents(connection, type, world, since, until);
+        }
+    }
+
+    private List<HeatmapEvent> queryHeatmapEvents(Connection conn, String type, String world, long since, long until) throws SQLException {
         List<HeatmapEvent> events = new ArrayList<>();
         String sql = "SELECT x, y, z, value, timestamp FROM heatmap_events WHERE type = ? AND world = ? AND timestamp >= ? AND timestamp <= ?";
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, type);
             ps.setString(2, world);
             ps.setLong(3, since);
@@ -1159,9 +1204,21 @@ public class StatsStorage implements Closeable {
         void accept(double x, double z, double value, long timestamp);
     }
 
-    public synchronized void forEachHeatmapEvent(String type, String world, long since, long until, HeatmapEventConsumer consumer) throws SQLException {
+    public void forEachHeatmapEvent(String type, String world, long since, long until, HeatmapEventConsumer consumer) throws SQLException {
+        synchronized (readLock) {
+            if (readConnection != null) {
+                scanHeatmapEvents(readConnection, type, world, since, until, consumer);
+                return;
+            }
+        }
+        synchronized (this) {
+            scanHeatmapEvents(connection, type, world, since, until, consumer);
+        }
+    }
+
+    private void scanHeatmapEvents(Connection conn, String type, String world, long since, long until, HeatmapEventConsumer consumer) throws SQLException {
         String sql = "SELECT x, z, value, timestamp FROM heatmap_events WHERE type = ? AND world = ? AND timestamp >= ? AND timestamp <= ?";
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, type);
             ps.setString(2, world);
             ps.setLong(3, since);

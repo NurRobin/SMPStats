@@ -53,6 +53,10 @@ public class StatsCommand implements CommandExecutor, TabCompleter {
         }
 
         if ("dump".equalsIgnoreCase(sub)) {
+            if (!sender.hasPermission("smpstats.admin")) {
+                sender.sendMessage(ChatColor.RED + "Dafür fehlt dir die Berechtigung.");
+                return true;
+            }
             List<StatsRecord> all = statsService.getAllStats();
             for (StatsRecord record : all) {
                 plugin.getLogger().info(record.getName() + " -> " + gson.toJson(record));
@@ -82,7 +86,9 @@ public class StatsCommand implements CommandExecutor, TabCompleter {
         if (args.length == 1) {
             List<String> suggestions = new ArrayList<>();
             suggestions.add("json");
-            suggestions.add("dump");
+            if (sender.hasPermission("smpstats.admin")) {
+                suggestions.add("dump");
+            }
             suggestions.addAll(statsService.getOnlineNames());
             return suggestions;
         }

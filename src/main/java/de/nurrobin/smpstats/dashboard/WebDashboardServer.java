@@ -634,7 +634,17 @@ public class WebDashboardServer {
             }
             limit = Math.min(100, Math.max(1, limit));
             
-            List<?> moments = momentService.getRecentMoments(limit);
+            // Public DTO: no player UUID, world, coordinates or payload (would reveal bases, stashes, death spots).
+            List<Map<String, Object>> moments = new java.util.ArrayList<>();
+            for (var moment : momentService.getRecentMoments(limit)) {
+                Map<String, Object> dto = new java.util.LinkedHashMap<>();
+                dto.put("type", moment.getType());
+                dto.put("title", moment.getTitle());
+                dto.put("detail", moment.getDetail());
+                dto.put("startedAt", moment.getStartedAt());
+                dto.put("endedAt", moment.getEndedAt());
+                moments.add(dto);
+            }
             sendJson(exchange, 200, Map.of("moments", moments));
         }
     }

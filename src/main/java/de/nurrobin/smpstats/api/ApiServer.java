@@ -432,7 +432,8 @@ public class ApiServer {
             if (playerParam.isPresent()) {
                 try {
                     playerId = java.util.UUID.fromString(playerParam.get());
-                } catch (IllegalArgumentException ignored) {
+                } catch (IllegalArgumentException e) {
+                    throw new BadRequestException("Invalid player UUID");
                 }
             }
             List<?> moments = momentService.queryMoments(playerId, type != null ? type.toUpperCase() : null, since, limit);

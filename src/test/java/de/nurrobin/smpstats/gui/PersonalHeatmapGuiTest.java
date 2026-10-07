@@ -53,6 +53,7 @@ class PersonalHeatmapGuiTest {
         
         // Configure plugin mocks
         when(plugin.getHeatmapService()).thenReturn(Optional.of(heatmapService));
+        when(plugin.isEnabled()).thenReturn(true);
         
         // Configure heatmap service to return empty bins by default
         when(heatmapService.generateHeatmap(anyString(), anyString(), anyLong(), anyLong(), anyDouble()))
@@ -156,11 +157,14 @@ class PersonalHeatmapGuiTest {
         ItemStack initialItem = gui.getInventory().getItem(0);
         assertNotNull(initialItem);
         
+        settle();
+
         // Simulate click on slot 0
         InventoryClickEvent event = createClickEvent(gui.getInventory(), 0);
         gui.handleClick(event);
         
         assertTrue(event.isCancelled());
+        settle();
         // After click, activity should have changed - service should be called with new type
         verify(heatmapService, atLeast(2)).generateHeatmap(anyString(), anyString(), anyLong(), anyLong(), anyDouble());
     }
@@ -170,11 +174,14 @@ class PersonalHeatmapGuiTest {
         PersonalHeatmapGui gui = new PersonalHeatmapGui(plugin, guiManager, statsService, viewer, targetUuid, "TestPlayer");
         gui.open(viewer);
         
+        settle();
+
         // Simulate click on slot 8
         InventoryClickEvent event = createClickEvent(gui.getInventory(), 8);
         gui.handleClick(event);
         
         assertTrue(event.isCancelled());
+        settle();
         // World should have cycled - heatmap service should be called again
         verify(heatmapService, atLeast(2)).generateHeatmap(anyString(), anyString(), anyLong(), anyLong(), anyDouble());
     }
@@ -204,6 +211,7 @@ class PersonalHeatmapGuiTest {
         
         PersonalHeatmapGui gui = new PersonalHeatmapGui(plugin, guiManager, statsService, viewer, targetUuid, "TestPlayer");
         gui.open(viewer);
+        settle();
         
         // The chunk with data should have a colored glass pane (not gray)
         // The chunk at (viewerChunkX + 1, viewerChunkZ) is at grid position (4, 2) -> slot 10 + 2*9 + 4 = 32
@@ -221,6 +229,44 @@ class PersonalHeatmapGuiTest {
         Inventory inv2 = gui.getInventory();
         
         assertSame(inv1, inv2);
+    }
+
+    private void settle() {
+        server.getScheduler().waitAsyncTasksFinished();
+        server.getScheduler().performOneTick();
+    }
+
+    @Test
+    void testOnlyTracksTypesThatAreActuallyWritten() {
+        PersonalHeatmapGui gui = new PersonalHeatmapGui(plugin, guiManager, statsService, viewer, targetUuid, "TestPlayer");
+        gui.open(viewer);
+        settle();
+        java.util.Set<String> queried = new java.util.HashSet<>();
+        for (int i = 0; i < 4; i++) {
+            gui.handleClick(createClickEvent(gui.getInventory(), 0));
+            settle();
+        }
+        org.mockito.ArgumentCaptor<String> types = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(heatmapService, atLeast(4)).generateHeatmap(types.capture(), anyString(), anyLong(), anyLong(), anyDouble());
+        queried.addAll(types.getAllValues());
+        assertEquals(java.util.Set.of("POSITION", "MINING", "DEATH", "DAMAGE"), queried);
+    }
+
+    @Test
+    void testOpenDoesNotQueryHeatmapOnCallingThread() {
+        PersonalHeatmapGui gui = new PersonalHeatmapGui(plugin, guiManager, statsService, viewer, targetUuid, "TestPlayer");
+        Thread caller = Thread.currentThread();
+        java.util.concurrent.atomic.AtomicReference<Thread> ran = new java.util.concurrent.atomic.AtomicReference<>();
+        when(heatmapService.generateHeatmap(anyString(), anyString(), anyLong(), anyLong(), anyDouble()))
+                .thenAnswer(inv -> {
+                    ran.set(Thread.currentThread());
+                    return new ArrayList<HeatmapBin>();
+                });
+        gui.open(viewer);
+        settle();
+        verify(heatmapService, atLeastOnce()).generateHeatmap(anyString(), anyString(), anyLong(), anyLong(), anyDouble());
+        assertNotNull(ran.get());
+        assertNotSame(caller, ran.get());
     }
 
     private InventoryClickEvent createClickEvent(Inventory inventory, int slot) {
