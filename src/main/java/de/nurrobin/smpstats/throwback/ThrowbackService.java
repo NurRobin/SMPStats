@@ -507,7 +507,7 @@ public final class ThrowbackService {
         session.text(sign, ThrowbackTexts.joinLines(plan.welcome()));
         if (plan.statueLabel() != null) {
             Location base = new Location(world, start.x() + fx * 3 + rx * 3, start.y(), start.z() + fz * 3 + rz * 3, start.yaw(), 0);
-            SceneSpec statue = new SceneSpec(org.bukkit.entity.Pose.STANDING, null, null, null, null, 0, null, 180, List.of());
+            SceneSpec statue = new SceneSpec(org.bukkit.entity.Pose.STANDING, null, null, null, null, 0, null, 270, List.of());
             session.figure(base, statue);
             session.text(base.clone().add(0, 2.4, 0), plan.statueLabel());
         }

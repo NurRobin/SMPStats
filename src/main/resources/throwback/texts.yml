@@ -102,12 +102,10 @@ welcome:
   trophy:
     - "<gold><bold>Willkommen zurück, <name>!"
     - "<gray>Das war dein Weihnachts-SMP 2025."
-    - "<gray>Geh den Gang entlang, links und rechts stehen deine Werte."
   # Wer 2025 kurz dabei war: bewusst neutral
   returning:
     - "<gold><bold>Willkommen zurück, <name>!"
     - "<gray>Schön, dass du wieder dabei bist."
-    - "<gray>Geh den Gang entlang, hier erfährst du alles zum Event."
   newcomer:
     - "<gold><bold>Willkommen auf dem Christmas SMP, <name>!"
     - "<gray>Geh den Gang entlang, hier erfährst du alles zum Event."
@@ -116,8 +114,8 @@ rules:
   title: "<red><bold>Regeln <gray>(Stand <version>)"
   lines:
     - "<white>1. Respektvoll miteinander: keine Beleidigungen, keine Hassrede."
-    - "<white>2. Nicht griefen, nicht stehlen. Bauen geht nur in eigenen Claims."
-    - "<white>3. PvP ist aus, Streit klären wir ohne Waffen."
+    - "<white>2. Nicht griefen, nicht stehlen. Bauen darfst du überall, geschützt ist aber nur, was in deinem Claim steht."
+    - "<white>3. PvP ist nur in Claims aus. Außerhalb ist PvP an, also fair bleiben."
     - "<white>4. Farmen und Redstone haben Limits. Wer riesige Anlagen baut, legt den Server lahm."
     - "<white>5. Fairplay: keine Cheats, keine Dupes, keine Exploits."
     - "<white>6. Handel nur ehrlich, Scamming wird bestraft."

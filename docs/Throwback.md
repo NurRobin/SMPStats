@@ -67,8 +67,9 @@ neuen Karten anlegt.
 | `/throwback admin reset <spieler>` | Fortschritt löschen: wieder Pflicht-Rundgang |
 | `/throwback admin info` | Zustand und Layout |
 
-Bau-Steckbrief für die echte Halle: Ankunftsplattform, Gang mindestens 3 Blöcke breit, 12 Bühnen innen etwa
-3×3×3 (6 links, 6 rechts, zum Gang offen, Einmessen der Bodenmitte), flache Wandflächen für etwa 3 Bilder à 4×3,
+Bau-Steckbrief für die echte Halle: Ankunftsplattform, Gang mindestens 3 Blöcke breit, 12 Bühnen mit einer
+Standfläche von 3 Blöcken Tiefe und 4 Blöcken Breite plus 1 bis 2 Blöcken Luft zu den Seiten, nach hinten und nach oben,
+damit die Hologramme (bis 6,5 Blöcke breit) nicht in die Wand ragen (6 links, 6 rechts, zum Gang offen, Einmessen der Bodenmitte), flache Wandflächen für etwa 3 Bilder à 4×3,
 Regeltafel etwa 5×3, dekoratives Portal am Gangende. Die Blickrichtung (`yaw`) einer Bühne zeigt auf die
 Rückwand der Bühne.
 
