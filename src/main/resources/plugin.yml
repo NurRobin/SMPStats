@@ -20,6 +20,9 @@ commands:
     description: Besuche die Throwback-Halle.
     usage: /throwback [leave]
 permissions:
+  smpstats.throwback.build:
+    description: Darf die Throwback-Halle im Bearbeitungsmodus (/throwback admin edit) einrichten, ohne sonstige Admin-Rechte.
+    default: false
   smpstats.throwback.bypass:
     description: Darf die Halle auch während des Pflicht-Rundgangs ohne Portal verlassen (Teleport).
     default: false
@@ -67,3 +70,4 @@ permissions:
       smpstats.gui.health.manage: true
       smpstats.health: true
       smpstats.throwback.bypass: true
+      smpstats.throwback.build: true

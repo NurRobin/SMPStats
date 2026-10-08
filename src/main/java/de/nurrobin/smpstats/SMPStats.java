@@ -8,6 +8,8 @@ import de.nurrobin.smpstats.throwback.HallWorld;
 import de.nurrobin.smpstats.throwback.MannequinSceneRenderer;
 import de.nurrobin.smpstats.throwback.MapArtWall;
 import de.nurrobin.smpstats.throwback.ThrowbackCommand;
+import de.nurrobin.smpstats.throwback.ThrowbackEditListener;
+import de.nurrobin.smpstats.throwback.ThrowbackEditor;
 import de.nurrobin.smpstats.throwback.ThrowbackListener;
 import de.nurrobin.smpstats.throwback.ThrowbackService;
 import de.nurrobin.smpstats.throwback.ThrowbackSettings;
@@ -71,6 +73,7 @@ public class SMPStats extends JavaPlugin {
     private SeasonService seasonService;
     private ThrowbackService throwbackService;
     private MannequinSceneRenderer throwbackRenderer;
+    private ThrowbackEditor throwbackEditor;
     private de.nurrobin.smpstats.database.WriteQueue writeQueue;
     private int autosaveTaskId = -1;
 
@@ -150,6 +153,9 @@ public class SMPStats extends JavaPlugin {
     @Override
     public void onDisable() {
         cancelAutosave();
+        if (throwbackEditor != null) {
+            throwbackEditor.shutdown();
+        }
         if (throwbackService != null) {
             throwbackService.shutdown();
         }
@@ -588,6 +594,7 @@ public class SMPStats extends JavaPlugin {
                     new MapArtWall(this, getDataFolder().toPath().resolve("throwback").resolve("mapwall.yml")),
                     () -> !Bukkit.getOnlineMode(), System::currentTimeMillis);
             this.throwbackRenderer = renderer;
+            this.throwbackEditor = new ThrowbackEditor(this, throwbackService, renderer);
             seasonService.onImported(season -> {
                 if (season.equals(throwbackService.settings().season())) {
                     throwbackService.invalidateBoard();
@@ -611,6 +618,7 @@ public class SMPStats extends JavaPlugin {
         pm.registerEvents(guiManager, this);
         if (throwbackService != null) {
             pm.registerEvents(new ThrowbackListener(this, throwbackService, throwbackRenderer), this);
+            pm.registerEvents(new ThrowbackEditListener(throwbackEditor, throwbackService), this);
         }
     }
 
@@ -624,7 +632,7 @@ public class SMPStats extends JavaPlugin {
         Objects.requireNonNull(getCommand("smpstats")).setExecutor(adminCommand);
         Objects.requireNonNull(getCommand("smpstats")).setTabCompleter(adminCommand);
         if (throwbackService != null && getCommand("throwback") != null) {
-            ThrowbackCommand throwbackCommand = new ThrowbackCommand(this, throwbackService, this::readThrowbackSettings);
+            ThrowbackCommand throwbackCommand = new ThrowbackCommand(this, throwbackService, this::readThrowbackSettings, throwbackEditor);
             Objects.requireNonNull(getCommand("throwback")).setExecutor(throwbackCommand);
             Objects.requireNonNull(getCommand("throwback")).setTabCompleter(throwbackCommand);
         }

@@ -21,25 +21,32 @@ import java.util.UUID;
 /** {@code /throwback}: visit the hall, plus admin sub-commands to measure in and build the stand-in corridor. */
 public final class ThrowbackCommand implements CommandExecutor, TabCompleter {
     private static final String ADMIN = "smpstats.admin";
+    private static final String BUILD = "smpstats.throwback.build";
     private static final List<String> ADMIN_SUBS = List.of("info", "reload", "build", "tp", "setstart", "setstage",
-            "setrules", "portal1", "portal2", "addwall", "walls", "reset", "skip", "preview");
+            "setrules", "portal1", "portal2", "addwall", "walls", "reset", "skip", "preview", "edit");
+    private static final List<String> EDIT_SUBS = List.of("save", "cancel", "wallsize");
 
     private final Plugin plugin;
     private final ThrowbackService service;
     private final java.util.function.Supplier<ThrowbackSettings> reread;
+    private final ThrowbackEditor editor;
     private Location portalCorner;
 
-    public ThrowbackCommand(Plugin plugin, ThrowbackService service, java.util.function.Supplier<ThrowbackSettings> reread) {
+    public ThrowbackCommand(Plugin plugin, ThrowbackService service, java.util.function.Supplier<ThrowbackSettings> reread,
+                            ThrowbackEditor editor) {
         this.plugin = plugin;
         this.service = service;
         this.reread = reread;
+        this.editor = editor;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         String sub = args.length == 0 ? "visit" : args[0].toLowerCase(Locale.ROOT);
         if (sub.equals("admin")) {
-            if (!sender.hasPermission(ADMIN)) {
+            // builders without smpstats.admin may use the edit mode and nothing else
+            boolean edit = args.length >= 2 && args[1].equalsIgnoreCase("edit") && sender.hasPermission(BUILD);
+            if (!sender.hasPermission(ADMIN) && !edit) {
                 sender.sendMessage(Component.text("Dafür fehlt dir die Berechtigung.", net.kyori.adventure.text.format.NamedTextColor.RED));
                 return true;
             }
@@ -148,7 +155,29 @@ public final class ThrowbackCommand implements CommandExecutor, TabCompleter {
                 }
             }
             case "addwall" -> addWall(p, args);
+            case "edit" -> edit(p, args);
             default -> say(p, "Nutze: /throwback admin <" + String.join("|", ADMIN_SUBS) + ">");
+        }
+    }
+
+    private void edit(Player p, String[] args) {
+        String action = args.length < 3 ? "" : args[2].toLowerCase(Locale.ROOT);
+        switch (action) {
+            case "" -> editor.begin(p);
+            case "save" -> editor.save(p);
+            case "cancel" -> editor.cancel(p);
+            case "wallsize" -> {
+                try {
+                    if (args.length < 5) {
+                        throw new NumberFormatException();
+                    }
+                    String title = args.length > 5 ? String.join(" ", java.util.Arrays.copyOfRange(args, 5, args.length)) : null;
+                    editor.wallSize(p, Integer.parseInt(args[3]), Integer.parseInt(args[4]), title);
+                } catch (NumberFormatException e) {
+                    p.sendMessage(service.texts().message("edit_wall_usage"));
+                }
+            }
+            default -> say(p, "Nutze: /throwback admin edit [" + String.join("|", EDIT_SUBS) + "]");
         }
     }
 
@@ -254,11 +283,18 @@ public final class ThrowbackCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             out.addAll(List.of("leave", "confirm"));
-            if (sender.hasPermission(ADMIN)) {
+            if (sender.hasPermission(ADMIN) || sender.hasPermission(BUILD)) {
                 out.add("admin");
             }
-        } else if (args.length == 2 && args[0].equalsIgnoreCase("admin") && sender.hasPermission(ADMIN)) {
-            out.addAll(ADMIN_SUBS);
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("admin")) {
+            if (sender.hasPermission(ADMIN)) {
+                out.addAll(ADMIN_SUBS);
+            } else if (sender.hasPermission(BUILD)) {
+                out.add("edit");
+            }
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("admin") && args[1].equalsIgnoreCase("edit")
+                && (sender.hasPermission(ADMIN) || sender.hasPermission(BUILD))) {
+            out.addAll(EDIT_SUBS);
         }
         String prefix = args[args.length - 1].toLowerCase(Locale.ROOT);
         out.removeIf(s -> !s.startsWith(prefix));
