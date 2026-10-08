@@ -46,6 +46,7 @@ class ThrowbackSettingsTest {
         assertEquals(layout.start(), read.start());
         assertEquals(layout.stages(), read.stages());
         assertEquals(layout.rules(), read.rules());
+        assertNull(read.privacy(), "the stand-in hall has no privacy place of its own");
         assertEquals(layout.portal(), read.portal());
         assertEquals(layout.walls(), read.walls());
         assertTrue(read.usable());
@@ -112,5 +113,77 @@ class ThrowbackSettingsTest {
                     "the corridor spans blocks -2..2, so its middle is x = 0.5");
             org.junit.jupiter.api.Assertions.assertEquals(west.z(), east.z(), 1e-9);
         }
+    }
+
+    @Test
+    void privacyPlaceRoundTripsThroughYaml() throws Exception {
+        HallLayout layout = PlaceholderHall.layout().withPrivacy(new Pos(4.5, 64, 90.5, -90f));
+        YamlConfiguration yaml = new YamlConfiguration();
+        layout.write(yaml.createSection("layout"));
+        YamlConfiguration reloaded = new YamlConfiguration();
+        reloaded.loadFromString(yaml.saveToString());
+
+        HallLayout read = HallLayout.read(reloaded.getConfigurationSection("layout"), LOG);
+
+        assertEquals(new Pos(4.5, 64, 90.5, -90f), read.privacy());
+        assertEquals(layout, read);
+    }
+
+    @Test
+    void oldLayoutsWithoutPrivacyStillRead() throws Exception {
+        YamlConfiguration yaml = new YamlConfiguration();
+        PlaceholderHall.layout().write(yaml.createSection("layout"));
+        yaml.set("layout.privacy", null);
+
+        HallLayout read = HallLayout.read(yaml.getConfigurationSection("layout"), LOG);
+
+        assertNull(read.privacy());
+        assertTrue(read.usable(), "a hall without a privacy place is still usable");
+    }
+
+    @Test
+    void writingWithoutPrivacyRemovesAnOldEntry() {
+        YamlConfiguration yaml = new YamlConfiguration();
+        PlaceholderHall.layout().withPrivacy(new Pos(1, 2, 3, 0)).write(yaml.createSection("layout"));
+        assertTrue(yaml.isConfigurationSection("layout.privacy"));
+
+        PlaceholderHall.layout().write(yaml.getConfigurationSection("layout"));
+
+        assertFalse(yaml.isConfigurationSection("layout.privacy"));
+    }
+
+    @Test
+    void withersKeepThePrivacyPlace() {
+        HallLayout layout = PlaceholderHall.layout().withPrivacy(new Pos(1, 2, 3, 0));
+
+        assertEquals(new Pos(1, 2, 3, 0), layout.withStart(new Pos(0, 0, 0, 0)).privacy());
+        assertEquals(new Pos(1, 2, 3, 0), layout.withRules(new Pos(0, 0, 0, 0)).privacy());
+        assertEquals(new Pos(1, 2, 3, 0), layout.withPortal(Region.of(0, 0, 0, 1, 1, 1)).privacy());
+        assertEquals(new Pos(1, 2, 3, 0), layout.withStage(0, new Pos(9, 9, 9, 0)).privacy());
+        assertEquals(new Pos(1, 2, 3, 0), layout.withWall(layout.walls().get(0)).privacy());
+    }
+
+    @Test
+    void editMinimumStagesDefaultsToEightAndIsClamped() {
+        assertEquals(8, ThrowbackSettings.read(null, LOG).editMinStages());
+
+        YamlConfiguration yaml = new YamlConfiguration();
+        yaml.set("edit.min_stages", 10);
+        assertEquals(10, ThrowbackSettings.read(yaml, LOG).editMinStages());
+        yaml.set("edit.min_stages", 99);
+        assertEquals(12, ThrowbackSettings.read(yaml, LOG).editMinStages());
+        yaml.set("edit.min_stages", 0);
+        assertEquals(1, ThrowbackSettings.read(yaml, LOG).editMinStages());
+    }
+
+    @Test
+    void shippedConfigHasTheEditSection() throws Exception {
+        YamlConfiguration yaml = new YamlConfiguration();
+        try (var in = getClass().getResourceAsStream("/config.yml")) {
+            yaml.load(new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8));
+        }
+
+        assertEquals(8, yaml.getInt("throwback.edit.min_stages"));
+        assertEquals(8, ThrowbackSettings.read(yaml.getConfigurationSection("throwback"), LOG).editMinStages());
     }
 }

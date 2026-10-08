@@ -8,10 +8,17 @@ import java.util.logging.Logger;
 public record ThrowbackSettings(boolean enabled, String world, String season, int minPlaytimeMinutes, int rankBadgeTop,
                                 String rulesVersion, String privacyUrl, boolean matchByNameOffline,
                                 int unloadDelaySeconds, String imagesFolder, String textsFile, String exitWorld,
-                                Pos exit, SpawnPortal spawnPortal, HallLayout layout) {
+                                Pos exit, SpawnPortal spawnPortal, int editMinStages, HallLayout layout) {
+    public static final int DEFAULT_EDIT_MIN_STAGES = 8;
 
     /** The entrance in the main world: walking into the region starts a visit; {@code exit} is where visitors land. */
     public record SpawnPortal(String world, Region region, Pos exit) {
+    }
+
+    public ThrowbackSettings withLayout(HallLayout next) {
+        return new ThrowbackSettings(enabled, world, season, minPlaytimeMinutes, rankBadgeTop, rulesVersion, privacyUrl,
+                matchByNameOffline, unloadDelaySeconds, imagesFolder, textsFile, exitWorld, exit, spawnPortal,
+                editMinStages, next);
     }
 
     public static ThrowbackSettings read(ConfigurationSection s, Logger logger) {
@@ -45,6 +52,7 @@ public record ThrowbackSettings(boolean enabled, String world, String season, in
                 exitSection == null ? "" : exitSection.getString("world", ""),
                 exitSection == null ? null : Pos.read(exitSection),
                 portal,
+                Math.max(1, Math.min(HallLayout.MAX_STAGES, s.getInt("edit.min_stages", DEFAULT_EDIT_MIN_STAGES))),
                 HallLayout.read(s.getConfigurationSection("layout"), logger));
     }
 }

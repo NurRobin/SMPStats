@@ -51,7 +51,7 @@ public final class PlaceholderHall {
                 new WallDef("bauten-1", -2, Y0, a + 6, BlockFace.EAST, 4, 3, "Bauten 2025: Bau 1", "Erbauer"),
                 new WallDef("bauten-2", -2, Y0, a + 11, BlockFace.EAST, 4, 3, "Bauten 2025: Bau 2", "Erbauer"),
                 new WallDef("bauten-3", -2, Y0, a + 16, BlockFace.EAST, 4, 3, "Bauten 2025: Bau 3", "Erbauer"));
-        return new HallLayout(new Pos(0.5, Y0, -6.5, 0f), List.copyOf(stages), new Pos(2.4, Y0, a + 7.5, 90f),
+        return new HallLayout(new Pos(0.5, Y0, -6.5, 0f), List.copyOf(stages), new Pos(2.4, Y0, a + 7.5, 90f), null,
                 Region.of(-1, Y0, END_Z - 3, 1, Y0 + 2, END_Z - 2), walls);
     }
 

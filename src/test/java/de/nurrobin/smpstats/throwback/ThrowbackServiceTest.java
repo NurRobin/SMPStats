@@ -100,7 +100,7 @@ class ThrowbackServiceTest {
         hall = new FakeHall();
         HallLayout layout = PlaceholderHall.layout();
         ThrowbackSettings settings = new ThrowbackSettings(true, "throwback_hall", "2025", 60, 15, "2026-1", "https://example.org",
-                false, 0, "throwback/images", "throwback/texts.yml", "", null, null, layout);
+                false, 0, "throwback/images", "throwback/texts.yml", "", null, null, 8, layout);
         service = new ThrowbackService(plugin, seasons, new CachedProgressRepository(progressStore, Logger.getLogger("test")),
                 settings, scenes, hall, new MapArtWall(plugin, data.resolve("mapwall.yml")), () -> false, clock::get);
         service.teleporter((player, location) -> {
@@ -146,6 +146,44 @@ class ThrowbackServiceTest {
         assertEquals(1, veraScenes.interactions, "one rules button");
         assertNotEquals(scenes.lastOf(VERA), scenes.lastOf(other.getUniqueId()), "every player has a session of their own");
         assertEquals(VERA, veraScenes.viewer);
+    }
+
+    @Test
+    void withoutAPrivacyPlaceTheBoardsHangSideBySideNextToTheRulesStation() {
+        PlayerMock vera = join("Vera", VERA);
+
+        java.util.List<Location> panels = scenes.lastOf(VERA).panels;
+
+        Pos rules = service.settings().layout().rules();
+        assertEquals(2, panels.size());
+        assertLocation(PanelMetrics.rulesBoard(hallWorld, rules), panels.get(0));
+        assertLocation(PanelMetrics.privacyBoard(hallWorld, rules, null), panels.get(1));
+        assertEquals(rules.z() - 2, panels.get(0).getZ(), 1e-9, "rules on the reader's left");
+        assertEquals(rules.z() + 2, panels.get(1).getZ(), 1e-9);
+        assertEquals(hallWorld, vera.getWorld());
+    }
+
+    @Test
+    void thePrivacyBoardHangsAtItsOwnPlaceWhenTheLayoutHasOne() {
+        Pos own = new Pos(20.5, 64, 100.5, 180f);
+        service.updateLayoutForTest(service.settings().layout().withPrivacy(own));
+
+        join("Vera", VERA);
+
+        java.util.List<Location> panels = scenes.lastOf(VERA).panels;
+        assertEquals(2, panels.size());
+        assertLocation(PanelMetrics.rulesBoard(hallWorld, service.settings().layout().rules()), panels.get(0));
+        assertEquals(20.5, panels.get(1).getX(), 1e-9);
+        assertEquals(100.5, panels.get(1).getZ(), 1e-9);
+        assertEquals(64 + PanelMetrics.PRIVACY_Y, panels.get(1).getY(), 1e-9);
+        assertEquals(180f, panels.get(1).getYaw());
+    }
+
+    private static void assertLocation(Location expected, Location actual) {
+        assertEquals(expected.getX(), actual.getX(), 1e-9);
+        assertEquals(expected.getY(), actual.getY(), 1e-9);
+        assertEquals(expected.getZ(), actual.getZ(), 1e-9);
+        assertEquals(expected.getYaw(), actual.getYaw());
     }
 
     @Test

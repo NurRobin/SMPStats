@@ -34,6 +34,7 @@ final class FakeScenes implements SceneRenderer {
         int figures;
         int texts;
         int interactions;
+        final List<Location> panels = new ArrayList<>();
         boolean closed;
 
         Session(UUID viewer) {
@@ -52,6 +53,7 @@ final class FakeScenes implements SceneRenderer {
 
         @Override
         public void panel(Location at, Component text, float scale) {
+            panels.add(at.clone());
             texts++;
         }
 
