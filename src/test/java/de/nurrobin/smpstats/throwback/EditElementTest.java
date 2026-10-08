@@ -159,7 +159,7 @@ class EditElementTest {
         OrientedBox box = e.clearance().get(0);
         assertEquals(20.5, box.center().x(), 1e-9);
         assertEquals(100.5, box.center().z(), 1e-9);
-        assertEquals(64 + PanelMetrics.PRIVACY_Y, box.y0(), 1e-9);
+        assertEquals(64, box.y0(), 1e-9, "its own place already is the bottom middle of the board");
     }
 
     @Test
@@ -175,7 +175,7 @@ class EditElementTest {
         assertEquals(100.5 + 2.0, fallback.getZ(), 1e-9);
         assertEquals(64 + 1.5, fallback.getY(), 1e-9);
         assertEquals(9.0, own.getX());
-        assertEquals(64 + 1.5, own.getY());
+        assertEquals(64, own.getY(), "its own place is the bottom middle, no offset");
     }
 
     // ------------------------------------------------------------------ collision

@@ -7,7 +7,8 @@ import org.bukkit.block.BlockFace;
  * south, 90 west, 180 north, -90 east):
  * <ul>
  * <li>start and stage: the builder's own look direction (a stage looks at its back wall)</li>
- * <li>rules and privacy board: look direction + 180, the board faces the reader</li>
+ * <li>rules board: look direction + 180, the board faces the reader</li>
+ * <li>privacy board: away from a clicked wall, else look direction + 180</li>
  * <li>picture wall: the frames face against the look direction</li>
  * </ul>
  */
@@ -54,13 +55,9 @@ final class EditGeometry {
             case STAGE:
                 return stage(bx, by, bz, hitX, hitZ, lookYaw);
             case RULES:
-            case PRIVACY:
                 return EditMark.of(kind, x, y, z, towardViewerYaw(lookYaw));
-            case PORTAL_1:
-            case PORTAL_2:
-                return EditMark.of(kind, x, y, z, 0f);
             default:
-                throw new IllegalArgumentException("Bilderwand: EditGeometry.wall nutzen");
+                throw new IllegalArgumentException(kind + ": eigene Methode in EditGeometry nutzen");
         }
     }
 
@@ -86,6 +83,49 @@ final class EditGeometry {
             return block;
         }
         return Math.max(block, Math.min(block + 1, Math.round(hit)));
+    }
+
+    /**
+     * A portal corner names the block a player's feet pass through, because the portal fires on the feet. That is
+     * the clicked block itself if one can walk through it (portal filling, carpet, air-like blocks), else the block
+     * on the clicked side, the same block a placed block would go to.
+     */
+    static EditMark portalCorner(EditKind kind, int bx, int by, int bz, boolean passable, BlockFace face) {
+        int x = bx;
+        int y = by;
+        int z = bz;
+        if (!passable && face != null) {
+            x += face.getModX();
+            y += face.getModY();
+            z += face.getModZ();
+        }
+        return EditMark.of(kind, x + 0.5, y, z + 0.5, 0f);
+    }
+
+    /**
+     * The privacy board, as the bottom middle of the board. Clicked on a wall it hangs flat against that wall with
+     * its middle at the clicked block; clicked on a floor it stands on it, on a ceiling it hangs from it.
+     */
+    static EditMark privacy(int bx, int by, int bz, BlockFace face, float lookYaw, double height) {
+        if (face == null || face == BlockFace.UP) {
+            return EditMark.of(EditKind.PRIVACY, bx + 0.5, by + 1.0, bz + 0.5, towardViewerYaw(lookYaw));
+        }
+        if (face == BlockFace.DOWN) {
+            return EditMark.of(EditKind.PRIVACY, bx + 0.5, by - height, bz + 0.5, towardViewerYaw(lookYaw));
+        }
+        double inset = 0.5 + PanelMetrics.THICKNESS / 2;
+        return EditMark.of(EditKind.PRIVACY, bx + 0.5 + face.getModX() * inset, by + 0.5 - height / 2,
+                bz + 0.5 + face.getModZ() * inset, yawOf(face));
+    }
+
+    /** The yaw that looks towards {@code face}. */
+    static float yawOf(BlockFace face) {
+        return switch (face) {
+            case WEST -> 90f;
+            case NORTH -> 180f;
+            case EAST -> -90f;
+            default -> 0f;
+        };
     }
 
     /** A picture wall whose lower-left front block sits on top of the clicked block, facing the builder. */

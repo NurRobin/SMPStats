@@ -175,7 +175,7 @@ class ThrowbackServiceTest {
         assertLocation(PanelMetrics.rulesBoard(hallWorld, service.settings().layout().rules()), panels.get(0));
         assertEquals(20.5, panels.get(1).getX(), 1e-9);
         assertEquals(100.5, panels.get(1).getZ(), 1e-9);
-        assertEquals(64 + PanelMetrics.PRIVACY_Y, panels.get(1).getY(), 1e-9);
+        assertEquals(64, panels.get(1).getY(), 1e-9, "the own place is the bottom middle of the board");
         assertEquals(180f, panels.get(1).getYaw());
     }
 

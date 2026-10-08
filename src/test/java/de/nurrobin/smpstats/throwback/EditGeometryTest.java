@@ -3,6 +3,8 @@ package de.nurrobin.smpstats.throwback;
 import org.bukkit.block.BlockFace;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class EditGeometryTest {
@@ -48,9 +50,30 @@ class EditGeometryTest {
     }
 
     @Test
-    void rulesAndPrivacyFaceTheBuilder() {
+    void rulesAndAPrivacyBoardOnTheFloorFaceTheBuilder() {
         assertEquals(180f, EditGeometry.mark(EditKind.RULES, 0, 63, 0, null, null, 0f).yaw());
-        assertEquals(-90f, EditGeometry.mark(EditKind.PRIVACY, 0, 63, 0, null, null, 90f).yaw());
+        assertEquals(-90f, EditGeometry.privacy(0, 63, 0, BlockFace.UP, 90f, 1.0).yaw());
+    }
+
+    @Test
+    void aPrivacyBoardClickedOnTheFloorStandsOnIt() {
+        assertEquals(new EditMark(EditKind.PRIVACY, 4.5, 64.0, 9.5, 180f, null), EditGeometry.privacy(4, 63, 9, BlockFace.UP, 10f, 1.4));
+    }
+
+    @Test
+    void aPrivacyBoardClickedOnAWallHangsFlatOnItCentredOnTheClickedBlock() {
+        // the north side of the block at z 10 was clicked: the board hangs just north of it and faces north
+        EditMark m = EditGeometry.privacy(4, 66, 10, BlockFace.NORTH, 33f, 1.4);
+
+        assertEquals(4.5, m.x(), 1e-9);
+        assertEquals(10.5 - 0.5 - PanelMetrics.THICKNESS / 2, m.z(), 1e-9, "flat against the wall");
+        assertEquals(66.5 - 0.7, m.y(), 1e-9, "the middle of the board is the middle of the clicked block");
+        assertEquals(180f, m.yaw(), "readable from the north, whatever way the builder looked");
+    }
+
+    @Test
+    void aPrivacyBoardClickedOnACeilingHangsFromIt() {
+        assertEquals(70 - 1.4, EditGeometry.privacy(0, 70, 0, BlockFace.DOWN, 0f, 1.4).y(), 1e-9);
     }
 
     @Test
@@ -87,12 +110,20 @@ class EditGeometryTest {
     }
 
     @Test
-    void portalCornersSitOnTheBlockAboveTheClickedOne() {
-        EditMark m = EditGeometry.mark(EditKind.PORTAL_1, 1, 63, 5, null, null, 33f);
+    void aPortalCornerOnASolidBlockIsTheBlockOnTheClickedSide() {
+        EditMark top = EditGeometry.portalCorner(EditKind.PORTAL_1, 1, 63, 5, false, BlockFace.UP);
+        EditMark side = EditGeometry.portalCorner(EditKind.PORTAL_2, 1, 65, 5, false, BlockFace.EAST);
 
-        assertEquals(1, m.blockX());
-        assertEquals(64, m.blockY());
-        assertEquals(5, m.blockZ());
+        assertEquals(List.of(1, 64, 5), List.of(top.blockX(), top.blockY(), top.blockZ()), "the floor: the block above it");
+        assertEquals(List.of(2, 65, 5), List.of(side.blockX(), side.blockY(), side.blockZ()), "a frame: the block next to it");
+        assertEquals(EditKind.PORTAL_2, side.kind());
+    }
+
+    @Test
+    void aPortalCornerOnAPassableBlockIsThatBlock() {
+        EditMark m = EditGeometry.portalCorner(EditKind.PORTAL_1, 1, 64, 5, true, BlockFace.SOUTH);
+
+        assertEquals(List.of(1, 64, 5), List.of(m.blockX(), m.blockY(), m.blockZ()));
     }
 
     @Test
@@ -107,7 +138,9 @@ class EditGeometryTest {
     }
 
     @Test
-    void wallsAreNotMadeByMark() {
+    void wallsPortalsAndPrivacyAreNotMadeByMark() {
         assertThrows(IllegalArgumentException.class, () -> EditGeometry.mark(EditKind.WALL, 0, 0, 0, null, null, 0f));
+        assertThrows(IllegalArgumentException.class, () -> EditGeometry.mark(EditKind.PORTAL_1, 0, 0, 0, null, null, 0f));
+        assertThrows(IllegalArgumentException.class, () -> EditGeometry.mark(EditKind.PRIVACY, 0, 0, 0, null, null, 0f));
     }
 }

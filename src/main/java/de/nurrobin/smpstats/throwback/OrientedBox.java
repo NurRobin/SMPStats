@@ -106,43 +106,34 @@ record OrientedBox(double ox, double oz, double fx, double fz, double s0, double
                 && by + 1 >= y0 - margin && by <= y1 + margin;
     }
 
-    /** Points along the 12 edges, about {@code spacing} apart, every corner once. */
-    List<Pt> edgePoints(double spacing) {
+    /** True if the point lies in the box grown by {@code margin} on every side. */
+    boolean contains(double x, double y, double z, double margin) {
+        double[] h = hull();
+        return x >= h[0] - margin && x <= h[1] + margin && z >= h[2] - margin && z <= h[3] + margin
+                && y >= y0 - margin && y <= y1 + margin;
+    }
+
+    /** The 12 edges as pairs of corners. */
+    List<Pt[]> edges() {
         double[] ss = {s0, s1};
         double[] ts = {t0, t1};
         double[] ys = {y0, y1};
-        List<Pt> out = new ArrayList<>();
-        for (double s : ss) {
-            for (double t : ts) {
-                for (double y : ys) {
-                    out.add(corner(s, t, y));
-                }
-            }
-        }
+        List<Pt[]> out = new ArrayList<>();
         for (double t : ts) {
             for (double y : ys) {
-                along(out, corner(s0, t, y), corner(s1, t, y), spacing);
+                out.add(new Pt[] {corner(s0, t, y), corner(s1, t, y)});
             }
         }
         for (double s : ss) {
             for (double y : ys) {
-                along(out, corner(s, t0, y), corner(s, t1, y), spacing);
+                out.add(new Pt[] {corner(s, t0, y), corner(s, t1, y)});
             }
         }
         for (double s : ss) {
             for (double t : ts) {
-                along(out, corner(s, t, y0), corner(s, t, y1), spacing);
+                out.add(new Pt[] {corner(s, t, y0), corner(s, t, y1)});
             }
         }
         return out;
-    }
-
-    private static void along(List<Pt> out, Pt a, Pt b, double spacing) {
-        double len = Math.sqrt(Math.pow(b.x() - a.x(), 2) + Math.pow(b.y() - a.y(), 2) + Math.pow(b.z() - a.z(), 2));
-        int n = Math.max(1, (int) Math.ceil(len / spacing - EPS));
-        for (int i = 1; i < n; i++) {
-            double f = (double) i / n;
-            out.add(new Pt(a.x() + (b.x() - a.x()) * f, a.y() + (b.y() - a.y()) * f, a.z() + (b.z() - a.z()) * f));
-        }
     }
 }

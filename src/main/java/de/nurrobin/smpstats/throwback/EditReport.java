@@ -6,6 +6,7 @@ import java.util.List;
 /**
  * What is still missing before the hall can be saved. {@code have/need} is shown for countable parts (stages,
  * portal corners); parts that are only there or not use 1 of 1. Blocked boxes are only warnings.
+ * The privacy board needs no place of its own: without one it hangs beside the rules board ({@code privacy_default}).
  */
 record EditReport(List<Check> checks, List<EditElement> blocked) {
 
@@ -20,7 +21,13 @@ record EditReport(List<Check> checks, List<EditElement> blocked) {
         List<Check> checks = new ArrayList<>();
         checks.add(single("start", draft.count(EditKind.START)));
         checks.add(single("rules", draft.count(EditKind.RULES)));
-        checks.add(single("privacy", draft.count(EditKind.PRIVACY)));
+        int rules = draft.count(EditKind.RULES);
+        int privacy = draft.count(EditKind.PRIVACY);
+        if (privacy == 0 && rules == 1) {
+            checks.add(new Check("privacy_default", true, 1, 1));
+        } else {
+            checks.add(single("privacy", privacy));
+        }
         int corners = draft.count(EditKind.PORTAL_1) + draft.count(EditKind.PORTAL_2);
         checks.add(new Check("portal", corners == 2, corners, 2));
         int stages = draft.count(EditKind.STAGE);

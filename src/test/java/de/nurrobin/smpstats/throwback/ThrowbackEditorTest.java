@@ -55,7 +55,51 @@ class ThrowbackEditorTest {
     @TempDir
     Path tempDir;
 
-    private record Dust(UUID viewer, Location at, Color color) {
+    /** A line as the fake effects saw it; {@code removed} is set by {@link EditEffects.Line#remove()}. */
+    private static final class DrawnLine implements EditEffects.Line {
+        final UUID viewer;
+        final Location from;
+        final Location to;
+        final Color color;
+        boolean removed;
+
+        DrawnLine(UUID viewer, Location from, Location to, Color color) {
+            this.viewer = viewer;
+            this.from = from;
+            this.to = to;
+            this.color = color;
+        }
+
+        @Override
+        public void remove() {
+            removed = true;
+        }
+    }
+
+    private final class FakeEffects implements EditEffects {
+        final List<DrawnLine> lines = new ArrayList<>();
+        final Map<UUID, List<String>> sidebars = new java.util.HashMap<>();
+
+        @Override
+        public EditEffects.Line line(org.bukkit.entity.Player viewer, Location from, Location to, Color color) {
+            DrawnLine l = new DrawnLine(viewer.getUniqueId(), from.clone(), to.clone(), color);
+            lines.add(l);
+            return l;
+        }
+
+        @Override
+        public void sidebar(org.bukkit.entity.Player viewer, Component title, List<Component> shown) {
+            sidebars.put(viewer.getUniqueId(), shown.stream().map(ThrowbackEditorTest::plain).toList());
+        }
+
+        @Override
+        public void clearSidebar(org.bukkit.entity.Player viewer) {
+            sidebars.remove(viewer.getUniqueId());
+        }
+
+        List<DrawnLine> live() {
+            return lines.stream().filter(l -> !l.removed).toList();
+        }
     }
 
     private ServerMock server;
@@ -66,7 +110,7 @@ class ThrowbackEditorTest {
     private ThrowbackService service;
     private ThrowbackEditor editor;
     private ThrowbackEditListener listener;
-    private final List<Dust> dust = new ArrayList<>();
+    private final FakeEffects effects = new FakeEffects();
     private final List<int[]> probed = new ArrayList<>();
     private java.util.Set<List<Integer>> solid = new java.util.HashSet<>();
 
@@ -106,7 +150,7 @@ class ThrowbackEditorTest {
 
     private ThrowbackEditor newEditor() {
         return new ThrowbackEditor(plugin, service, scenes,
-                (viewer, at, color) -> dust.add(new Dust(viewer.getUniqueId(), at.clone(), color)),
+                effects,
                 world -> (x, y, z) -> {
                     probed.add(new int[] {x, y, z});
                     return solid.contains(List.of(x, y, z));
@@ -152,8 +196,12 @@ class ThrowbackEditorTest {
     }
 
     private PlayerInteractEvent click(PlayerMock p, EditTool tool, Action action, Block block) {
+        return click(p, tool, action, block, BlockFace.UP);
+    }
+
+    private PlayerInteractEvent click(PlayerMock p, EditTool tool, Action action, Block block, BlockFace face) {
         p.getInventory().setHeldItemSlot(tool.ordinal());
-        PlayerInteractEvent e = new PlayerInteractEvent(p, action, p.getInventory().getItem(tool.ordinal()), block, BlockFace.UP,
+        PlayerInteractEvent e = new PlayerInteractEvent(p, action, p.getInventory().getItem(tool.ordinal()), block, face,
                 EquipmentSlot.HAND);
         server.getPluginManager().callEvent(e);
         return e;
@@ -549,6 +597,71 @@ class ThrowbackEditorTest {
     }
 
     @Test
+    void portalCornersAreTheBlocksTheFeetPassThrough() {
+        PlayerMock bob = emptyBuilder();
+        solid.add(List.of(10, 63, 10));
+        solid.add(List.of(13, 66, 10));
+
+        click(bob, EditTool.PORTAL_1, Action.RIGHT_CLICK_BLOCK, hallWorld.getBlockAt(10, 63, 10), BlockFace.UP);
+        click(bob, EditTool.PORTAL_2, Action.RIGHT_CLICK_BLOCK, hallWorld.getBlockAt(13, 66, 10), BlockFace.WEST);
+        EditMark corner1 = draft(bob).single(EditKind.PORTAL_1).orElseThrow();
+        EditMark corner2 = draft(bob).single(EditKind.PORTAL_2).orElseThrow();
+
+        assertEquals(List.of(10, 64, 10), List.of(corner1.blockX(), corner1.blockY(), corner1.blockZ()), "on the floor: above it");
+        assertEquals(List.of(12, 66, 10), List.of(corner2.blockX(), corner2.blockY(), corner2.blockZ()), "on the frame: in front of it");
+
+        click(bob, EditTool.PORTAL_2, Action.RIGHT_CLICK_BLOCK, hallWorld.getBlockAt(12, 65, 10), BlockFace.UP);
+        EditMark passable = draft(bob).single(EditKind.PORTAL_2).orElseThrow();
+        assertEquals(65, passable.blockY(), "a block one can walk through is the corner itself");
+    }
+
+    @Test
+    void aPrivacyBoardClickedOnAWallHangsThere() {
+        PlayerMock bob = builder();
+        hallWorld.getBlockAt(20, 66, 100).setType(Material.STONE);
+
+        click(bob, EditTool.PRIVACY, Action.RIGHT_CLICK_BLOCK, hallWorld.getBlockAt(20, 66, 100), BlockFace.NORTH);
+
+        Location board = scenes.lastOf(bob.getUniqueId()).panels.get(1);
+        assertEquals(100 - PanelMetrics.THICKNESS / 2, board.getZ(), 1e-9);
+        assertTrue(board.getY() < 66.5 && board.getY() > 64, "the board's middle is at the clicked block: " + board.getY());
+        assertEquals(180f, board.getYaw());
+    }
+
+    @Test
+    void leftClickIntoTheAirRemovesTheBoardTheBuilderLooksAt() {
+        PlayerMock bob = builder();
+        look(bob, 0f);
+        rightClick(bob, EditTool.PRIVACY, 20, 63, 100);
+        Location eye = new Location(hallWorld, 20.5, 64, 94.5, 0f, 0f);
+        double boardMiddle = 64 + editor.elements(bob.getUniqueId()).stream().filter(e -> e.type().equals("privacy")).findFirst()
+                .orElseThrow().clearance().get(0).center().y() - 64;
+        double dy = boardMiddle - (eye.getY() + bob.getEyeHeight());
+        eye.setPitch((float) -Math.toDegrees(Math.atan2(dy, 6.0)));
+        bob.teleport(eye);
+        messages(bob);
+
+        click(bob, EditTool.RULES, Action.LEFT_CLICK_AIR, null);
+        assertTrue(draft(bob).single(EditKind.PRIVACY).isPresent(), "another tool leaves the board alone");
+
+        click(bob, EditTool.PRIVACY, Action.LEFT_CLICK_AIR, null);
+
+        assertTrue(draft(bob).single(EditKind.PRIVACY).isEmpty());
+        assertTrue(messages(bob).contains("Datenschutz-Tafel entfernt."));
+    }
+
+    @Test
+    void leftClickOnTheDefaultPrivacyBoardExplainsWhereItComesFrom() {
+        PlayerMock bob = builder();
+        bob.teleport(new Location(hallWorld, 300.5, 64, 300.5, 0f, 90f));
+        messages(bob);
+
+        click(bob, EditTool.PRIVACY, Action.LEFT_CLICK_BLOCK, hallWorld.getBlockAt(300, 63, 300));
+
+        assertTrue(messages(bob).stream().anyMatch(m -> m.contains("Standardplatz neben der Regeltafel")));
+    }
+
+    @Test
     void undoToolTakesBackTheLastMarker() {
         PlayerMock bob = builder();
         look(bob, 0f);
@@ -734,52 +847,63 @@ class ThrowbackEditorTest {
         bob.teleport(new Location(hallWorld, 0.5, 64, 0.5));
         editor.begin(bob);
         server.getScheduler().performTicks(2);
-        dust.clear();
         return bob;
     }
 
     @Test
-    void aStartColumnIsDrawnWithItsTwelveEdgesOnly() {
+    void aStartColumnIsDrawnWithItsTwelveEdges() {
         PlayerMock bob = emptyBuilder();
         look(bob, 0f);
         rightClick(bob, EditTool.START, 0, 63, 3);
 
-        int points = editor.drawForTest(bob);
+        List<DrawnLine> live = effects.live();
 
-        // a 1 x 1 x 2 column: 8 corners, one point in the middle of each of the 8 short edges, 3 on each of the 4 tall ones
-        assertEquals(8 + 8 * 1 + 4 * 3, points);
-        assertEquals(points, dust.size());
-        assertTrue(dust.stream().allMatch(d -> d.color().equals(ThrowbackEditor.FREE)));
-        double spacing = dust.stream().filter(d -> d.at().getX() == 0.0 && d.at().getZ() == 3.0).map(d -> d.at().getY()).sorted()
-                .reduce((a, b) -> b - a > 0 ? b : a).orElseThrow();
-        assertEquals(66.0, spacing, 1e-9);
+        assertEquals(12, live.size());
+        assertTrue(live.stream().allMatch(l -> l.color.equals(ThrowbackEditor.FREE)));
+        double top = live.stream().mapToDouble(l -> Math.max(l.from.getY(), l.to.getY())).max().orElseThrow();
+        assertEquals(66.0, top, 1e-9, "two blocks high on top of the clicked block");
     }
 
     @Test
-    void onlyTheBuilderReceivesTheParticles() {
+    void onlyTheBuilderSeesTheLines() {
         PlayerMock bob = emptyBuilder();
         PlayerMock other = player("Other");
         other.teleport(new Location(hallWorld, 1, 64, 1));
         look(bob, 0f);
         rightClick(bob, EditTool.START, 0, 63, 3);
 
-        server.getScheduler().performTicks(ThrowbackEditor.PARTICLE_PERIOD);
-
-        assertFalse(dust.isEmpty(), "the tick draws");
-        assertTrue(dust.stream().allMatch(d -> d.viewer().equals(bob.getUniqueId())));
+        assertFalse(effects.live().isEmpty());
+        assertTrue(effects.lines.stream().allMatch(l -> l.viewer.equals(bob.getUniqueId())));
     }
 
     @Test
-    void elementsBeyondThirtyTwoBlocksAreNotDrawn() {
+    void linesStayInsteadOfBeingRedrawnAllTheTime() {
         PlayerMock bob = emptyBuilder();
         look(bob, 90f);
         rightClick(bob, EditTool.STAGE, 0, 63, 10);
-        rightClick(bob, EditTool.STAGE, 0, 63, 200);
+        // turning around is a teleport in the test, and a teleport draws once more on the next tick
+        server.getScheduler().performTicks(1);
+        int drawn = effects.lines.size();
+        int looked = probed.size();
 
-        editor.drawForTest(bob);
+        server.getScheduler().performTicks(200);
 
-        assertFalse(dust.isEmpty());
-        assertTrue(dust.stream().allMatch(d -> d.at().getZ() < 40), "nothing near the second stage at z 200");
+        assertEquals(drawn, effects.lines.size(), "nothing is drawn again while nothing changes");
+        assertEquals(looked, probed.size(), "and no block is looked at");
+        assertEquals(24, effects.live().size(), "free space and floor, 12 edges each");
+    }
+
+    @Test
+    void movingAMarkerReplacesItsLines() {
+        PlayerMock bob = emptyBuilder();
+        look(bob, 0f);
+        rightClick(bob, EditTool.START, 0, 63, 3);
+        rightClick(bob, EditTool.START, 5, 63, 8);
+
+        List<DrawnLine> live = effects.live();
+
+        assertEquals(12, live.size());
+        assertTrue(live.stream().allMatch(l -> l.from.getX() >= 5), "the old column is gone");
     }
 
     @Test
@@ -787,16 +911,46 @@ class ThrowbackEditorTest {
         PlayerMock bob = emptyBuilder();
         look(bob, 90f);
         rightClick(bob, EditTool.STAGE, 0, 63, 10);
+        assertTrue(effects.live().stream().anyMatch(l -> l.color.equals(ThrowbackEditor.FREE)));
+
         solid.add(List.of(-1, 66, 10));
         editor.blockChanged(bob, hallWorld.getBlockAt(-1, 66, 10));
         server.getScheduler().performTicks(1);
 
-        editor.drawForTest(bob);
-
+        List<DrawnLine> live = effects.live();
         assertTrue(editor.elements(bob.getUniqueId()).get(0).blocked());
-        assertTrue(dust.stream().anyMatch(d -> d.color().equals(ThrowbackEditor.BLOCKED)));
-        assertTrue(dust.stream().anyMatch(d -> d.color().equals(ThrowbackEditor.FLOOR)));
-        assertTrue(dust.stream().noneMatch(d -> d.color().equals(ThrowbackEditor.FREE)));
+        assertTrue(live.stream().anyMatch(l -> l.color.equals(ThrowbackEditor.BLOCKED)));
+        assertTrue(live.stream().anyMatch(l -> l.color.equals(ThrowbackEditor.FLOOR)));
+        assertTrue(live.stream().noneMatch(l -> l.color.equals(ThrowbackEditor.FREE)));
+    }
+
+    @Test
+    void endingTheSessionRemovesEveryLineAndTheSidebar() {
+        PlayerMock bob = emptyBuilder();
+        look(bob, 0f);
+        rightClick(bob, EditTool.START, 0, 63, 3);
+        assertTrue(effects.sidebars.containsKey(bob.getUniqueId()));
+
+        editor.cancel(bob);
+
+        assertTrue(effects.live().isEmpty());
+        assertFalse(effects.sidebars.containsKey(bob.getUniqueId()));
+    }
+
+    @Test
+    void theSidebarListsWhatIsMissingAndWhatIsBlocked() {
+        PlayerMock bob = emptyBuilder();
+        look(bob, 90f);
+        rightClick(bob, EditTool.STAGE, 0, 63, 10);
+        solid.add(List.of(-1, 66, 10));
+        editor.blockChanged(bob, hallWorld.getBlockAt(-1, 66, 10));
+        server.getScheduler().performTicks(1);
+
+        List<String> sidebar = effects.sidebars.get(bob.getUniqueId());
+
+        assertTrue(sidebar.contains("Start ✗"), sidebar.toString());
+        assertTrue(sidebar.contains("Bühnen 1/8 ✗"), sidebar.toString());
+        assertTrue(sidebar.contains("⚠ Bühne 1 ragt in Blöcke"), sidebar.toString());
     }
 
     @Test
@@ -812,39 +966,6 @@ class ThrowbackEditorTest {
         rightClick(bob, EditTool.STAGE, 0, 63, 10);
 
         assertFalse(editor.elements(bob.getUniqueId()).get(0).blocked());
-    }
-
-    @Test
-    void particlesPerRunAreCapped() {
-        PlayerMock bob = emptyBuilder();
-        look(bob, 90f);
-        for (int i = 0; i < 12; i++) {
-            rightClick(bob, EditTool.STAGE, 0, 63, 4 + 2 * i);
-        }
-
-        int points = editor.drawForTest(bob);
-
-        // a stage is 140 points of free space plus 60 of floor; twelve of them would be 2400
-        assertTrue(points <= ThrowbackEditor.MAX_POINTS_PER_RUN, "points: " + points);
-        assertEquals(points, dust.size());
-        assertTrue(points > ThrowbackEditor.MAX_POINTS_PER_RUN - 200, "but the budget is used: " + points);
-        assertTrue(dust.stream().anyMatch(d -> d.at().getZ() < 8), "the nearest stage comes first");
-        assertTrue(dust.stream().noneMatch(d -> d.at().getZ() > 24), "the farthest two are dropped");
-    }
-
-    @Test
-    void theParticleTickReadsTheCacheAndNeverLooksAtBlocks() {
-        PlayerMock bob = emptyBuilder();
-        look(bob, 90f);
-        rightClick(bob, EditTool.STAGE, 0, 63, 10);
-        int looked = probed.size();
-        assertTrue(looked > 0, "placing checks the blocks once");
-
-        server.getScheduler().performTicks(ThrowbackEditor.PARTICLE_PERIOD * 5);
-        editor.drawForTest(bob);
-
-        assertEquals(looked, probed.size());
-        assertFalse(dust.isEmpty());
     }
 
     @Test
@@ -921,7 +1042,7 @@ class ThrowbackEditorTest {
         assertEquals(2, after.panels.size());
         assertEquals(20.5, after.panels.get(1).getX(), 1e-9);
         assertEquals(100.5, after.panels.get(1).getZ(), 1e-9);
-        assertEquals(64 + PanelMetrics.PRIVACY_Y, after.panels.get(1).getY(), 1e-9);
+        assertEquals(64, after.panels.get(1).getY(), 1e-9, "clicked on the floor, the board stands on it");
         assertEquals(0f, after.panels.get(1).getYaw() - 180f, "looking south, the board faces north");
     }
 
@@ -980,7 +1101,7 @@ class ThrowbackEditorTest {
         assertTrue(lines.contains("Bühnen 6/8 ✗"), lines.toString());
         assertTrue(lines.contains("Start ✓"), lines.toString());
         assertTrue(lines.contains("Regeltafel ✓"));
-        assertTrue(lines.contains("Datenschutz-Tafel ✗"), "the stand-in hall has no privacy place yet");
+        assertTrue(lines.contains("Datenschutz-Tafel (neben Regeltafel) ✓"), "without a place of its own it hangs beside the rules board");
         assertTrue(lines.contains("Portal 2/2 ✓"));
         assertTrue(editor.inSession(bob.getUniqueId()), "the builder stays in the edit mode");
         assertEquals(12, service.settings().layout().stages().size());
@@ -1075,14 +1196,14 @@ class ThrowbackEditorTest {
     }
 
     @Test
-    void theActionbarChecklistListsEveryRequiredPart() {
+    void theChecklistListsEveryRequiredPart() {
         PlayerMock bob = builder();
 
         EditReport report = editor.report(bob.getUniqueId());
-        server.getScheduler().performTicks(ThrowbackEditor.PARTICLE_PERIOD);
 
         assertEquals(5, report.checks().size());
-        assertFalse(report.complete(), "privacy is missing in the stand-in hall");
+        assertEquals(5, effects.sidebars.get(bob.getUniqueId()).size());
+        assertTrue(report.complete(), "the stand-in hall has everything, its privacy board hangs beside the rules board");
         assertNull(editor.report(UUID.randomUUID()));
     }
 
@@ -1174,9 +1295,6 @@ class ThrowbackEditorTest {
 
         run(amy, "admin", "edit", "wallsize", "x");
         assertTrue(messages(amy).stream().anyMatch(m -> m.contains("Nutze: /throwback admin edit wallsize")));
-
-        run(amy, "admin", "edit", "save");
-        assertTrue(editor.inSession(amy.getUniqueId()), "no privacy place yet, so saving is refused");
 
         run(amy, "admin", "edit", "cancel");
         assertFalse(editor.inSession(amy.getUniqueId()));

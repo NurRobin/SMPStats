@@ -59,10 +59,13 @@ final class PanelMetrics {
                 rules.z() - Math.sin(rad) * OFFSET, rules.yaw(), 0);
     }
 
-    /** Bottom middle of the privacy board: at its own place if the layout has one, else on the other side of the station. */
+    /**
+     * Bottom middle of the privacy board: its own place if the layout has one (that place already is the bottom
+     * middle, see {@link EditGeometry#privacy}), else beside the station on the other side from the rules board.
+     */
     static Location privacyBoard(World world, Pos rules, Pos privacy) {
         if (privacy != null) {
-            return new Location(world, privacy.x(), privacy.y() + PRIVACY_Y, privacy.z(), privacy.yaw(), 0);
+            return new Location(world, privacy.x(), privacy.y(), privacy.z(), privacy.yaw(), 0);
         }
         double rad = Math.toRadians(rules.yaw());
         return new Location(world, rules.x() + Math.cos(rad) * OFFSET, rules.y() + PRIVACY_Y,

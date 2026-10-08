@@ -6,17 +6,16 @@ import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Player;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
-import org.bukkit.scheduler.BukkitTask;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -28,18 +27,18 @@ import java.util.logging.Logger;
 
 /**
  * The edit mode of the hall: a builder gets a hotbar of tools in place of their inventory, marks where start,
- * stages, boards, portal and picture walls go, sees each marker as a particle box that only they receive, and
- * saves the result as the hall layout. The real inventory lies in a file the whole time and comes back on every
+ * stages, boards, portal and picture walls go, sees each marker as a box of thin lines and the checklist in the
+ * sidebar, both shown to them only, and saves the result as the hall layout. The real inventory lies in a file the whole time and comes back on every
  * way out (save, cancel, quit, kick, death, plugin disable, and at the next join after a crash). The unsaved draft
  * is kept in a file as well, so a restart only costs the session, not the work.
  * Everything here runs on the main thread.
  */
 public final class ThrowbackEditor {
-    static final double PARTICLE_RANGE = 32.0;
-    static final double PARTICLE_SPACING = 0.5;
-    static final int MAX_POINTS_PER_RUN = 1500;
-    static final long PARTICLE_PERIOD = 10L;
     static final double REMOVE_RADIUS = 2.0;
+    /** How far a left click into the air looks for a box, and how close the look ray has to pass it. */
+    static final double REACH = 8.0;
+    static final double RAY_STEP = 0.2;
+    static final double RAY_MARGIN = 0.3;
     static final int DEFAULT_WALL_WIDTH = 4;
     static final int DEFAULT_WALL_HEIGHT = 3;
     static final int MAX_WALL_SIDE = 16;
@@ -59,6 +58,7 @@ public final class ThrowbackEditor {
         int wallWidth = DEFAULT_WALL_WIDTH;
         int wallHeight = DEFAULT_WALL_HEIGHT;
         String wallTitle;
+        List<EditEffects.Line> lines = new ArrayList<>();
 
         Session(UUID uuid, World world, EditDraft draft) {
             this.uuid = uuid;
@@ -76,10 +76,9 @@ public final class ThrowbackEditor {
     private final EditStore store;
     private final org.bukkit.NamespacedKey toolKey;
     private final Map<UUID, Session> sessions = new ConcurrentHashMap<>();
-    private BukkitTask task;
 
     public ThrowbackEditor(Plugin plugin, ThrowbackService service, SceneRenderer renderer) {
-        this(plugin, service, renderer, EditEffects.PAPER, BlockProbe::of);
+        this(plugin, service, renderer, EditEffects.paper(plugin), BlockProbe::of);
     }
 
     ThrowbackEditor(Plugin plugin, ThrowbackService service, SceneRenderer renderer, EditEffects effects,
@@ -137,7 +136,7 @@ public final class ThrowbackEditor {
         Session running = sessions.get(uuid);
         if (running != null) {
             // blocks changed by other means (WorldEdit, commands) are not noticed, so running the command again checks them
-            refreshElements(running);
+            refreshElements(p, running);
             p.sendMessage(texts.message("edit_already"));
             return;
         }
@@ -194,7 +193,6 @@ public final class ThrowbackEditor {
         Session s = new Session(uuid, p.getWorld(), draft);
         sessions.put(uuid, s);
         refresh(p, s);
-        ensureTask();
         p.sendMessage(texts.message(resumed.isPresent() ? "edit_resumed" : "edit_started"));
     }
 
@@ -299,12 +297,14 @@ public final class ThrowbackEditor {
                 end(p, End.KEEP_DRAFT, null);
             } else {
                 Session s = sessions.remove(uuid);
-                if (s != null && s.preview != null) {
-                    s.preview.close();
+                if (s != null) {
+                    if (s.preview != null) {
+                        s.preview.close();
+                    }
+                    removeLines(s);
                 }
             }
         }
-        stopTask();
     }
 
     private void end(Player p, End how, String messageKey) {
@@ -316,15 +316,13 @@ public final class ThrowbackEditor {
             s.preview.close();
             s.preview = null;
         }
+        removeLines(s);
+        effects.clearSidebar(p);
         restoreInventory(p);
         if (how != End.KEEP_DRAFT) {
             store.deleteDraft(p.getUniqueId());
         }
-        if (sessions.isEmpty()) {
-            stopTask();
-        }
         if (p.isOnline()) {
-            p.sendActionBar(Component.empty());
             if (messageKey != null) {
                 p.sendMessage(service.texts().message(messageKey));
             }
@@ -391,8 +389,8 @@ public final class ThrowbackEditor {
 
     // ------------------------------------------------------------------ clicking
 
-    /** Right click on a block with a tool. */
-    void use(Player p, EditTool tool, Block block, Location hit) {
+    /** Right click on a block with a tool; {@code face} is the clicked side of the block. */
+    void use(Player p, EditTool tool, Block block, BlockFace face, Location hit) {
         Session s = sessions.get(p.getUniqueId());
         if (s == null || !service.isHallWorld(p.getWorld())) {
             return;
@@ -402,7 +400,7 @@ public final class ThrowbackEditor {
             case UNDO -> undo(p, s);
             case SAVE -> save(p);
             default -> {
-                EditMark mark = markFor(p, s, tool.kind(), block, hit);
+                EditMark mark = markFor(p, s, tool.kind(), block, face, hit);
                 EditDraft.Placed result = s.draft.place(mark);
                 switch (result) {
                     case STAGE_LIMIT -> p.sendMessage(texts.message("edit_stage_limit",
@@ -417,8 +415,15 @@ public final class ThrowbackEditor {
         }
     }
 
-    private EditMark markFor(Player p, Session s, EditKind kind, Block block, Location hit) {
+    private EditMark markFor(Player p, Session s, EditKind kind, Block block, BlockFace face, Location hit) {
         float yaw = p.getLocation().getYaw();
+        if (kind == EditKind.PORTAL_1 || kind == EditKind.PORTAL_2) {
+            boolean passable = !probes.apply(s.world).solid(block.getX(), block.getY(), block.getZ());
+            return EditGeometry.portalCorner(kind, block.getX(), block.getY(), block.getZ(), passable, face);
+        }
+        if (kind == EditKind.PRIVACY) {
+            return EditGeometry.privacy(block.getX(), block.getY(), block.getZ(), face, yaw, panelSizes().privacy());
+        }
         if (kind == EditKind.WALL) {
             int n = s.draft.nextWallNumber();
             String title = s.wallTitle != null ? s.wallTitle : plain(service.texts().message("edit_wall_title",
@@ -430,23 +435,57 @@ public final class ThrowbackEditor {
                 hit == null ? null : hit.getZ(), yaw);
     }
 
-    /** Left click on a block with a tool: removes the tool's marker nearest to that block. */
+    /**
+     * Left click with a tool, on a block or into the air ({@code block} null): removes the tool's marker whose box
+     * the builder looks at. Boards hang in front of walls and have no hit box, so the look ray is followed through
+     * them up to the clicked block; a marker within two blocks of the clicked block is the fallback.
+     */
     void remove(Player p, EditTool tool, Block block) {
         Session s = sessions.get(p.getUniqueId());
         if (s == null || tool.kind() == null || !service.isHallWorld(p.getWorld())) {
             return;
         }
         ThrowbackTexts texts = service.texts();
-        Optional<EditMark> found = s.draft.nearest(tool.kind(), block.getX() + 0.5, block.getY() + 0.5, block.getZ() + 0.5,
-                REMOVE_RADIUS);
+        Optional<EditMark> found = lookedAt(p, s, tool.kind(), block);
+        if (found.isEmpty() && block != null) {
+            found = s.draft.nearest(tool.kind(), block.getX() + 0.5, block.getY() + 0.5, block.getZ() + 0.5, REMOVE_RADIUS);
+        }
         if (found.isEmpty()) {
-            p.sendMessage(texts.message("edit_nothing_near"));
+            boolean defaultBoard = tool.kind() == EditKind.PRIVACY && s.draft.count(EditKind.RULES) == 1;
+            p.sendMessage(texts.message(defaultBoard ? "edit_privacy_default" : "edit_nothing_near"));
             return;
         }
         Component label = markLabel(found.get(), s.draft);
         s.draft.remove(found.get());
         changed(p, s, tool.kind());
         p.sendMessage(texts.message("edit_removed", Map.of("label", label)));
+    }
+
+    /** The first marker of {@code kind} whose box the look ray passes through, up to the clicked block or {@link #REACH}. */
+    private Optional<EditMark> lookedAt(Player p, Session s, EditKind kind, Block block) {
+        Location eye = p.getEyeLocation();
+        org.bukkit.util.Vector dir = eye.getDirection().normalize();
+        double reach = REACH;
+        if (block != null) {
+            reach = Math.min(REACH, eye.toVector().distance(block.getLocation().add(0.5, 0.5, 0.5).toVector()) + 1.0);
+        }
+        for (double d = 0; d <= reach; d += RAY_STEP) {
+            double x = eye.getX() + dir.getX() * d;
+            double y = eye.getY() + dir.getY() * d;
+            double z = eye.getZ() + dir.getZ() * d;
+            for (EditElement e : s.elements) {
+                Optional<EditMark> mark = e.marks().stream().filter(m -> m.kind() == kind).findFirst();
+                if (mark.isEmpty()) {
+                    continue;
+                }
+                for (OrientedBox box : e.boxes()) {
+                    if (box.contains(x, y, z, RAY_MARGIN)) {
+                        return mark;
+                    }
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     private void undo(Player p, Session s) {
@@ -493,10 +532,16 @@ public final class ThrowbackEditor {
                 return;
             }
             BlockProbe probe = probes.apply(s.world);
+            boolean flipped = false;
             for (EditElement e : s.elements) {
                 if (e.near(x, y, z)) {
+                    boolean before = e.blocked();
                     e.recompute(probe);
+                    flipped |= before != e.blocked();
                 }
+            }
+            if (flipped) {
+                show(p, s);
             }
         });
     }
@@ -510,14 +555,14 @@ public final class ThrowbackEditor {
         } catch (IOException e) {
             logger.log(Level.WARNING, "Throwback: Entwurf von " + p.getName() + " ließ sich nicht speichern", e);
         }
-        refreshElements(s);
+        refreshElements(p, s);
         if (kind == EditKind.RULES || kind == EditKind.PRIVACY) {
             refreshPreview(p, s);
         }
     }
 
     private void refresh(Player p, Session s) {
-        refreshElements(s);
+        refreshElements(p, s);
         refreshPreview(p, s);
     }
 
@@ -528,16 +573,18 @@ public final class ThrowbackEditor {
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (sessions.get(p.getUniqueId()) == s && p.isOnline()) {
                     refreshPreview(p, s);
+                    show(p, s);
                 }
             });
         }
     }
 
-    private void refreshElements(Session s) {
+    private void refreshElements(Player p, Session s) {
         BlockProbe probe = probes.apply(s.world);
         List<EditElement> elements = EditElement.of(s.draft, panelSizes());
         elements.forEach(e -> e.recompute(probe));
         s.elements = elements;
+        show(p, s);
     }
 
     private EditElement.PanelSizes panelSizes() {
@@ -578,74 +625,44 @@ public final class ThrowbackEditor {
         }
     }
 
-    // ------------------------------------------------------------------ particles and checklist
+    // ------------------------------------------------------------------ boxes and checklist
 
-    private void ensureTask() {
-        if (task == null) {
-            task = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, PARTICLE_PERIOD, PARTICLE_PERIOD);
+    /** Draws every box again and updates the sidebar; called whenever a marker or a blocked flag changed. */
+    private void show(Player p, Session s) {
+        removeLines(s);
+        if (p == null || !p.isOnline() || p.getWorld() != s.world) {
+            return;
         }
-    }
-
-    private void stopTask() {
-        if (task != null) {
-            task.cancel();
-            task = null;
-        }
-    }
-
-    /** Draws the boxes near each builder and refreshes the checklist; reads the cached blocked flags only. */
-    void tick() {
-        for (Session s : sessions.values()) {
-            Player p = Bukkit.getPlayer(s.uuid);
-            if (p == null || !p.isOnline() || p.getWorld() != s.world) {
-                continue;
-            }
-            draw(p, s);
-            p.sendActionBar(checklist(EditReport.of(s.draft, service.settings().editMinStages(), s.elements)));
-        }
-    }
-
-    /** Sends the edges of all boxes within range, nearest first, until the point budget of this run is used up. Returns the points sent. */
-    private int draw(Player p, Session s) {
-        Location at = p.getLocation();
-        List<EditElement> near = new ArrayList<>();
         for (EditElement e : s.elements) {
-            OrientedBox.Pt c = e.center();
-            double dx = c.x() - at.getX();
-            double dy = c.y() - at.getY();
-            double dz = c.z() - at.getZ();
-            if (dx * dx + dy * dy + dz * dz <= PARTICLE_RANGE * PARTICLE_RANGE) {
-                near.add(e);
-            }
-        }
-        near.sort(Comparator.comparingDouble(e -> {
-            OrientedBox.Pt c = e.center();
-            return Math.pow(c.x() - at.getX(), 2) + Math.pow(c.y() - at.getY(), 2) + Math.pow(c.z() - at.getZ(), 2);
-        }));
-        int budget = MAX_POINTS_PER_RUN;
-        for (EditElement e : near) {
             Color color = e.blocked() ? BLOCKED : FREE;
-            List<OrientedBox> boxes = new ArrayList<>(e.footprint());
-            boxes.addAll(e.clearance());
-            for (OrientedBox box : boxes) {
-                List<OrientedBox.Pt> points = box.edgePoints(PARTICLE_SPACING);
-                if (points.size() > budget) {
-                    return MAX_POINTS_PER_RUN - budget;
-                }
-                Color c = e.footprint().contains(box) ? FLOOR : color;
-                for (OrientedBox.Pt pt : points) {
-                    effects.dust(p, new Location(s.world, pt.x(), pt.y(), pt.z()), c);
-                }
-                budget -= points.size();
+            for (OrientedBox box : e.footprint()) {
+                drawBox(p, s, box, FLOOR);
+            }
+            for (OrientedBox box : e.clearance()) {
+                drawBox(p, s, box, color);
             }
         }
-        return MAX_POINTS_PER_RUN - budget;
+        effects.sidebar(p, service.texts().message("edit_sidebar_title"), sidebarLines(report(p.getUniqueId())));
     }
 
-    /** Test hook: one drawing run for a builder; returns the number of points sent. */
-    int drawForTest(Player p) {
-        Session s = sessions.get(p.getUniqueId());
-        return s == null ? 0 : draw(p, s);
+    private void drawBox(Player p, Session s, OrientedBox box, Color color) {
+        for (OrientedBox.Pt[] edge : box.edges()) {
+            s.lines.add(effects.line(p, new Location(s.world, edge[0].x(), edge[0].y(), edge[0].z()),
+                    new Location(s.world, edge[1].x(), edge[1].y(), edge[1].z()), color));
+        }
+    }
+
+    private static void removeLines(Session s) {
+        s.lines.forEach(EditEffects.Line::remove);
+        s.lines = new ArrayList<>();
+    }
+
+    private List<Component> sidebarLines(EditReport report) {
+        List<Component> lines = new ArrayList<>(checkLines(report));
+        for (EditElement e : report.blocked()) {
+            lines.add(service.texts().message("edit_sidebar_blocked", Map.of("label", elementLabel(e))));
+        }
+        return lines;
     }
 
     private List<Component> checkLines(EditReport report) {
@@ -657,16 +674,6 @@ public final class ThrowbackEditor {
             lines.add(texts.message(c.ok() ? "edit_check_ok" : "edit_check_bad", Map.of("label", label)));
         }
         return lines;
-    }
-
-    private Component checklist(EditReport report) {
-        Component out = Component.empty();
-        List<Component> lines = checkLines(report);
-        for (int i = 0; i < lines.size(); i++) {
-            out = out.append(i == 0 ? Component.empty() : Component.text(" | ", net.kyori.adventure.text.format.NamedTextColor.DARK_GRAY))
-                    .append(lines.get(i));
-        }
-        return out;
     }
 
     private Component elementLabel(EditElement e) {

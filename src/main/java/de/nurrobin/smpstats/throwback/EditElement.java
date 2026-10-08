@@ -61,6 +61,13 @@ final class EditElement {
         return footprint;
     }
 
+    /** Footprint and clearance boxes together. */
+    List<OrientedBox> boxes() {
+        List<OrientedBox> all = new ArrayList<>(footprint);
+        all.addAll(clearance);
+        return all;
+    }
+
     boolean blocked() {
         return blocked;
     }
