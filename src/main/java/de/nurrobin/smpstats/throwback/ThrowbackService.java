@@ -36,6 +36,8 @@ public final class ThrowbackService {
     private static final long PORTAL_COOLDOWN_MS = 5_000L;
     private static final long HINT_COOLDOWN_MS = 3_000L;
     private static final double RULES_REACH = 8.0;
+    private static final double PANEL_OFFSET = 2.0;
+    private static final float PANEL_SCALE = 0.5f;
 
     private record Origin(Location location) {
     }
@@ -515,11 +517,18 @@ public final class ThrowbackService {
 
     private void buildRules(SceneRenderer.SceneSession session, World world, HallLayout layout, HallPlan plan) {
         Pos rules = layout.rules();
-        List<Component> lines = new ArrayList<>(plan.rules());
-        lines.add(Component.empty());
-        lines.addAll(plan.privacy());
-        Location board = new Location(world, rules.x(), rules.y() + 2.7, rules.z());
-        session.text(board, ThrowbackTexts.joinLines(lines));
+        // Two fixed boards side by side at eye level: rules on the reader's left, privacy on the right.
+        double rad = Math.toRadians(rules.yaw());
+        double rx = -Math.cos(rad);
+        double rz = -Math.sin(rad);
+        Location board = new Location(world, rules.x() + rx * PANEL_OFFSET, rules.y() + 1.2,
+                rules.z() + rz * PANEL_OFFSET, rules.yaw(), 0);
+        session.panel(board, ThrowbackTexts.joinLines(plan.rules()), PANEL_SCALE);
+        if (!plan.privacy().isEmpty()) {
+            Location privacy = new Location(world, rules.x() - rx * PANEL_OFFSET, rules.y() + 1.5,
+                    rules.z() - rz * PANEL_OFFSET, rules.yaw(), 0);
+            session.panel(privacy, ThrowbackTexts.joinLines(plan.privacy()), PANEL_SCALE);
+        }
         Location button = new Location(world, rules.x(), rules.y() + 0.8, rules.z());
         session.text(button, content().rulesButton());
         session.interaction(new Location(world, rules.x(), rules.y(), rules.z()), 1.4f, 1.4f, ACTION_RULES);

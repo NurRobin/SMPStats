@@ -41,6 +41,11 @@ class MannequinSceneRendererTest {
         }
 
         @Override
+        public void stylePanel(org.bukkit.entity.TextDisplay display, Component text, float scale) {
+            log.add("panel " + scale);
+        }
+
+        @Override
         public void styleInteraction(org.bukkit.entity.Interaction interaction, float width, float height) {
             log.add("interaction");
         }
@@ -124,5 +129,23 @@ class MannequinSceneRendererTest {
         assertTrue(nonPlayers() > 0, "the Christmas tree props are there");
         assertNotNull(Material.SPRUCE_LOG);
         session.close();
+    }
+
+    @Test
+    void panelsKeepTheirYawAndAreShownToTheOwnerOnly() {
+        PlayerMock viewer = server.addPlayer("Vera");
+        SceneRenderer.SceneSession session = new MannequinSceneRenderer(plugin, visibility).open(viewer);
+
+        session.panel(new Location(world, 2.4, 65.2, 40.5, 90f, 30f), Component.text("Regeln"), 0.5f);
+
+        var displays = world.getEntitiesByClass(org.bukkit.entity.TextDisplay.class);
+        assertEquals(1, displays.size());
+        var panel = displays.iterator().next();
+        assertEquals(90f, panel.getLocation().getYaw(), 0.01f);
+        assertEquals(0f, panel.getLocation().getPitch(), 0.01f, "a wall panel hangs upright");
+        assertTrue(log.contains("panel 0.5"));
+        assertTrue(log.indexOf("show " + panel.getUniqueId() + " to Vera") > log.indexOf("hide " + panel.getUniqueId()));
+        session.close();
+        assertEquals(0, nonPlayers());
     }
 }

@@ -19,6 +19,12 @@ public interface SceneRenderer {
 
         void text(Location at, Component text);
 
+        /**
+         * A text that hangs fixed in place instead of turning to the viewer, readable from the side
+         * {@code at}'s yaw points to, shrunk by {@code scale}. The location is the bottom middle of the text.
+         */
+        void panel(Location at, Component text, float scale);
+
         /** An invisible click target; {@code action} is stored on it and read by the listener. */
         void interaction(Location at, float width, float height, String action);
 
