@@ -239,7 +239,7 @@ messages:
   edit_tool_stage: "<gold><bold>Bühne"
   edit_tool_stage_lore: "<gray>Rechtsklick auf den hintersten Boden-Block, Blick zur Rückwand"
   edit_tool_rules: "<red><bold>Regeltafel"
-  edit_tool_rules_lore: "<gray>Rechtsklick: Regelstation, die Tafel schaut zu dir"
+  edit_tool_rules_lore: "<gray>Rechtsklick auf Wand oder Boden: Tafel hängt genau dort, der Knopf direkt darunter"
   edit_tool_privacy: "<aqua><bold>Datenschutz-Tafel"
   edit_tool_privacy_lore: "<gray>Rechtsklick auf Wand oder Boden: Tafel hängt genau dort. Ohne eigene hängt sie neben der Regeltafel"
   edit_tool_portal1: "<light_purple><bold>Portal-Ecke 1"

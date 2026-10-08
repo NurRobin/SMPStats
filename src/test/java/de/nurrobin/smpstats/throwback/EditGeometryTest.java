@@ -51,7 +51,7 @@ class EditGeometryTest {
 
     @Test
     void rulesAndAPrivacyBoardOnTheFloorFaceTheBuilder() {
-        assertEquals(180f, EditGeometry.mark(EditKind.RULES, 0, 63, 0, null, null, 0f).yaw());
+        assertEquals(180f, EditGeometry.rules(0, 63, 0, BlockFace.UP, 0f, 1.0).yaw());
         assertEquals(-90f, EditGeometry.privacy(0, 63, 0, BlockFace.UP, 90f, 1.0).yaw());
     }
 
@@ -69,6 +69,17 @@ class EditGeometryTest {
         assertEquals(10.5 - 0.5 - PanelMetrics.THICKNESS / 2, m.z(), 1e-9, "flat against the wall");
         assertEquals(66.5 - 0.7, m.y(), 1e-9, "the middle of the board is the middle of the clicked block");
         assertEquals(180f, m.yaw(), "readable from the north, whatever way the builder looked");
+    }
+
+    @Test
+    void theRulesBoardKeepsRoomForItsButton() {
+        EditMark floor = EditGeometry.rules(4, 63, 9, BlockFace.UP, 0f, 1.4);
+        EditMark wall = EditGeometry.rules(4, 66, 10, BlockFace.NORTH, 0f, 1.4);
+
+        assertEquals(64 + PanelMetrics.BUTTON_SPACE, floor.y(), 1e-9, "on the floor the button fits under the board");
+        assertEquals(EditKind.RULES, wall.kind());
+        double middle = (wall.y() - PanelMetrics.BUTTON_SPACE + wall.y() + 1.4) / 2;
+        assertEquals(66.5, middle, 1e-9, "board and button together are centred on the clicked block");
     }
 
     @Test
@@ -142,5 +153,6 @@ class EditGeometryTest {
         assertThrows(IllegalArgumentException.class, () -> EditGeometry.mark(EditKind.WALL, 0, 0, 0, null, null, 0f));
         assertThrows(IllegalArgumentException.class, () -> EditGeometry.mark(EditKind.PORTAL_1, 0, 0, 0, null, null, 0f));
         assertThrows(IllegalArgumentException.class, () -> EditGeometry.mark(EditKind.PRIVACY, 0, 0, 0, null, null, 0f));
+        assertThrows(IllegalArgumentException.class, () -> EditGeometry.mark(EditKind.RULES, 0, 0, 0, null, null, 0f));
     }
 }

@@ -158,8 +158,8 @@ class ThrowbackServiceTest {
         assertEquals(2, panels.size());
         assertLocation(PanelMetrics.rulesBoard(hallWorld, rules), panels.get(0));
         assertLocation(PanelMetrics.privacyBoard(hallWorld, rules, null), panels.get(1));
-        assertEquals(rules.z() - 2, panels.get(0).getZ(), 1e-9, "rules on the reader's left");
-        assertEquals(rules.z() + 2, panels.get(1).getZ(), 1e-9);
+        assertEquals(rules.z(), panels.get(0).getZ(), 1e-9, "the rules board hangs at its place");
+        assertEquals(rules.z() + PanelMetrics.width() + PanelMetrics.BESIDE_GAP, panels.get(1).getZ(), 1e-9, "privacy on the reader's right");
         assertEquals(hallWorld, vera.getWorld());
     }
 

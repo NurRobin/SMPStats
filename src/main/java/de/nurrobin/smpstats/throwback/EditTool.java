@@ -12,7 +12,8 @@ import org.bukkit.persistence.PersistentDataType;
 enum EditTool {
     START("start", Material.COMPASS, EditKind.START),
     STAGE("stage", Material.ARMOR_STAND, EditKind.STAGE),
-    RULES("rules", Material.WRITABLE_BOOK, EditKind.RULES),
+    // paper, because a writable book opens its editor on the client before the server can stop the click
+    RULES("rules", Material.PAPER, EditKind.RULES),
     PRIVACY("privacy", Material.BOOK, EditKind.PRIVACY),
     PORTAL_1("portal1", Material.ENDER_PEARL, EditKind.PORTAL_1),
     PORTAL_2("portal2", Material.ENDER_EYE, EditKind.PORTAL_2),

@@ -515,15 +515,15 @@ public final class ThrowbackService {
 
     private void buildRules(SceneRenderer.SceneSession session, World world, HallLayout layout, HallPlan plan) {
         Pos rules = layout.rules();
-        // Two fixed boards at eye level: rules on the reader's left, privacy on the right unless it has a place of its own.
+        // Two fixed boards: the rules with the button right under them, privacy on the reader's right unless it has a place of its own.
         session.panel(PanelMetrics.rulesBoard(world, rules), ThrowbackTexts.joinLines(plan.rules()), PanelMetrics.SCALE);
         if (!plan.privacy().isEmpty()) {
             session.panel(PanelMetrics.privacyBoard(world, rules, layout.privacy()), ThrowbackTexts.joinLines(plan.privacy()),
                     PanelMetrics.SCALE);
         }
-        Location button = new Location(world, rules.x(), rules.y() + 0.8, rules.z());
-        session.text(button, content().rulesButton());
-        session.interaction(new Location(world, rules.x(), rules.y(), rules.z()), 1.4f, 1.4f, ACTION_RULES);
+        session.text(PanelMetrics.rulesButton(world, rules), content().rulesButton());
+        session.interaction(PanelMetrics.rulesClickBox(world, rules), PanelMetrics.CLICK_WIDTH, (float) PanelMetrics.BUTTON_SPACE,
+                ACTION_RULES);
     }
 
     private void buildStage(SceneRenderer.SceneSession session, World world, Pos pos, StagePlan stage) {

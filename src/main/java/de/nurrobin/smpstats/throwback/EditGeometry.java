@@ -7,8 +7,7 @@ import org.bukkit.block.BlockFace;
  * south, 90 west, 180 north, -90 east):
  * <ul>
  * <li>start and stage: the builder's own look direction (a stage looks at its back wall)</li>
- * <li>rules board: look direction + 180, the board faces the reader</li>
- * <li>privacy board: away from a clicked wall, else look direction + 180</li>
+ * <li>rules and privacy board: away from a clicked wall, else look direction + 180</li>
  * <li>picture wall: the frames face against the look direction</li>
  * </ul>
  */
@@ -54,8 +53,6 @@ final class EditGeometry {
                 return EditMark.of(kind, x, y, z, snapYaw(lookYaw));
             case STAGE:
                 return stage(bx, by, bz, hitX, hitZ, lookYaw);
-            case RULES:
-                return EditMark.of(kind, x, y, z, towardViewerYaw(lookYaw));
             default:
                 throw new IllegalArgumentException(kind + ": eigene Methode in EditGeometry nutzen");
         }
@@ -103,19 +100,28 @@ final class EditGeometry {
     }
 
     /**
-     * The privacy board, as the bottom middle of the board. Clicked on a wall it hangs flat against that wall with
-     * its middle at the clicked block; clicked on a floor it stands on it, on a ceiling it hangs from it.
+     * A board (rules or privacy), as the bottom middle of the board. Clicked on a wall it hangs flat against that
+     * wall, the middle of board and {@code below} together at the clicked block; clicked on a floor it stands on it,
+     * on a ceiling it hangs from it. {@code below} is room kept free under the board (the rules button).
      */
-    static EditMark privacy(int bx, int by, int bz, BlockFace face, float lookYaw, double height) {
+    static EditMark board(EditKind kind, int bx, int by, int bz, BlockFace face, float lookYaw, double height, double below) {
         if (face == null || face == BlockFace.UP) {
-            return EditMark.of(EditKind.PRIVACY, bx + 0.5, by + 1.0, bz + 0.5, towardViewerYaw(lookYaw));
+            return EditMark.of(kind, bx + 0.5, by + 1.0 + below, bz + 0.5, towardViewerYaw(lookYaw));
         }
         if (face == BlockFace.DOWN) {
-            return EditMark.of(EditKind.PRIVACY, bx + 0.5, by - height, bz + 0.5, towardViewerYaw(lookYaw));
+            return EditMark.of(kind, bx + 0.5, by - height, bz + 0.5, towardViewerYaw(lookYaw));
         }
         double inset = 0.5 + PanelMetrics.THICKNESS / 2;
-        return EditMark.of(EditKind.PRIVACY, bx + 0.5 + face.getModX() * inset, by + 0.5 - height / 2,
+        return EditMark.of(kind, bx + 0.5 + face.getModX() * inset, by + 0.5 - (height + below) / 2 + below,
                 bz + 0.5 + face.getModZ() * inset, yawOf(face));
+    }
+
+    static EditMark privacy(int bx, int by, int bz, BlockFace face, float lookYaw, double height) {
+        return board(EditKind.PRIVACY, bx, by, bz, face, lookYaw, height, 0);
+    }
+
+    static EditMark rules(int bx, int by, int bz, BlockFace face, float lookYaw, double height) {
+        return board(EditKind.RULES, bx, by, bz, face, lookYaw, height, PanelMetrics.BUTTON_SPACE);
     }
 
     /** The yaw that looks towards {@code face}. */

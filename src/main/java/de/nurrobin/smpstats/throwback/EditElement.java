@@ -159,6 +159,9 @@ final class EditElement {
     private static EditElement rules(EditMark m, PanelSizes sizes, boolean withFallbackPrivacy) {
         List<OrientedBox> boxes = new ArrayList<>();
         boxes.add(board(PanelMetrics.rulesBoard(null, m.pos()), m.yaw(), sizes.rules()));
+        // the room under the board for the button and its click box
+        boxes.add(OrientedBox.of(m.x(), m.z(), m.yaw(), -PanelMetrics.THICKNESS / 2, PanelMetrics.CLICK_WIDTH, -PanelMetrics.CLICK_WIDTH / 2,
+                PanelMetrics.CLICK_WIDTH / 2, m.y() - PanelMetrics.BUTTON_SPACE, m.y()));
         if (withFallbackPrivacy) {
             boxes.add(board(PanelMetrics.privacyBoard(null, m.pos(), null), m.yaw(), sizes.privacy()));
         }

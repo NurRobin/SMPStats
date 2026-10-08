@@ -424,6 +424,9 @@ public final class ThrowbackEditor {
         if (kind == EditKind.PRIVACY) {
             return EditGeometry.privacy(block.getX(), block.getY(), block.getZ(), face, yaw, panelSizes().privacy());
         }
+        if (kind == EditKind.RULES) {
+            return EditGeometry.rules(block.getX(), block.getY(), block.getZ(), face, yaw, panelSizes().rules());
+        }
         if (kind == EditKind.WALL) {
             int n = s.draft.nextWallNumber();
             String title = s.wallTitle != null ? s.wallTitle : plain(service.texts().message("edit_wall_title",
@@ -615,7 +618,7 @@ public final class ThrowbackEditor {
             Pos station = rules.get().pos();
             preview.panel(PanelMetrics.rulesBoard(s.world, station),
                     ThrowbackTexts.joinLines(texts.rules(settings.rulesVersion())), PanelMetrics.SCALE);
-            preview.text(new Location(s.world, station.x(), station.y() + 0.8, station.z()), texts.button());
+            preview.text(PanelMetrics.rulesButton(s.world, station), texts.button());
             if (privacy.isEmpty() && !privacyLines.isEmpty()) {
                 preview.panel(PanelMetrics.privacyBoard(s.world, station, null), privacyText, PanelMetrics.SCALE);
             }
