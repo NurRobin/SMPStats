@@ -1,9 +1,12 @@
 package de.nurrobin.smpstats.throwback;
 
-import org.bukkit.block.BlockFace;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -20,7 +23,6 @@ class ThrowbackSettingsTest {
         assertEquals("2025", s.season());
         assertEquals(60, s.minPlaytimeMinutes());
         assertEquals(15, s.rankBadgeTop());
-        assertEquals("throwback/images", s.imagesFolder());
         assertFalse(s.layout().usable());
         assertNull(s.spawnPortal());
     }
@@ -35,7 +37,9 @@ class ThrowbackSettingsTest {
 
     @Test
     void layoutRoundTripsThroughYaml() throws Exception {
-        HallLayout layout = PlaceholderHall.layout();
+        HallLayout base = PlaceholderHall.layout();
+        HallLayout layout = new HallLayout(base.start(), base.stages(), base.rules(), base.privacy(), base.portal(),
+                List.of(new HallText(new Pos(1.5, 64, 2.5, 90f), "<gold>Titel<br>Zeile 2")));
         YamlConfiguration yaml = new YamlConfiguration();
         layout.write(yaml.createSection("layout"));
         YamlConfiguration reloaded = new YamlConfiguration();
@@ -48,16 +52,16 @@ class ThrowbackSettingsTest {
         assertEquals(layout.rules(), read.rules());
         assertNull(read.privacy(), "the stand-in hall has no privacy place of its own");
         assertEquals(layout.portal(), read.portal());
-        assertEquals(layout.walls(), read.walls());
+        assertEquals(layout.texts(), read.texts());
         assertTrue(read.usable());
     }
 
     @Test
-    void placeholderLayoutHasTwelveStagesAndThreeWalls() {
+    void placeholderLayoutHasTwelveStagesAndNoTexts() {
         HallLayout layout = PlaceholderHall.layout();
 
         assertEquals(12, layout.stages().size());
-        assertEquals(3, layout.walls().size());
+        assertTrue(layout.texts().isEmpty());
         assertTrue(layout.usable());
         assertFalse(layout.portal().contains(layout.start().x(), layout.start().y(), layout.start().z()));
     }
@@ -73,25 +77,41 @@ class ThrowbackSettingsTest {
     }
 
     @Test
-    void wallsWithBadNamesOrFacingAreSkipped() {
-        YamlConfiguration yaml = new YamlConfiguration();
-        java.util.List<java.util.Map<String, Object>> walls = new java.util.ArrayList<>();
-        walls.add(new WallDef("ok", 1, 2, 3, BlockFace.NORTH, 4, 3, "T", "B").toMap());
-        walls.add(new WallDef("../evil", 1, 2, 3, BlockFace.NORTH, 4, 3, "T", "B").toMap());
-        java.util.Map<String, Object> up = new WallDef("up", 1, 2, 3, BlockFace.NORTH, 4, 3, "T", "B").toMap();
-        up.put("facing", "UP");
-        walls.add(up);
-        yaml.set("walls", walls);
+    void textsWithoutCoordinatesOrContentAreSkipped() {
+        List<Map<String, Object>> texts = new ArrayList<>();
+        texts.add(new HallText(new Pos(1, 2, 3, 90f), "ok").toMap());
+        texts.add(new HallText(new Pos(1, 2, 3, 90f), "  ").toMap());
+        Map<String, Object> noZ = new HallText(new Pos(1, 2, 3, 90f), "no z").toMap();
+        noZ.remove("z");
+        texts.add(noZ);
+        texts.add(Map.of("x", 1, "y", 2, "z", 3));
 
-        assertEquals(1, WallDef.readAll(yaml, LOG).size());
+        List<Map<?, ?>> raw = new ArrayList<>(texts);
+        List<HallText> read = HallText.readAll(raw, LOG);
+
+        assertEquals(List.of(new HallText(new Pos(1, 2, 3, 90f), "ok")), read);
     }
 
     @Test
-    void wallRightFollowsTheViewer() {
-        assertEquals(BlockFace.NORTH, new WallDef("a", 0, 0, 0, BlockFace.EAST, 1, 1, "", "").right());
-        assertEquals(BlockFace.EAST, new WallDef("a", 0, 0, 0, BlockFace.SOUTH, 1, 1, "", "").right());
-        assertEquals(BlockFace.SOUTH, new WallDef("a", 0, 0, 0, BlockFace.WEST, 1, 1, "", "").right());
-        assertEquals(BlockFace.WEST, new WallDef("a", 0, 0, 0, BlockFace.NORTH, 1, 1, "", "").right());
+    void aTextWithoutYawReadsAsYawZero() {
+        List<HallText> read = HallText.readAll(List.of(Map.of("x", 1, "y", 2, "z", 3, "text", "T")), LOG);
+
+        assertEquals(0f, read.get(0).pos().yaw());
+    }
+
+    @Test
+    void writingALayoutDropsTheOldWallsKeyAndReplacesTexts() {
+        YamlConfiguration yaml = new YamlConfiguration();
+        ConfigurationSection section = yaml.createSection("layout");
+        section.set("walls", List.of(Map.of("name", "bauten-1")));
+        new HallLayout(null, List.of(), null, null, null, List.of(new HallText(new Pos(1, 2, 3, 0f), "A"))).write(section);
+
+        assertFalse(section.contains("walls"));
+        assertEquals(1, section.getMapList("texts").size());
+
+        PlaceholderHall.layout().write(section);
+
+        assertTrue(section.getMapList("texts").isEmpty());
     }
 
     @Test
@@ -160,7 +180,6 @@ class ThrowbackSettingsTest {
         assertEquals(new Pos(1, 2, 3, 0), layout.withRules(new Pos(0, 0, 0, 0)).privacy());
         assertEquals(new Pos(1, 2, 3, 0), layout.withPortal(Region.of(0, 0, 0, 1, 1, 1)).privacy());
         assertEquals(new Pos(1, 2, 3, 0), layout.withStage(0, new Pos(9, 9, 9, 0)).privacy());
-        assertEquals(new Pos(1, 2, 3, 0), layout.withWall(layout.walls().get(0)).privacy());
     }
 
     @Test

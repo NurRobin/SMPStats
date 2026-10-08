@@ -9,8 +9,9 @@ import java.util.logging.Logger;
 /**
  * Where everything stands in the hall world; read from {@code throwback.layout}, measured in by admin commands
  * or the edit mode. {@code privacy} is optional: without it the privacy board hangs next to the rules board.
+ * {@code rules} and {@code privacy} are the bottom middle of their boards; {@code texts} are free titles.
  */
-public record HallLayout(Pos start, List<Pos> stages, Pos rules, Pos privacy, Region portal, List<WallDef> walls) {
+public record HallLayout(Pos start, List<Pos> stages, Pos rules, Pos privacy, Region portal, List<HallText> texts) {
     public static final int MAX_STAGES = 12;
 
     public static HallLayout empty() {
@@ -44,7 +45,7 @@ public record HallLayout(Pos start, List<Pos> stages, Pos rules, Pos privacy, Re
         }
         return new HallLayout(Pos.read(section.getConfigurationSection("start")), List.copyOf(stages),
                 Pos.read(section.getConfigurationSection("rules")), Pos.read(section.getConfigurationSection("privacy")),
-                Region.read(section.getConfigurationSection("portal")), List.copyOf(WallDef.readAll(section, logger)));
+                Region.read(section.getConfigurationSection("portal")), List.copyOf(HallText.readAll(section.getMapList("texts"), logger)));
     }
 
     public void write(ConfigurationSection section) {
@@ -54,6 +55,7 @@ public record HallLayout(Pos start, List<Pos> stages, Pos rules, Pos privacy, Re
         section.set("portal", null);
         section.set("stages", null);
         section.set("walls", null);
+        section.set("texts", null);
         if (start != null) {
             start.write(section.createSection("start"));
         }
@@ -76,23 +78,23 @@ public record HallLayout(Pos start, List<Pos> stages, Pos rules, Pos privacy, Re
             st.add(m);
         }
         section.set("stages", st);
-        section.set("walls", walls.stream().map(WallDef::toMap).toList());
+        section.set("texts", texts.stream().map(HallText::toMap).toList());
     }
 
     public HallLayout withStart(Pos p) {
-        return new HallLayout(p, stages, rules, privacy, portal, walls);
+        return new HallLayout(p, stages, rules, privacy, portal, texts);
     }
 
     public HallLayout withRules(Pos p) {
-        return new HallLayout(start, stages, p, privacy, portal, walls);
+        return new HallLayout(start, stages, p, privacy, portal, texts);
     }
 
     public HallLayout withPrivacy(Pos p) {
-        return new HallLayout(start, stages, rules, p, portal, walls);
+        return new HallLayout(start, stages, rules, p, portal, texts);
     }
 
     public HallLayout withPortal(Region r) {
-        return new HallLayout(start, stages, rules, privacy, r, walls);
+        return new HallLayout(start, stages, rules, privacy, r, texts);
     }
 
     /** Sets stage {@code index} (0-based); missing earlier stages are not allowed, so the list never has holes. */
@@ -106,12 +108,6 @@ public record HallLayout(Pos start, List<Pos> stages, Pos rules, Pos privacy, Re
         } else {
             next.set(index, p);
         }
-        return new HallLayout(start, List.copyOf(next), rules, privacy, portal, walls);
-    }
-
-    public HallLayout withWall(WallDef wall) {
-        List<WallDef> next = new ArrayList<>(walls.stream().filter(w -> !w.name().equals(wall.name())).toList());
-        next.add(wall);
-        return new HallLayout(start, stages, rules, privacy, portal, List.copyOf(next));
+        return new HallLayout(start, List.copyOf(next), rules, privacy, portal, texts);
     }
 }

@@ -100,9 +100,9 @@ class ThrowbackServiceTest {
         hall = new FakeHall();
         HallLayout layout = PlaceholderHall.layout();
         ThrowbackSettings settings = new ThrowbackSettings(true, "throwback_hall", "2025", 60, 15, "2026-1", "https://example.org",
-                false, 0, "throwback/images", "throwback/texts.yml", "", null, null, 8, layout);
+                false, 0, "throwback/texts.yml", "", null, null, 8, layout);
         service = new ThrowbackService(plugin, seasons, new CachedProgressRepository(progressStore, Logger.getLogger("test")),
-                settings, scenes, hall, new MapArtWall(plugin, data.resolve("mapwall.yml")), () -> false, clock::get);
+                settings, scenes, hall, () -> false, clock::get);
         service.teleporter((player, location) -> {
             player.teleport(location);
             return java.util.concurrent.CompletableFuture.completedFuture(true);

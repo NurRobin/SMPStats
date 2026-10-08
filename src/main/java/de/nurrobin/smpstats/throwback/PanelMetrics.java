@@ -54,7 +54,23 @@ final class PanelMetrics {
 
     /** Height in blocks of a board with the given text. */
     static double height(List<Component> text) {
-        return (lines(text) * LINE_HEIGHT_PX + 2 * PADDING_PX) * SCALE / PX_PER_BLOCK;
+        return height(text, SCALE);
+    }
+
+    static double height(List<Component> text, float scale) {
+        return (lines(text) * LINE_HEIGHT_PX + 2 * PADDING_PX) * scale / PX_PER_BLOCK;
+    }
+
+    /** Estimated width in blocks of a text drawn at {@code scale}: its longest line, at most the wrap width. */
+    static double textWidth(List<Component> text, float scale) {
+        int longest = 0;
+        for (Component line : text) {
+            for (String part : PlainTextComponentSerializer.plainText().serialize(line).split("\n", -1)) {
+                longest = Math.max(longest, part.length());
+            }
+        }
+        double px = Math.min(LINE_WIDTH_PX, longest * AVG_CHAR_PX) + 2 * PADDING_PX;
+        return px * scale / PX_PER_BLOCK;
     }
 
     /** The rules board: its place in the layout is its bottom middle, like the privacy board's own place. */

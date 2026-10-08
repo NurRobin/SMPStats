@@ -7,7 +7,7 @@ import java.util.logging.Logger;
 /** The {@code throwback} section of config.yml. */
 public record ThrowbackSettings(boolean enabled, String world, String season, int minPlaytimeMinutes, int rankBadgeTop,
                                 String rulesVersion, String privacyUrl, boolean matchByNameOffline,
-                                int unloadDelaySeconds, String imagesFolder, String textsFile, String exitWorld,
+                                int unloadDelaySeconds, String textsFile, String exitWorld,
                                 Pos exit, SpawnPortal spawnPortal, int editMinStages, HallLayout layout) {
     public static final int DEFAULT_EDIT_MIN_STAGES = 8;
 
@@ -17,7 +17,7 @@ public record ThrowbackSettings(boolean enabled, String world, String season, in
 
     public ThrowbackSettings withLayout(HallLayout next) {
         return new ThrowbackSettings(enabled, world, season, minPlaytimeMinutes, rankBadgeTop, rulesVersion, privacyUrl,
-                matchByNameOffline, unloadDelaySeconds, imagesFolder, textsFile, exitWorld, exit, spawnPortal,
+                matchByNameOffline, unloadDelaySeconds, textsFile, exitWorld, exit, spawnPortal,
                 editMinStages, next);
     }
 
@@ -47,7 +47,6 @@ public record ThrowbackSettings(boolean enabled, String world, String season, in
                 s.getString("privacy_url", ""),
                 s.getBoolean("match_by_name_offline", true),
                 Math.max(0, s.getInt("unload_delay_seconds", 60)),
-                s.getString("images_folder", "throwback/images"),
                 s.getString("texts_file", "throwback/texts.yml"),
                 exitSection == null ? "" : exitSection.getString("world", ""),
                 exitSection == null ? null : Pos.read(exitSection),

@@ -138,19 +138,28 @@ class EditGeometryTest {
     }
 
     @Test
-    void wallFramesFaceAgainstTheLookDirection() {
-        WallDef west = EditGeometry.wall(2, 63, 40, 90f, "a", 4, 3, "T", "");
-        WallDef south = EditGeometry.wall(2, 63, 40, 5f, "b", 4, 3, "T", "");
+    void aTextClickedOnAWallHangsFlatCentredOnTheClickedBlock() {
+        EditMark m = EditGeometry.text(2, 63, 40, BlockFace.WEST, 90f, 0.5, "T");
 
-        assertEquals(BlockFace.EAST, west.facing(), "looking at a wall to the west, the frames face east");
-        assertEquals(BlockFace.NORTH, south.facing());
-        assertEquals(64, west.y(), "the corner is the block above the clicked one");
-        assertEquals(40, west.z());
+        assertEquals(EditKind.TEXT, m.kind());
+        assertEquals("T", m.text());
+        assertEquals(2.0 - PanelMetrics.THICKNESS / 2, m.x(), 1e-9, "just in front of the clicked wall");
+        assertEquals(40.5, m.z(), 1e-9);
+        assertEquals(63.5 - 0.25, m.y(), 1e-9, "centred on the clicked block");
     }
 
     @Test
-    void wallsPortalsAndPrivacyAreNotMadeByMark() {
-        assertThrows(IllegalArgumentException.class, () -> EditGeometry.mark(EditKind.WALL, 0, 0, 0, null, null, 0f));
+    void aTextClickedOnTheFloorStandsOnItFacingTheBuilder() {
+        EditMark m = EditGeometry.text(2, 63, 40, BlockFace.UP, 0f, 0.5, "T");
+
+        assertEquals(64.0, m.y(), 1e-9);
+        assertEquals(2.5, m.x(), 1e-9);
+        assertEquals(EditGeometry.towardViewerYaw(0f), m.yaw());
+    }
+
+    @Test
+    void textsPortalsAndPrivacyAreNotMadeByMark() {
+        assertThrows(IllegalArgumentException.class, () -> EditGeometry.mark(EditKind.TEXT, 0, 0, 0, null, null, 0f));
         assertThrows(IllegalArgumentException.class, () -> EditGeometry.mark(EditKind.PORTAL_1, 0, 0, 0, null, null, 0f));
         assertThrows(IllegalArgumentException.class, () -> EditGeometry.mark(EditKind.PRIVACY, 0, 0, 0, null, null, 0f));
         assertThrows(IllegalArgumentException.class, () -> EditGeometry.mark(EditKind.RULES, 0, 0, 0, null, null, 0f));

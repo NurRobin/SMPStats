@@ -135,9 +135,9 @@ class ThrowbackEditorTest {
                 new SeasonImporter(), Runnable::run);
         scenes = new FakeScenes();
         ThrowbackSettings settings = new ThrowbackSettings(true, "throwback_hall", "2025", 60, 15, "2026-1", "https://example.org",
-                false, 0, "throwback/images", "throwback/texts.yml", "", null, null, 8, PlaceholderHall.layout());
+                false, 0, "throwback/texts.yml", "", null, null, 8, PlaceholderHall.layout());
         service = new ThrowbackService(plugin, seasons, new CachedProgressRepository(new ThrowbackStore(storage), Logger.getLogger("test")),
-                settings, scenes, new FakeHallWorlds(hallWorld), new MapArtWall(plugin, data.resolve("mapwall.yml")), () -> false,
+                settings, scenes, new FakeHallWorlds(hallWorld), () -> false,
                 () -> 10_000L);
         service.teleporter((player, location) -> {
             player.teleport(location);
@@ -520,32 +520,92 @@ class ThrowbackEditorTest {
     }
 
     @Test
-    void wallFramesFaceTheBuilderAndTheNextFreeNumberIsUsed() {
+    void textToolPlacesTheTextFacingTheBuilder() {
         PlayerMock bob = builder();
         look(bob, 90f);
+        editor.setText(bob, "<gold>Mein Dorf");
 
-        rightClick(bob, EditTool.WALL, 70, 63, 70);
+        rightClick(bob, EditTool.TEXT, 70, 63, 70);
 
-        WallDef wall = draft(bob).walls().get(draft(bob).walls().size() - 1).wall();
-        assertEquals("bauten-4", wall.name(), "the stand-in hall has bauten-1 to 3");
-        assertEquals(BlockFace.EAST, wall.facing());
-        assertEquals(64, wall.y());
-        assertEquals(4, wall.width());
-        assertEquals(3, wall.height());
-        assertEquals("Bauten 2025: Bau 4", wall.title());
+        EditMark text = draft(bob).texts().get(draft(bob).texts().size() - 1);
+        assertEquals(EditKind.TEXT, text.kind());
+        assertEquals("<gold>Mein Dorf", text.text());
+        assertEquals(64.0, text.y(), 1e-9, "standing on the clicked block");
+        assertEquals(-90f, text.yaw(), "looks back at the builder");
     }
 
     @Test
-    void wallsizeChangesSizeAndTitleOfTheNextWalls() {
+    void textToolWithoutATextPlacesNothingAndSaysSo() {
         PlayerMock bob = builder();
+        messages(bob);
 
-        editor.wallSize(bob, 6, 99, "Mein Dorf");
-        rightClick(bob, EditTool.WALL, 70, 63, 70);
+        rightClick(bob, EditTool.TEXT, 70, 63, 70);
 
-        WallDef wall = draft(bob).walls().get(draft(bob).walls().size() - 1).wall();
-        assertEquals(6, wall.width());
-        assertEquals(16, wall.height(), "clamped like the old addwall command");
-        assertEquals("Mein Dorf", wall.title());
+        assertTrue(draft(bob).texts().isEmpty());
+        assertTrue(messages(bob).stream().anyMatch(m -> m.contains("Erst den Text festlegen")));
+    }
+
+    @Test
+    void textsCanBePlacedSeveralTimesWithTheSameText() {
+        PlayerMock bob = builder();
+        look(bob, 0f);
+        editor.setText(bob, "Titel");
+
+        rightClick(bob, EditTool.TEXT, 70, 63, 70);
+        rightClick(bob, EditTool.TEXT, 74, 63, 70);
+        rightClick(bob, EditTool.TEXT, 78, 63, 70);
+
+        assertEquals(3, draft(bob).texts().size());
+    }
+
+    @Test
+    void settingTheTextAgainChangesOnlyTheNextTexts() {
+        PlayerMock bob = builder();
+        look(bob, 0f);
+        editor.setText(bob, "Alt");
+        rightClick(bob, EditTool.TEXT, 70, 63, 70);
+
+        editor.setText(bob, "Neu");
+        rightClick(bob, EditTool.TEXT, 74, 63, 70);
+
+        assertEquals(List.of("Alt", "Neu"), draft(bob).texts().stream().map(EditMark::text).toList());
+    }
+
+    @Test
+    void setTextWithoutASessionOnlySaysEditModeIsNotActive() {
+        PlayerMock amy = player("Amy");
+
+        editor.setText(amy, "Titel");
+
+        assertFalse(editor.inSession(amy.getUniqueId()));
+        assertFalse(messages(amy).isEmpty());
+    }
+
+    @Test
+    void blankOrTooLongTextsAreRefusedAndKeepTheOldOne() {
+        PlayerMock bob = builder();
+        look(bob, 0f);
+        editor.setText(bob, "Behalten");
+        messages(bob);
+
+        editor.setText(bob, "   ");
+        editor.setText(bob, null);
+        editor.setText(bob, "x".repeat(HallText.MAX_LENGTH + 1));
+        rightClick(bob, EditTool.TEXT, 70, 63, 70);
+
+        assertEquals(3, messages(bob).stream().filter(m -> m.contains("Nutze: /throwback admin edit text")).count());
+        assertEquals("Behalten", draft(bob).texts().get(0).text());
+    }
+
+    @Test
+    void aTextOfExactlyTheMaximumLengthIsAccepted() {
+        PlayerMock bob = builder();
+        look(bob, 0f);
+
+        editor.setText(bob, "x".repeat(HallText.MAX_LENGTH));
+        rightClick(bob, EditTool.TEXT, 70, 63, 70);
+
+        assertEquals(HallText.MAX_LENGTH, draft(bob).texts().get(0).text().length());
     }
 
     @Test
@@ -669,7 +729,6 @@ class ThrowbackEditorTest {
 
         click(bob, EditTool.UNDO, Action.RIGHT_CLICK_AIR, null);
 
-        assertEquals(EditKind.WALL, draft(bob).marks().get(draft(bob).marks().size() - 1).kind(), "the new start is gone");
         assertTrue(draft(bob).single(EditKind.START).isEmpty() || draft(bob).single(EditKind.START).get().x() != 30.5);
     }
 
@@ -1136,6 +1195,8 @@ class ThrowbackEditorTest {
         look(bob, 0f);
         rightClick(bob, EditTool.PRIVACY, 20, 63, 100);
         rightClick(bob, EditTool.START, 7, 63, 7);
+        editor.setText(bob, "Mein Dorf");
+        rightClick(bob, EditTool.TEXT, 70, 63, 70);
         messages(bob);
 
         click(bob, EditTool.SAVE, Action.RIGHT_CLICK_AIR, null);
@@ -1144,26 +1205,29 @@ class ThrowbackEditorTest {
         assertEquals(new Pos(20.5, 64, 100.5, 180f), saved.privacy());
         assertEquals(new Pos(7.5, 64, 7.5, 0f), saved.start());
         assertEquals(12, saved.stages().size());
+        assertEquals(List.of("Mein Dorf"), saved.texts().stream().map(HallText::text).toList());
         assertFalse(editor.inSession(bob.getUniqueId()));
         assertOriginalInventory(bob);
         assertFalse(editor.store().hasDraft(bob.getUniqueId()), "a saved draft is gone");
-        assertTrue(messages(bob).stream().anyMatch(m -> m.contains("Halle gespeichert: 12 Bühnen, 3 Bilderwände")));
+        assertTrue(messages(bob).stream().anyMatch(m -> m.contains("Halle gespeichert: 12 Bühnen, 1 Texte")));
         assertEquals(20.5, plugin.getConfig().getDouble("throwback.layout.privacy.x"), "written to config.yml");
         assertTrue(scenes.lastOf(bob.getUniqueId()).closed);
     }
 
     @Test
-    void removedPicturesLeaveTheSavedLayout() {
+    void removedTextsLeaveTheSavedLayout() {
         PlayerMock bob = builder();
         look(bob, 0f);
         rightClick(bob, EditTool.PRIVACY, 20, 63, 100);
-        WallDef gone = draft(bob).walls().get(0).wall();
-        leftClick(bob, EditTool.WALL, gone.x(), gone.y() - 1, gone.z());
+        editor.setText(bob, "Bleibt");
+        rightClick(bob, EditTool.TEXT, 70, 63, 70);
+        editor.setText(bob, "Weg");
+        rightClick(bob, EditTool.TEXT, 90, 63, 70);
 
+        leftClick(bob, EditTool.TEXT, 90, 63, 70);
         editor.save(bob);
 
-        assertEquals(2, service.settings().layout().walls().size());
-        assertTrue(service.settings().layout().walls().stream().noneMatch(w -> w.name().equals(gone.name())));
+        assertEquals(List.of("Bleibt"), service.settings().layout().texts().stream().map(HallText::text).toList());
     }
 
     @Test
@@ -1281,20 +1345,19 @@ class ThrowbackEditorTest {
     }
 
     @Test
-    void editSubcommandsSaveCancelAndWallsize() {
+    void editSubcommandsSaveCancelAndText() {
         PlayerMock amy = player("Amy");
         amy.addAttachment(plugin, "smpstats.admin", true);
         run(amy, "admin", "edit");
-        run(amy, "admin", "edit", "wallsize", "5", "2", "Mein", "Dorf");
+        run(amy, "admin", "edit", "text", "Mein", "Dorf");
         look(amy, 0f);
-        rightClick(amy, EditTool.WALL, 70, 63, 70);
+        rightClick(amy, EditTool.TEXT, 70, 63, 70);
 
-        WallDef wall = draft(amy).walls().get(draft(amy).walls().size() - 1).wall();
-        assertEquals(5, wall.width());
-        assertEquals("Mein Dorf", wall.title());
+        assertEquals("Mein Dorf", draft(amy).texts().get(0).text());
 
-        run(amy, "admin", "edit", "wallsize", "x");
-        assertTrue(messages(amy).stream().anyMatch(m -> m.contains("Nutze: /throwback admin edit wallsize")));
+        messages(amy);
+        run(amy, "admin", "edit", "text");
+        assertTrue(messages(amy).stream().anyMatch(m -> m.contains("Nutze: /throwback admin edit text")));
 
         run(amy, "admin", "edit", "cancel");
         assertFalse(editor.inSession(amy.getUniqueId()));
@@ -1310,7 +1373,7 @@ class ThrowbackEditorTest {
         assertEquals(List.of("admin"), command().onTabComplete(bob, null, "throwback", new String[] {"a"}));
         assertEquals(List.of("edit"), command().onTabComplete(bob, null, "throwback", new String[] {"admin", ""}));
         assertTrue(command().onTabComplete(amy, null, "throwback", new String[] {"admin", "e"}).contains("edit"));
-        assertEquals(List.of("save", "cancel", "wallsize"), command().onTabComplete(bob, null, "throwback", new String[] {"admin", "edit", ""}));
+        assertEquals(List.of("save", "cancel", "text"), command().onTabComplete(bob, null, "throwback", new String[] {"admin", "edit", ""}));
         assertTrue(command().onTabComplete(player("Nobody"), null, "throwback", new String[] {"a"}).isEmpty());
     }
 
@@ -1326,11 +1389,10 @@ class ThrowbackEditorTest {
         run(amy, "admin", "portal1");
         amy.teleport(new Location(hallWorld, 12.5, 66, 12.5));
         run(amy, "admin", "portal2");
-        // addwall reads Entity#getFacing, which MockBukkit does not implement
 
         HallLayout l = service.settings().layout();
         assertEquals(9.5, l.start().x(), 1e-9);
-        assertEquals(9.5, l.rules().x(), 1e-9);
+        assertEquals(new Pos(7.5, 65.2, 9.5, -90f), l.rules(), "two blocks in front of the admin at eye level, facing them");
         assertEquals(9.5, l.stages().get(1).x(), 1e-9);
         assertEquals(Region.of(9, 64, 9, 12, 66, 12), l.portal());
     }

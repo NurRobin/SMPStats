@@ -18,7 +18,8 @@ enum EditTool {
     PRIVACY("privacy", Material.BOOK, EditKind.PRIVACY),
     PORTAL_1("portal1", Material.ENDER_PEARL, EditKind.PORTAL_1),
     PORTAL_2("portal2", Material.ENDER_EYE, EditKind.PORTAL_2),
-    WALL("wall", Material.PAINTING, EditKind.WALL),
+    // a name tag does nothing on a block, so the click reaches the edit mode alone
+    TEXT("text", Material.NAME_TAG, EditKind.TEXT),
     UNDO("undo", Material.RED_DYE, null),
     SAVE("save", Material.LIME_DYE, null);
 

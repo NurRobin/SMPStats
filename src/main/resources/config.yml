@@ -215,7 +215,6 @@ throwback:
   privacy_url: "https://christmas.nurrobin.de/datenschutz"
   match_by_name_offline: true    # nur Testserver im Offline-Modus: Spieler der Saison per Name statt UUID finden
   unload_delay_seconds: 60       # so lange nach dem letzten Besucher bleibt die Welt geladen
-  images_folder: "throwback/images"   # PNGs der Bilderwand "Bauten 2025", relativ zu plugins/SMPStats
   texts_file: "throwback/texts.yml"   # Texte, Regeln, Vergleiche (wird beim ersten Start angelegt)
   # exit:                        # Ziel nach dem Pflicht-Rundgang; sonst der Spawn der ersten Welt
   #   world: world

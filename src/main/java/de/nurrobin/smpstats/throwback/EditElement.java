@@ -1,7 +1,7 @@
 package de.nurrobin.smpstats.throwback;
 
+import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
-import org.bukkit.block.BlockFace;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,12 +39,12 @@ final class EditElement {
         this.footprint = List.copyOf(footprint);
     }
 
-    /** One of start, stage, rules, privacy, portal, portal_corner, wall. */
+    /** One of start, stage, rules, privacy, portal, portal_corner, text. */
     String type() {
         return type;
     }
 
-    /** Stage number or wall name; empty for the rest. */
+    /** Stage or text number; empty for the rest. */
     String detail() {
         return detail;
     }
@@ -129,8 +129,9 @@ final class EditElement {
                 }
             }
         }
-        for (EditMark m : draft.walls()) {
-            out.add(wall(m));
+        List<EditMark> texts = draft.texts();
+        for (int i = 0; i < texts.size(); i++) {
+            out.add(text(texts.get(i), i + 1));
         }
         return out;
     }
@@ -173,13 +174,11 @@ final class EditElement {
                 List.of(board(PanelMetrics.privacyBoard(null, m.pos(), m.pos()), m.yaw(), sizes.privacy())), List.of());
     }
 
-    private static EditElement wall(EditMark m) {
-        WallDef w = m.wall();
-        BlockFace right = w.right();
-        int x2 = w.x() + right.getModX() * (w.width() - 1);
-        int z2 = w.z() + right.getModZ() * (w.width() - 1);
-        OrientedBox frames = OrientedBox.aabb(Math.min(w.x(), x2), w.y(), Math.min(w.z(), z2),
-                Math.max(w.x(), x2) + 1, w.y() + w.height(), Math.max(w.z(), z2) + 1);
-        return new EditElement("wall", w.name(), List.of(m), List.of(frames), List.of());
+    private static EditElement text(EditMark m, int number) {
+        List<Component> lines = List.of(m.hallText().component());
+        double half = PanelMetrics.textWidth(lines, HallText.SCALE) / 2;
+        double thickness = PanelMetrics.THICKNESS / 2;
+        return new EditElement("text", String.valueOf(number), List.of(m), List.of(OrientedBox.of(m.x(), m.z(), m.yaw(),
+                -thickness, thickness, -half, half, m.y(), m.y() + PanelMetrics.height(lines, HallText.SCALE))), List.of());
     }
 }

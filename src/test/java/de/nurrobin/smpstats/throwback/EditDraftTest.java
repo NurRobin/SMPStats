@@ -1,7 +1,8 @@
 package de.nurrobin.smpstats.throwback;
 
-import org.bukkit.block.BlockFace;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -74,15 +75,28 @@ class EditDraftTest {
     }
 
     @Test
-    void wallNamesAreUniqueAndNumberedFromOne() {
+    void textsCanBePlacedAnyNumberOfTimes() {
         EditDraft d = new EditDraft();
-        assertEquals(1, d.nextWallNumber());
-        d.place(EditMark.ofWall(new WallDef("bauten-1", 0, 64, 0, BlockFace.EAST, 4, 3, "T", "")));
-        d.place(EditMark.ofWall(new WallDef("bauten-3", 0, 64, 9, BlockFace.EAST, 4, 3, "T", "")));
 
-        assertEquals(2, d.nextWallNumber());
-        assertEquals(EditDraft.Placed.WALL_NAME_TAKEN,
-                d.place(EditMark.ofWall(new WallDef("bauten-1", 5, 64, 0, BlockFace.EAST, 4, 3, "T", ""))));
+        for (int i = 0; i < 20; i++) {
+            assertEquals(EditDraft.Placed.ADDED, d.place(EditMark.ofText(new HallText(new Pos(i, 64, 0, 90f), "Titel " + i))));
+        }
+
+        assertEquals(20, d.texts().size());
+        assertEquals("Titel 19", d.texts().get(19).text());
+    }
+
+    @Test
+    void textsSurviveTheRoundTripThroughADraftInOrder() {
+        HallLayout layout = PlaceholderHall.layout();
+        layout = new HallLayout(layout.start(), layout.stages(), layout.rules(), layout.privacy(), layout.portal(),
+                List.of(new HallText(new Pos(1.5, 64, 2.5, 90f), "<gold>Eins"), new HallText(new Pos(-3, 65, 7, -90f), "Zwei<br>Zeilen")));
+
+        EditDraft d = EditDraft.fromLayout(layout);
+
+        assertEquals(2, d.texts().size());
+        assertEquals(EditKind.TEXT, d.texts().get(0).kind());
+        assertEquals(layout, d.toLayout());
     }
 
     @Test

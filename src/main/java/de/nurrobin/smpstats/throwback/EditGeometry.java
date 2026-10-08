@@ -7,8 +7,7 @@ import org.bukkit.block.BlockFace;
  * south, 90 west, 180 north, -90 east):
  * <ul>
  * <li>start and stage: the builder's own look direction (a stage looks at its back wall)</li>
- * <li>rules and privacy board: away from a clicked wall, else look direction + 180</li>
- * <li>picture wall: the frames face against the look direction</li>
+ * <li>rules and privacy board, texts: away from a clicked wall, else look direction + 180</li>
  * </ul>
  */
 final class EditGeometry {
@@ -100,7 +99,7 @@ final class EditGeometry {
     }
 
     /**
-     * A board (rules or privacy), as the bottom middle of the board. Clicked on a wall it hangs flat against that
+     * A board (rules, privacy or a text), as the bottom middle of the board. Clicked on a wall it hangs flat against that
      * wall, the middle of board and {@code below} together at the clicked block; clicked on a floor it stands on it,
      * on a ceiling it hangs from it. {@code below} is room kept free under the board (the rules button).
      */
@@ -120,6 +119,11 @@ final class EditGeometry {
         return board(EditKind.PRIVACY, bx, by, bz, face, lookYaw, height, 0);
     }
 
+    static EditMark text(int bx, int by, int bz, BlockFace face, float lookYaw, double height, String text) {
+        EditMark m = board(EditKind.TEXT, bx, by, bz, face, lookYaw, height, 0);
+        return new EditMark(EditKind.TEXT, m.x(), m.y(), m.z(), m.yaw(), text);
+    }
+
     static EditMark rules(int bx, int by, int bz, BlockFace face, float lookYaw, double height) {
         return board(EditKind.RULES, bx, by, bz, face, lookYaw, height, PanelMetrics.BUTTON_SPACE);
     }
@@ -132,11 +136,5 @@ final class EditGeometry {
             case EAST -> -90f;
             default -> 0f;
         };
-    }
-
-    /** A picture wall whose lower-left front block sits on top of the clicked block, facing the builder. */
-    static WallDef wall(int bx, int by, int bz, float lookYaw, String name, int width, int height, String title,
-                        String builders) {
-        return new WallDef(name, bx, by + 1, bz, faceOf(lookYaw).getOppositeFace(), width, height, title, builders);
     }
 }

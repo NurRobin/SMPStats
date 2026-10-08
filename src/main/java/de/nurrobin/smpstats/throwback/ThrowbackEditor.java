@@ -27,7 +27,7 @@ import java.util.logging.Logger;
 
 /**
  * The edit mode of the hall: a builder gets a hotbar of tools in place of their inventory, marks where start,
- * stages, boards, portal and picture walls go, sees each marker as a box of thin lines and the checklist in the
+ * stages, boards, portal and free texts go, sees each marker as a box of thin lines and the checklist in the
  * sidebar, both shown to them only, and saves the result as the hall layout. The real inventory lies in a file the whole time and comes back on every
  * way out (save, cancel, quit, kick, death, plugin disable, and at the next join after a crash). The unsaved draft
  * is kept in a file as well, so a restart only costs the session, not the work.
@@ -39,9 +39,6 @@ public final class ThrowbackEditor {
     static final double REACH = 8.0;
     static final double RAY_STEP = 0.2;
     static final double RAY_MARGIN = 0.3;
-    static final int DEFAULT_WALL_WIDTH = 4;
-    static final int DEFAULT_WALL_HEIGHT = 3;
-    static final int MAX_WALL_SIDE = 16;
     static final Color FREE = Color.LIME;
     static final Color BLOCKED = Color.RED;
     static final Color FLOOR = Color.AQUA;
@@ -55,9 +52,8 @@ public final class ThrowbackEditor {
         final EditDraft draft;
         List<EditElement> elements = List.of();
         SceneRenderer.SceneSession preview;
-        int wallWidth = DEFAULT_WALL_WIDTH;
-        int wallHeight = DEFAULT_WALL_HEIGHT;
-        String wallTitle;
+        /** What the text tool places next, set with {@code /throwback admin edit text}. */
+        String text;
         List<EditEffects.Line> lines = new ArrayList<>();
 
         Session(UUID uuid, World world, EditDraft draft) {
@@ -234,7 +230,7 @@ public final class ThrowbackEditor {
         }
         end(p, End.SAVED, null);
         p.sendMessage(texts.message("edit_saved", Map.of("stages", Component.text(layout.stages().size()),
-                "walls", Component.text(layout.walls().size()))));
+                "texts", Component.text(layout.texts().size()))));
         for (EditElement e : report.blocked()) {
             p.sendMessage(texts.message("edit_warn_blocked", Map.of("label", elementLabel(e))));
         }
@@ -401,11 +397,14 @@ public final class ThrowbackEditor {
             case SAVE -> save(p);
             default -> {
                 EditMark mark = markFor(p, s, tool.kind(), block, face, hit);
+                if (mark == null) {
+                    p.sendMessage(texts.message("edit_text_missing"));
+                    return;
+                }
                 EditDraft.Placed result = s.draft.place(mark);
                 switch (result) {
                     case STAGE_LIMIT -> p.sendMessage(texts.message("edit_stage_limit",
                             Map.of("max", Component.text(HallLayout.MAX_STAGES))));
-                    case WALL_NAME_TAKEN -> p.sendMessage(texts.message("edit_wall_taken"));
                     default -> {
                         changed(p, s, mark.kind());
                         p.sendMessage(texts.message("edit_placed", Map.of("label", markLabel(mark, s.draft))));
@@ -427,12 +426,12 @@ public final class ThrowbackEditor {
         if (kind == EditKind.RULES) {
             return EditGeometry.rules(block.getX(), block.getY(), block.getZ(), face, yaw, panelSizes().rules());
         }
-        if (kind == EditKind.WALL) {
-            int n = s.draft.nextWallNumber();
-            String title = s.wallTitle != null ? s.wallTitle : plain(service.texts().message("edit_wall_title",
-                    Map.of("n", Component.text(n))));
-            return EditMark.ofWall(EditGeometry.wall(block.getX(), block.getY(), block.getZ(), yaw, "bauten-" + n,
-                    s.wallWidth, s.wallHeight, title, ""));
+        if (kind == EditKind.TEXT) {
+            if (s.text == null) {
+                return null;
+            }
+            double height = PanelMetrics.height(List.of(new HallText(null, s.text).component()), HallText.SCALE);
+            return EditGeometry.text(block.getX(), block.getY(), block.getZ(), face, yaw, height, s.text);
         }
         return EditGeometry.mark(kind, block.getX(), block.getY(), block.getZ(), hit == null ? null : hit.getX(),
                 hit == null ? null : hit.getZ(), yaw);
@@ -504,21 +503,20 @@ public final class ThrowbackEditor {
         p.sendMessage(texts.message("edit_undone", Map.of("label", label)));
     }
 
-    /** {@code /throwback admin edit wallsize <b> <h> [titel]}: size and title of the walls placed from now on. */
-    public void wallSize(Player p, int width, int height, String title) {
+    /** {@code /throwback admin edit text <text>}: the text the text tool places from now on (MiniMessage). */
+    public void setText(Player p, String text) {
         Session s = sessions.get(p.getUniqueId());
         ThrowbackTexts texts = service.texts();
         if (s == null) {
             p.sendMessage(texts.message("edit_not_active"));
             return;
         }
-        s.wallWidth = Math.max(1, Math.min(MAX_WALL_SIDE, width));
-        s.wallHeight = Math.max(1, Math.min(MAX_WALL_SIDE, height));
-        s.wallTitle = title == null || title.isBlank() ? null : title;
-        p.sendMessage(texts.message("edit_wall_size", Map.of("width", Component.text(s.wallWidth),
-                "height", Component.text(s.wallHeight),
-                "title", Component.text(s.wallTitle == null ? plain(texts.message("edit_wall_title", Map.of("n", Component.text("n"))))
-                        : s.wallTitle))));
+        if (text == null || text.isBlank() || text.length() > HallText.MAX_LENGTH) {
+            p.sendMessage(texts.message("edit_text_usage", Map.of("max", Component.text(HallText.MAX_LENGTH))));
+            return;
+        }
+        s.text = text;
+        p.sendMessage(texts.message("edit_text_set", Map.of("text", new HallText(null, text).component())));
     }
 
     /** A block of the hall changed under the builder's hands; boxes near it are checked again next tick. */
@@ -559,7 +557,7 @@ public final class ThrowbackEditor {
             logger.log(Level.WARNING, "Throwback: Entwurf von " + p.getName() + " ließ sich nicht speichern", e);
         }
         refreshElements(p, s);
-        if (kind == EditKind.RULES || kind == EditKind.PRIVACY) {
+        if (kind == EditKind.RULES || kind == EditKind.PRIVACY || kind == EditKind.TEXT) {
             refreshPreview(p, s);
         }
     }
@@ -597,7 +595,7 @@ public final class ThrowbackEditor {
                 PanelMetrics.height(texts.privacy(settings.privacyUrl())));
     }
 
-    /** The real boards, exactly as the tour builds them, shown to the builder only and not saved with the world. */
+    /** The real boards and texts, exactly as the tour builds them, shown to the builder only and not saved with the world. */
     private void refreshPreview(Player p, Session s) {
         if (s.preview != null) {
             s.preview.close();
@@ -605,7 +603,8 @@ public final class ThrowbackEditor {
         }
         Optional<EditMark> rules = s.draft.single(EditKind.RULES);
         Optional<EditMark> privacy = s.draft.single(EditKind.PRIVACY);
-        if (rules.isEmpty() && privacy.isEmpty()) {
+        List<EditMark> hallTexts = s.draft.texts();
+        if (rules.isEmpty() && privacy.isEmpty() && hallTexts.isEmpty()) {
             return;
         }
         ThrowbackTexts texts = service.texts();
@@ -625,6 +624,9 @@ public final class ThrowbackEditor {
         }
         if (!privacyLines.isEmpty()) {
             privacy.ifPresent(m -> preview.panel(PanelMetrics.privacyBoard(s.world, m.pos(), m.pos()), privacyText, PanelMetrics.SCALE));
+        }
+        for (EditMark m : hallTexts) {
+            preview.panel(m.pos().at(s.world), m.hallText().component(), HallText.SCALE);
         }
     }
 
@@ -703,14 +705,10 @@ public final class ThrowbackEditor {
                 detail = "2";
             }
             default -> {
-                type = "wall";
-                detail = m.wall().name();
+                type = "text";
+                detail = String.valueOf(draft.texts().indexOf(m) + 1);
             }
         }
         return service.texts().message("edit_element_" + type, Map.of("detail", Component.text(detail)));
-    }
-
-    private static String plain(Component c) {
-        return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(c);
     }
 }

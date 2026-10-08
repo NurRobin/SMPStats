@@ -71,7 +71,6 @@ class EditReportTest {
     @Test
     void onePortalCornerIsNotEnough() {
         EditDraft d = draftWith(12);
-        d.undo();
         d.remove(d.single(EditKind.PORTAL_2).orElseThrow());
 
         EditReport r = EditReport.of(d, 8, List.of());
@@ -81,9 +80,9 @@ class EditReportTest {
     }
 
     @Test
-    void picturesAreOptional() {
+    void textsAreOptional() {
         EditDraft d = draftWith(12);
-        d.marks().stream().filter(m -> m.kind() == EditKind.WALL).toList().forEach(d::remove);
+        d.marks().stream().filter(m -> m.kind() == EditKind.TEXT).toList().forEach(d::remove);
 
         assertTrue(EditReport.of(d, 8, List.of()).complete());
     }

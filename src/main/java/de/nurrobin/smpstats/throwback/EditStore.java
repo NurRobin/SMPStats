@@ -1,6 +1,5 @@
 package de.nurrobin.smpstats.throwback;
 
-import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.inventory.ItemStack;
@@ -99,8 +98,8 @@ final class EditStore {
             map.put("y", m.y());
             map.put("z", m.z());
             map.put("yaw", (double) m.yaw());
-            if (m.wall() != null) {
-                map.put("wall", m.wall().toMap());
+            if (m.text() != null) {
+                map.put("text", m.text());
             }
             list.add(map);
         }
@@ -121,8 +120,12 @@ final class EditStore {
                 double y = ((Number) m.get("y")).doubleValue();
                 double z = ((Number) m.get("z")).doubleValue();
                 float yaw = ((Number) m.get("yaw")).floatValue();
-                if (kind == EditKind.WALL) {
-                    marks.addAll(wallMark(m));
+                if (kind == EditKind.TEXT) {
+                    Object text = m.get("text");
+                    if (text == null || String.valueOf(text).isBlank()) {
+                        throw new IllegalArgumentException("Text ohne Inhalt");
+                    }
+                    marks.add(new EditMark(kind, x, y, z, yaw, String.valueOf(text)));
                 } else {
                     marks.add(EditMark.of(kind, x, y, z, yaw));
                 }
@@ -131,12 +134,6 @@ final class EditStore {
             }
         }
         return Optional.of(new EditDraft(marks));
-    }
-
-    private List<EditMark> wallMark(Map<?, ?> m) {
-        ConfigurationSection holder = new YamlConfiguration().createSection("w");
-        holder.set("walls", List.of(m.get("wall")));
-        return WallDef.readAll(holder, logger).stream().map(EditMark::ofWall).toList();
     }
 
     void deleteDraft(UUID uuid) {

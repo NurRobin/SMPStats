@@ -5,7 +5,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
-import org.bukkit.block.BlockFace;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -23,8 +22,8 @@ public final class ThrowbackCommand implements CommandExecutor, TabCompleter {
     private static final String ADMIN = "smpstats.admin";
     private static final String BUILD = "smpstats.throwback.build";
     private static final List<String> ADMIN_SUBS = List.of("info", "reload", "build", "tp", "setstart", "setstage",
-            "setrules", "portal1", "portal2", "addwall", "walls", "reset", "skip", "preview", "edit");
-    private static final List<String> EDIT_SUBS = List.of("save", "cancel", "wallsize");
+            "setrules", "portal1", "portal2", "reset", "skip", "preview", "edit");
+    private static final List<String> EDIT_SUBS = List.of("save", "cancel", "text");
 
     private final Plugin plugin;
     private final ThrowbackService service;
@@ -84,10 +83,6 @@ public final class ThrowbackCommand implements CommandExecutor, TabCompleter {
                     say(sender, "Rundgang von " + args[2] + " als erledigt markiert.");
                 }
             }
-            case "walls" -> {
-                int shown = service.rebuildWalls();
-                say(sender, "Bilderwände neu aufgebaut, " + shown + " mit Bild. Ist die Halle nicht geladen, passiert nichts (erst /throwback admin tp).");
-            }
             default -> {
                 if (!(sender instanceof Player p)) {
                     sender.sendMessage("Dieser Befehl geht nur ingame.");
@@ -109,9 +104,8 @@ public final class ThrowbackCommand implements CommandExecutor, TabCompleter {
                 }
                 HallLayout layout = PlaceholderHall.build(world);
                 service.updateLayout(old -> layout);
-                int shown = service.rebuildWalls();
-                say(p, "Platzhalter-Gang gebaut und Layout gespeichert (" + layout.stages().size() + " Bühnen, "
-                        + layout.walls().size() + " Bilderwände, " + shown + " mit Bild). Mit /throwback admin tp kommst du hin.");
+                say(p, "Platzhalter-Gang gebaut und Layout gespeichert (" + layout.stages().size()
+                        + " Bühnen). Mit /throwback admin tp kommst du hin.");
             }
             case "tp" -> {
                 World world = service.loadForAdmin();
@@ -130,8 +124,14 @@ public final class ThrowbackCommand implements CommandExecutor, TabCompleter {
             }
             case "setrules" -> {
                 if (inHall(p)) {
-                    service.updateLayout(l -> l.withRules(Pos.of(p.getLocation())));
-                    say(p, "Regeltafel gesetzt (Knopf an deiner Position, Blickrichtung zur Tafel).");
+                    // the board hangs two blocks in front of the admin at eye level and faces them
+                    Location at = p.getLocation();
+                    float yaw = EditGeometry.snapYaw(at.getYaw());
+                    double rad = Math.toRadians(yaw);
+                    Pos board = new Pos(at.getX() - Math.sin(rad) * 2, at.getY() + 1.2, at.getZ() + Math.cos(rad) * 2,
+                            EditGeometry.towardViewerYaw(yaw));
+                    service.updateLayout(l -> l.withRules(board));
+                    say(p, "Regeltafel gesetzt, zwei Blöcke vor dir, der Knopf direkt darunter.");
                 }
             }
             case "setstage" -> setStage(p, args);
@@ -154,7 +154,6 @@ public final class ThrowbackCommand implements CommandExecutor, TabCompleter {
                     say(p, "Portal-Bereich gesetzt.");
                 }
             }
-            case "addwall" -> addWall(p, args);
             case "edit" -> edit(p, args);
             default -> say(p, "Nutze: /throwback admin <" + String.join("|", ADMIN_SUBS) + ">");
         }
@@ -166,17 +165,8 @@ public final class ThrowbackCommand implements CommandExecutor, TabCompleter {
             case "" -> editor.begin(p);
             case "save" -> editor.save(p);
             case "cancel" -> editor.cancel(p);
-            case "wallsize" -> {
-                try {
-                    if (args.length < 5) {
-                        throw new NumberFormatException();
-                    }
-                    String title = args.length > 5 ? String.join(" ", java.util.Arrays.copyOfRange(args, 5, args.length)) : null;
-                    editor.wallSize(p, Integer.parseInt(args[3]), Integer.parseInt(args[4]), title);
-                } catch (NumberFormatException e) {
-                    p.sendMessage(service.texts().message("edit_wall_usage"));
-                }
-            }
+            case "text" -> editor.setText(p, args.length < 4 ? null
+                    : String.join(" ", java.util.Arrays.copyOfRange(args, 3, args.length)));
             default -> say(p, "Nutze: /throwback admin edit [" + String.join("|", EDIT_SUBS) + "]");
         }
     }
@@ -207,35 +197,6 @@ public final class ThrowbackCommand implements CommandExecutor, TabCompleter {
             say(p, "Bühnennummer erwartet.");
         } catch (IllegalArgumentException e) {
             say(p, e.getMessage());
-        }
-    }
-
-    private void addWall(Player p, String[] args) {
-        if (!inHall(p)) {
-            return;
-        }
-        if (args.length < 5) {
-            say(p, "Nutze: /throwback admin addwall <name> <breite> <höhe> [Titel] (du stehst vor der Wand, unten links)");
-            return;
-        }
-        try {
-            String name = args[2];
-            int width = Integer.parseInt(args[3]);
-            int height = Integer.parseInt(args[4]);
-            if (!name.matches("[A-Za-z0-9_.-]{1,64}")) {
-                say(p, "Der Name darf nur Buchstaben, Ziffern, Punkt, Unterstrich und Minus enthalten.");
-                return;
-            }
-            BlockFace facing = p.getFacing().getOppositeFace();
-            String title = args.length > 5 ? String.join(" ", java.util.Arrays.copyOfRange(args, 5, args.length)) : name;
-            Location at = p.getLocation().getBlock().getLocation();
-            WallDef wall = new WallDef(name, at.getBlockX(), at.getBlockY(), at.getBlockZ(), facing,
-                    Math.max(1, Math.min(16, width)), Math.max(1, Math.min(16, height)), title, "");
-            service.updateLayout(l -> l.withWall(wall));
-            say(p, "Bilderwand " + name + " gespeichert. PNG: plugins/SMPStats/" + service.settings().imagesFolder() + "/" + name
-                    + ".png, dann /throwback admin walls. Erbauer-Zeile steht in der config.yml (throwback.layout.walls).");
-        } catch (NumberFormatException e) {
-            say(p, "Breite und Höhe müssen Zahlen sein.");
         }
     }
 
@@ -270,7 +231,7 @@ public final class ThrowbackCommand implements CommandExecutor, TabCompleter {
         say(sender, "Throwback: " + (s.enabled() ? "an" : "aus") + ", Welt " + s.world() + ", Saison " + s.season()
                 + ", Regeln-Version " + s.rulesVersion());
         say(sender, "Layout: Start " + (l.start() != null) + ", Regeltafel " + (l.rules() != null) + ", Portal " + (l.portal() != null)
-                + ", Bühnen " + l.stages().size() + "/" + HallLayout.MAX_STAGES + ", Bilderwände " + l.walls().size()
+                + ", Bühnen " + l.stages().size() + "/" + HallLayout.MAX_STAGES + ", Texte " + l.texts().size()
                 + (l.usable() ? " (einsatzbereit)" : " (unvollständig, die Halle ist aus)"));
     }
 

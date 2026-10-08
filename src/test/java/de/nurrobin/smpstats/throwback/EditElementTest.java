@@ -1,7 +1,6 @@
 package de.nurrobin.smpstats.throwback;
 
 import net.kyori.adventure.text.Component;
-import org.bukkit.block.BlockFace;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -111,19 +110,19 @@ class EditElementTest {
     }
 
     @Test
-    void wallBoxIsTheFrameAreaInFrontOfTheWall() {
-        WallDef wall = new WallDef("w", 5, 64, 40, BlockFace.EAST, 4, 3, "T", "");
+    void textBoxIsSizedByTheRealTextAndNumberedFromOne() {
+        EditMark text = EditMark.ofText(new HallText(new Pos(5.5, 64, 40.5, 0f), "Mein Dorf"));
+        EditDraft d = draftOf(text, EditMark.ofText(new HallText(new Pos(9.5, 64, 40.5, 0f), "Zweiter")));
 
-        EditElement e = single(draftOf(EditMark.ofWall(wall)), "wall");
+        List<EditElement> texts = EditElement.of(d, SIZES).stream().filter(e -> e.type().equals("text")).toList();
 
-        // facing east: the viewer's right is north, so the wall runs from z 40 to z 37
-        double[] h = e.clearance().get(0).hull();
-        assertEquals(5.0, h[0], 1e-9);
-        assertEquals(6.0, h[1], 1e-9);
-        assertEquals(37.0, h[2], 1e-9);
-        assertEquals(41.0, h[3], 1e-9);
-        assertEquals(4 * 3, e.clearance().get(0).blocks().size());
-        assertEquals("w", e.detail());
+        assertEquals(2, texts.size());
+        assertEquals("1", texts.get(0).detail());
+        assertEquals("2", texts.get(1).detail());
+        assertEquals(1, texts.get(0).clearance().size());
+        assertEquals(List.of(text), texts.get(0).marks());
+        double[] h = texts.get(0).clearance().get(0).hull();
+        assertEquals(PanelMetrics.textWidth(List.of(new HallText(null, "Mein Dorf").component()), HallText.SCALE), h[1] - h[0], 1e-6);
     }
 
     @Test
