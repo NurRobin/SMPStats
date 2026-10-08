@@ -51,6 +51,11 @@ final class FakeScenes implements SceneRenderer {
         }
 
         @Override
+        public void panel(Location at, Component text, float scale) {
+            texts++;
+        }
+
+        @Override
         public void interaction(Location at, float width, float height, String action) {
             interactions++;
         }

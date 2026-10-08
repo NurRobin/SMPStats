@@ -41,6 +41,7 @@ public final class MannequinSceneRenderer implements SceneRenderer {
     public static final String OWNER_KEY = "throwback_owner";
     private static final long SWING_PERIOD_TICKS = 16L;
     private static final double SWING_RANGE_SQUARED = 24.0 * 24.0;
+    private static final int PANEL_LINE_WIDTH = 320;
 
     /** How entities are hidden and shown; replaced in tests because MockBukkit has no per-player visibility. */
     interface Visibility {
@@ -59,6 +60,17 @@ public final class MannequinSceneRenderer implements SceneRenderer {
             display.setLineWidth(260);
             display.setShadowed(true);
             display.setViewRange(0.5f);
+        }
+
+        default void stylePanel(TextDisplay display, Component text, float scale) {
+            display.text(text);
+            display.setBillboard(Display.Billboard.FIXED);
+            display.setBackgroundColor(Color.fromARGB(150, 0, 0, 0));
+            display.setLineWidth(PANEL_LINE_WIDTH);
+            display.setShadowed(true);
+            display.setViewRange(0.5f);
+            display.setTransformation(new Transformation(new Vector3f(), new Quaternionf(),
+                    new Vector3f(scale, scale, scale), new Quaternionf()));
         }
 
         default void styleInteraction(Interaction interaction, float width, float height) {
@@ -223,6 +235,16 @@ public final class MannequinSceneRenderer implements SceneRenderer {
                 return;
             }
             spawn(at, TextDisplay.class, t -> visibility.styleText(t, text));
+        }
+
+        @Override
+        public void panel(Location at, Component text, float scale) {
+            if (closed) {
+                return;
+            }
+            Location fixed = at.clone();
+            fixed.setPitch(0);
+            spawn(fixed, TextDisplay.class, t -> visibility.stylePanel(t, text, scale));
         }
 
         @Override
