@@ -36,8 +36,6 @@ public final class ThrowbackService {
     private static final long PORTAL_COOLDOWN_MS = 5_000L;
     private static final long HINT_COOLDOWN_MS = 3_000L;
     private static final double RULES_REACH = 8.0;
-    private static final double PANEL_OFFSET = 2.0;
-    private static final float PANEL_SCALE = 0.5f;
 
     private record Origin(Location location) {
     }
@@ -131,7 +129,7 @@ public final class ThrowbackService {
         this.teleporter = teleporter;
     }
 
-    private java.util.concurrent.CompletableFuture<Boolean> teleport(Player player, Location location) {
+    java.util.concurrent.CompletableFuture<Boolean> teleport(Player player, Location location) {
         return teleporter.apply(player, location);
     }
 
@@ -517,17 +515,11 @@ public final class ThrowbackService {
 
     private void buildRules(SceneRenderer.SceneSession session, World world, HallLayout layout, HallPlan plan) {
         Pos rules = layout.rules();
-        // Two fixed boards side by side at eye level: rules on the reader's left, privacy on the right.
-        double rad = Math.toRadians(rules.yaw());
-        double rx = -Math.cos(rad);
-        double rz = -Math.sin(rad);
-        Location board = new Location(world, rules.x() + rx * PANEL_OFFSET, rules.y() + 1.2,
-                rules.z() + rz * PANEL_OFFSET, rules.yaw(), 0);
-        session.panel(board, ThrowbackTexts.joinLines(plan.rules()), PANEL_SCALE);
+        // Two fixed boards at eye level: rules on the reader's left, privacy on the right unless it has a place of its own.
+        session.panel(PanelMetrics.rulesBoard(world, rules), ThrowbackTexts.joinLines(plan.rules()), PanelMetrics.SCALE);
         if (!plan.privacy().isEmpty()) {
-            Location privacy = new Location(world, rules.x() - rx * PANEL_OFFSET, rules.y() + 1.5,
-                    rules.z() - rz * PANEL_OFFSET, rules.yaw(), 0);
-            session.panel(privacy, ThrowbackTexts.joinLines(plan.privacy()), PANEL_SCALE);
+            session.panel(PanelMetrics.privacyBoard(world, rules, layout.privacy()), ThrowbackTexts.joinLines(plan.privacy()),
+                    PanelMetrics.SCALE);
         }
         Location button = new Location(world, rules.x(), rules.y() + 0.8, rules.z());
         session.text(button, content().rulesButton());
@@ -748,25 +740,43 @@ public final class ThrowbackService {
         return world;
     }
 
+    /**
+     * Saves a layout made in the edit mode: picture walls that are gone get their frames removed, the layout is
+     * written to config.yml and the remaining walls are rebuilt. Returns how many walls got a picture.
+     */
+    public int applyEditedLayout(HallLayout next) {
+        World world = hall.loaded();
+        if (world != null) {
+            List<String> kept = next.walls().stream().map(WallDef::name).toList();
+            try {
+                wall.clear(world, settings.layout().walls().stream().filter(w -> !kept.contains(w.name())).toList());
+            } catch (RuntimeException e) {
+                logger.log(java.util.logging.Level.WARNING, "Throwback: Rahmen entfernter Bilderwände ließen sich nicht abräumen", e);
+            }
+        }
+        updateLayout(old -> next);
+        try {
+            return rebuildWalls();
+        } catch (RuntimeException e) {
+            // the layout is saved by now; the walls can be rebuilt with /throwback admin walls
+            logger.log(java.util.logging.Level.WARNING, "Throwback: Bilderwände konnten nicht neu aufgebaut werden", e);
+            return 0;
+        }
+    }
+
     /** Applies a layout change and writes it to config.yml. */
     public void updateLayout(UnaryOperator<HallLayout> change) {
         HallLayout next = change.apply(settings.layout());
         plugin.getConfig().set("throwback.layout", null);
         next.write(plugin.getConfig().createSection("throwback.layout"));
         plugin.saveConfig();
-        ThrowbackSettings s = settings;
-        this.settings = new ThrowbackSettings(s.enabled(), s.world(), s.season(), s.minPlaytimeMinutes(), s.rankBadgeTop(),
-                s.rulesVersion(), s.privacyUrl(), s.matchByNameOffline(), s.unloadDelaySeconds(), s.imagesFolder(),
-                s.textsFile(), s.exitWorld(), s.exit(), s.spawnPortal(), next);
+        this.settings = settings.withLayout(next);
         this.content = null;
     }
 
     /** Test hook: swap the layout without touching config.yml. */
     void updateLayoutForTest(HallLayout layout) {
-        ThrowbackSettings s = settings;
-        this.settings = new ThrowbackSettings(s.enabled(), s.world(), s.season(), s.minPlaytimeMinutes(), s.rankBadgeTop(),
-                s.rulesVersion(), s.privacyUrl(), s.matchByNameOffline(), s.unloadDelaySeconds(), s.imagesFolder(),
-                s.textsFile(), s.exitWorld(), s.exit(), s.spawnPortal(), layout);
+        this.settings = settings.withLayout(layout);
     }
 
     /** Staff override: marks the tour as done; a player who is in the hall right now is sent out. */

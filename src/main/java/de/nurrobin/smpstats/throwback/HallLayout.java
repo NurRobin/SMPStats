@@ -6,12 +6,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
-/** Where everything stands in the hall world; read from {@code throwback.layout}, measured in by admin commands. */
-public record HallLayout(Pos start, List<Pos> stages, Pos rules, Region portal, List<WallDef> walls) {
+/**
+ * Where everything stands in the hall world; read from {@code throwback.layout}, measured in by admin commands
+ * or the edit mode. {@code privacy} is optional: without it the privacy board hangs next to the rules board.
+ */
+public record HallLayout(Pos start, List<Pos> stages, Pos rules, Pos privacy, Region portal, List<WallDef> walls) {
     public static final int MAX_STAGES = 12;
 
     public static HallLayout empty() {
-        return new HallLayout(null, List.of(), null, null, List.of());
+        return new HallLayout(null, List.of(), null, null, null, List.of());
     }
 
     /** The hall can only run when start, rules station and portal are known. */
@@ -40,13 +43,14 @@ public record HallLayout(Pos start, List<Pos> stages, Pos rules, Region portal, 
             stages.add(new Pos(x.doubleValue(), y.doubleValue(), z.doubleValue(), yaw == null ? 0f : yaw.floatValue()));
         }
         return new HallLayout(Pos.read(section.getConfigurationSection("start")), List.copyOf(stages),
-                Pos.read(section.getConfigurationSection("rules")), Region.read(section.getConfigurationSection("portal")),
-                List.copyOf(WallDef.readAll(section, logger)));
+                Pos.read(section.getConfigurationSection("rules")), Pos.read(section.getConfigurationSection("privacy")),
+                Region.read(section.getConfigurationSection("portal")), List.copyOf(WallDef.readAll(section, logger)));
     }
 
     public void write(ConfigurationSection section) {
         section.set("start", null);
         section.set("rules", null);
+        section.set("privacy", null);
         section.set("portal", null);
         section.set("stages", null);
         section.set("walls", null);
@@ -55,6 +59,9 @@ public record HallLayout(Pos start, List<Pos> stages, Pos rules, Region portal, 
         }
         if (rules != null) {
             rules.write(section.createSection("rules"));
+        }
+        if (privacy != null) {
+            privacy.write(section.createSection("privacy"));
         }
         if (portal != null) {
             portal.write(section.createSection("portal"));
@@ -73,15 +80,19 @@ public record HallLayout(Pos start, List<Pos> stages, Pos rules, Region portal, 
     }
 
     public HallLayout withStart(Pos p) {
-        return new HallLayout(p, stages, rules, portal, walls);
+        return new HallLayout(p, stages, rules, privacy, portal, walls);
     }
 
     public HallLayout withRules(Pos p) {
-        return new HallLayout(start, stages, p, portal, walls);
+        return new HallLayout(start, stages, p, privacy, portal, walls);
+    }
+
+    public HallLayout withPrivacy(Pos p) {
+        return new HallLayout(start, stages, rules, p, portal, walls);
     }
 
     public HallLayout withPortal(Region r) {
-        return new HallLayout(start, stages, rules, r, walls);
+        return new HallLayout(start, stages, rules, privacy, r, walls);
     }
 
     /** Sets stage {@code index} (0-based); missing earlier stages are not allowed, so the list never has holes. */
@@ -95,12 +106,12 @@ public record HallLayout(Pos start, List<Pos> stages, Pos rules, Region portal, 
         } else {
             next.set(index, p);
         }
-        return new HallLayout(start, List.copyOf(next), rules, portal, walls);
+        return new HallLayout(start, List.copyOf(next), rules, privacy, portal, walls);
     }
 
     public HallLayout withWall(WallDef wall) {
         List<WallDef> next = new ArrayList<>(walls.stream().filter(w -> !w.name().equals(wall.name())).toList());
         next.add(wall);
-        return new HallLayout(start, stages, rules, portal, List.copyOf(next));
+        return new HallLayout(start, stages, rules, privacy, portal, List.copyOf(next));
     }
 }

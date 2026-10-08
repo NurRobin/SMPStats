@@ -41,7 +41,6 @@ public final class MannequinSceneRenderer implements SceneRenderer {
     public static final String OWNER_KEY = "throwback_owner";
     private static final long SWING_PERIOD_TICKS = 16L;
     private static final double SWING_RANGE_SQUARED = 24.0 * 24.0;
-    private static final int PANEL_LINE_WIDTH = 320;
 
     /** How entities are hidden and shown; replaced in tests because MockBukkit has no per-player visibility. */
     interface Visibility {
@@ -66,7 +65,7 @@ public final class MannequinSceneRenderer implements SceneRenderer {
             display.text(text);
             display.setBillboard(Display.Billboard.FIXED);
             display.setBackgroundColor(Color.fromARGB(150, 0, 0, 0));
-            display.setLineWidth(PANEL_LINE_WIDTH);
+            display.setLineWidth(PanelMetrics.LINE_WIDTH_PX);
             display.setShadowed(true);
             display.setViewRange(0.5f);
             display.setTransformation(new Transformation(new Vector3f(), new Quaternionf(),

@@ -228,4 +228,6 @@ throwback:
   #   min: {x: 0, y: 80, z: 0}
   #   max: {x: 2, y: 83, z: 0}
   #   exit: {x: 0.5, y: 80, z: 4.5, yaw: 0}   # wohin Besucher zurückkehren
-  layout: {}                     # wird mit /throwback admin ... eingemessen
+  edit:                          # Bearbeitungsmodus (/throwback admin edit)
+    min_stages: 8                # so viele Bühnen braucht der Entwurf mindestens zum Speichern (höchstens 12)
+  layout: {}                     # wird mit /throwback admin ... eingemessen oder im Bearbeitungsmodus gesetzt

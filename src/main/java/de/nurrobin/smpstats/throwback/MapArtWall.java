@@ -79,6 +79,11 @@ public final class MapArtWall {
         return shown;
     }
 
+    /** Takes down the frames and captions of walls that are no longer part of the layout. */
+    public void clear(World world, List<WallDef> walls) {
+        walls.forEach(w -> clearWall(world, w));
+    }
+
     private void placeTiles(World world, WallDef wall, BufferedImage image, YamlConfiguration ids) {
         BlockFace right = wall.right();
         for (int ty = 0; ty < wall.height(); ty++) {
