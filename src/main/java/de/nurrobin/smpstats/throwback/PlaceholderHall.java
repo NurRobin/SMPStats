@@ -11,16 +11,25 @@ import java.util.List;
 /**
  * A plain stand-in corridor so the hall can be tested before the builders deliver theirs: start platform,
  * a corridor with six alcoves per side, three picture walls, a rules panel and a portal frame at the end.
+ * Each alcove holds a stage floor of {@link #STAGE_DEPTH} by {@link #STAGE_WIDTH} with {@link #MARGIN} free
+ * blocks to the sides and the back, because the hologram above a stage is up to 6.5 blocks wide.
  * Everything is derived from the constants below, and the matching {@link HallLayout} is returned.
  */
 public final class PlaceholderHall {
     static final int FLOOR_Y = 63;
     static final int Y0 = FLOOR_Y + 1;
     static final int HEIGHT = 5;
+    static final int STAGE_DEPTH = 3;
+    static final int STAGE_WIDTH = 4;
+    static final int MARGIN = 2;
+    static final int CORRIDOR_HALF = 2;
     static final int FIRST_ALCOVE_Z = 12;
-    static final int ALCOVE_SPACING = 4;
+    static final int ALCOVE_SPACING = STAGE_WIDTH + 2 * MARGIN + 1;
     static final int ALCOVES_PER_SIDE = 6;
-    static final int END_Z = 56;
+    /** First z behind the last alcove; picture walls, rules panel and portal are placed relative to it. */
+    static final int AFTER_ALCOVES_Z = FIRST_ALCOVE_Z + ALCOVE_SPACING * (ALCOVES_PER_SIDE - 1) + STAGE_WIDTH / 2 + MARGIN;
+    static final int END_Z = AFTER_ALCOVES_Z + 23;
+    static final int OUTER_X = CORRIDOR_HALF + STAGE_DEPTH + MARGIN;
 
     private PlaceholderHall() {
     }
@@ -28,39 +37,45 @@ public final class PlaceholderHall {
     /** The layout this class builds; also usable without a world, for tests. */
     public static HallLayout layout() {
         List<Pos> stages = new ArrayList<>();
+        double stageX = CORRIDOR_HALF + 1 + STAGE_DEPTH / 2.0;
         for (int k = 0; k < ALCOVES_PER_SIDE; k++) {
-            double z = FIRST_ALCOVE_Z + ALCOVE_SPACING * k + 0.5;
-            stages.add(new Pos(-4.5, Y0, z, 90f));
-            stages.add(new Pos(4.5, Y0, z, -90f));
+            double z = FIRST_ALCOVE_Z + ALCOVE_SPACING * k;
+            stages.add(new Pos(-stageX, Y0, z, 90f));
+            stages.add(new Pos(stageX, Y0, z, -90f));
         }
+        int a = AFTER_ALCOVES_Z;
         List<WallDef> walls = List.of(
-                new WallDef("bauten-1", -2, Y0, 39, BlockFace.EAST, 4, 3, "Bauten 2025: Bau 1", "Erbauer"),
-                new WallDef("bauten-2", -2, Y0, 44, BlockFace.EAST, 4, 3, "Bauten 2025: Bau 2", "Erbauer"),
-                new WallDef("bauten-3", -2, Y0, 49, BlockFace.EAST, 4, 3, "Bauten 2025: Bau 3", "Erbauer"));
-        return new HallLayout(new Pos(0.5, Y0, -6.5, 0f), List.copyOf(stages), new Pos(2.4, Y0, 40.5, 90f),
+                new WallDef("bauten-1", -2, Y0, a + 6, BlockFace.EAST, 4, 3, "Bauten 2025: Bau 1", "Erbauer"),
+                new WallDef("bauten-2", -2, Y0, a + 11, BlockFace.EAST, 4, 3, "Bauten 2025: Bau 2", "Erbauer"),
+                new WallDef("bauten-3", -2, Y0, a + 16, BlockFace.EAST, 4, 3, "Bauten 2025: Bau 3", "Erbauer"));
+        return new HallLayout(new Pos(0.5, Y0, -6.5, 0f), List.copyOf(stages), new Pos(2.4, Y0, a + 7.5, 90f),
                 Region.of(-1, Y0, END_Z - 3, 1, Y0 + 2, END_Z - 2), walls);
     }
 
     /** Builds the blocks into the world and returns the layout that belongs to them. */
     public static HallLayout build(World world) {
-        fill(world, -7, FLOOR_Y, -9, 7, FLOOR_Y + HEIGHT + 1, END_Z + 2, Material.DEEPSLATE_BRICKS);
+        fill(world, -OUTER_X - 1, FLOOR_Y, -9, OUTER_X + 1, FLOOR_Y + HEIGHT + 1, END_Z + 2, Material.DEEPSLATE_BRICKS);
         carve(world, -5, Y0, -8, 5, Y0 + HEIGHT - 1, 6);
-        carve(world, -2, Y0, 7, 2, Y0 + HEIGHT - 1, END_Z);
+        carve(world, -CORRIDOR_HALF, Y0, 7, CORRIDOR_HALF, Y0 + HEIGHT - 1, END_Z);
+        int stageIn = CORRIDOR_HALF + 1;
+        int stageOut = CORRIDOR_HALF + STAGE_DEPTH;
         for (int k = 0; k < ALCOVES_PER_SIDE; k++) {
             int c = FIRST_ALCOVE_Z + ALCOVE_SPACING * k;
-            carve(world, -6, Y0, c - 1, -3, Y0 + HEIGHT - 2, c + 1);
-            carve(world, 3, Y0, c - 1, 6, Y0 + HEIGHT - 2, c + 1);
-            lantern(world, -5, Y0 + HEIGHT - 2, c);
-            lantern(world, 5, Y0 + HEIGHT - 2, c);
-            fill(world, -6, FLOOR_Y, c - 1, -4, FLOOR_Y, c + 1, Material.SPRUCE_PLANKS);
-            fill(world, 4, FLOOR_Y, c - 1, 6, FLOOR_Y, c + 1, Material.SPRUCE_PLANKS);
+            int z1 = c - STAGE_WIDTH / 2;
+            int z2 = c + STAGE_WIDTH / 2 - 1;
+            carve(world, -OUTER_X, Y0, z1 - MARGIN, -stageIn, Y0 + HEIGHT - 1, z2 + MARGIN);
+            carve(world, stageIn, Y0, z1 - MARGIN, OUTER_X, Y0 + HEIGHT - 1, z2 + MARGIN);
+            lantern(world, -OUTER_X, Y0 + HEIGHT - 1, c);
+            lantern(world, OUTER_X, Y0 + HEIGHT - 1, c);
+            fill(world, -stageOut, FLOOR_Y, z1, -stageIn, FLOOR_Y, z2, Material.SPRUCE_PLANKS);
+            fill(world, stageIn, FLOOR_Y, z1, stageOut, FLOOR_Y, z2, Material.SPRUCE_PLANKS);
         }
         fill(world, -1, Y0, 7, 1, Y0, END_Z - 4, Material.RED_CARPET);
         fill(world, -1, Y0, -8, 1, Y0, 6, Material.RED_CARPET);
         for (int z = -6; z <= END_Z; z += 6) {
             lantern(world, 0, Y0 + HEIGHT - 1, z);
         }
-        fill(world, 3, Y0, 36, 3, Y0 + 3, 44, Material.DARK_OAK_PLANKS);
+        fill(world, 3, Y0, AFTER_ALCOVES_Z + 3, 3, Y0 + 3, AFTER_ALCOVES_Z + 11, Material.DARK_OAK_PLANKS);
         portalFrame(world);
         return layout();
     }
