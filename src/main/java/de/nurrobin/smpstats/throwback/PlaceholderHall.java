@@ -37,11 +37,14 @@ public final class PlaceholderHall {
     /** The layout this class builds; also usable without a world, for tests. */
     public static HallLayout layout() {
         List<Pos> stages = new ArrayList<>();
-        double stageX = CORRIDOR_HALF + 1 + STAGE_DEPTH / 2.0;
+        // The corridor spans blocks -CORRIDOR_HALF..CORRIDOR_HALF, so it is mirrored around x = 0.5, not 0.
+        // Both figures stand half a block in front of their alcove's stage back edge.
+        double westX = -(CORRIDOR_HALF + STAGE_DEPTH) + 0.5;
+        double eastX = 1.0 - westX;
         for (int k = 0; k < ALCOVES_PER_SIDE; k++) {
             double z = FIRST_ALCOVE_Z + ALCOVE_SPACING * k;
-            stages.add(new Pos(-stageX, Y0, z, 90f));
-            stages.add(new Pos(stageX, Y0, z, -90f));
+            stages.add(new Pos(westX, Y0, z, 90f));
+            stages.add(new Pos(eastX, Y0, z, -90f));
         }
         int a = AFTER_ALCOVES_Z;
         List<WallDef> walls = List.of(

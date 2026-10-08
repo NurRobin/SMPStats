@@ -101,4 +101,16 @@ class ThrowbackSettingsTest {
         assertFalse(r.contains(2.0, 64.0, 54.0));
         assertEquals(0.5, r.centerX());
     }
+
+    @Test
+    void placeholderStagesAreMirroredAcrossTheCorridor() {
+        java.util.List<Pos> stages = PlaceholderHall.layout().stages();
+        for (int i = 0; i < stages.size(); i += 2) {
+            Pos west = stages.get(i);
+            Pos east = stages.get(i + 1);
+            org.junit.jupiter.api.Assertions.assertEquals(0.5, (west.x() + east.x()) / 2, 1e-9,
+                    "the corridor spans blocks -2..2, so its middle is x = 0.5");
+            org.junit.jupiter.api.Assertions.assertEquals(west.z(), east.z(), 1e-9);
+        }
+    }
 }
