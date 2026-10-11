@@ -2,7 +2,6 @@ package de.nurrobin.smpstats.throwback;
 
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
-import org.bukkit.block.BlockFace;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -86,13 +85,13 @@ class EditStoreTest {
     @Test
     void draftRoundTripsWithAllKindsAndKeepsTheOrder() throws Exception {
         EditDraft draft = EditDraft.fromLayout(PlaceholderHall.layout().withPrivacy(new Pos(3.5, 64, 90.5, -90f)));
-        draft.place(EditMark.ofWall(new WallDef("bauten-9", 1, 64, 2, BlockFace.WEST, 5, 2, "Mein Bau", "Alex & Sam")));
+        draft.place(EditMark.ofText(new HallText(new Pos(1.5, 64, 2.5, 90f), "<gold>Mein Bau<br>Alex & Sam")));
 
         store.saveDraft(id, draft);
         EditDraft back = store.loadDraft(id).orElseThrow();
 
         assertEquals(draft.marks(), back.marks());
-        assertEquals("Alex & Sam", back.walls().get(back.walls().size() - 1).wall().builders());
+        assertEquals("<gold>Mein Bau<br>Alex & Sam", back.texts().get(back.texts().size() - 1).text());
         assertEquals(draft.toLayout(), back.toLayout());
     }
 
@@ -119,6 +118,22 @@ class EditStoreTest {
 
         assertEquals(1, draft.marks().size());
         assertEquals(EditKind.START, draft.marks().get(0).kind());
+    }
+
+    @Test
+    void aTextMarkWithoutTextIsSkippedButTheRestIsKept() throws Exception {
+        Path dir = Files.createDirectories(tempDir.resolve("throwback/edit"));
+        Files.writeString(dir.resolve(id + ".draft.yml"), """
+                marks:
+                  - {kind: TEXT, x: 1.5, y: 64.0, z: 2.5, yaw: 90.0}
+                  - {kind: TEXT, x: 1.5, y: 64.0, z: 2.5, yaw: 90.0, text: "  "}
+                  - {kind: TEXT, x: 3.5, y: 64.0, z: 2.5, yaw: 90.0, text: "Hallo"}
+                """);
+
+        EditDraft draft = store.loadDraft(id).orElseThrow();
+
+        assertEquals(1, draft.texts().size());
+        assertEquals("Hallo", draft.texts().get(0).text());
     }
 
     @Test

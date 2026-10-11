@@ -1,7 +1,6 @@
 package de.nurrobin.smpstats.throwback;
 
 import net.kyori.adventure.text.Component;
-import org.bukkit.block.BlockFace;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -111,19 +110,19 @@ class EditElementTest {
     }
 
     @Test
-    void wallBoxIsTheFrameAreaInFrontOfTheWall() {
-        WallDef wall = new WallDef("w", 5, 64, 40, BlockFace.EAST, 4, 3, "T", "");
+    void textBoxIsSizedByTheRealTextAndNumberedFromOne() {
+        EditMark text = EditMark.ofText(new HallText(new Pos(5.5, 64, 40.5, 0f), "Mein Dorf"));
+        EditDraft d = draftOf(text, EditMark.ofText(new HallText(new Pos(9.5, 64, 40.5, 0f), "Zweiter")));
 
-        EditElement e = single(draftOf(EditMark.ofWall(wall)), "wall");
+        List<EditElement> texts = EditElement.of(d, SIZES).stream().filter(e -> e.type().equals("text")).toList();
 
-        // facing east: the viewer's right is north, so the wall runs from z 40 to z 37
-        double[] h = e.clearance().get(0).hull();
-        assertEquals(5.0, h[0], 1e-9);
-        assertEquals(6.0, h[1], 1e-9);
-        assertEquals(37.0, h[2], 1e-9);
-        assertEquals(41.0, h[3], 1e-9);
-        assertEquals(4 * 3, e.clearance().get(0).blocks().size());
-        assertEquals("w", e.detail());
+        assertEquals(2, texts.size());
+        assertEquals("1", texts.get(0).detail());
+        assertEquals("2", texts.get(1).detail());
+        assertEquals(1, texts.get(0).clearance().size());
+        assertEquals(List.of(text), texts.get(0).marks());
+        double[] h = texts.get(0).clearance().get(0).hull();
+        assertEquals(PanelMetrics.textWidth(List.of(new HallText(null, "Mein Dorf").component()), HallText.SCALE), h[1] - h[0], 1e-6);
     }
 
     @Test
@@ -133,23 +132,26 @@ class EditElementTest {
 
         EditElement e = single(withPrivacy, "rules");
 
-        assertEquals(1, e.clearance().size(), "the privacy board has its own place, so no second box here");
+        assertEquals(2, e.clearance().size(), "board and button; the privacy board has its own place");
         OrientedBox box = e.clearance().get(0);
         assertEquals(PanelMetrics.width(), box.t1() - box.t0(), 1e-9);
         assertEquals(4.0, PanelMetrics.width(), 1e-9);
-        assertEquals(64 + PanelMetrics.RULES_Y, box.y0(), 1e-9);
-        assertEquals(64 + PanelMetrics.RULES_Y + SIZES.rules(), box.y1(), 1e-9);
+        assertEquals(64, box.y0(), 1e-9, "the place is the bottom middle of the board");
+        assertEquals(64 + SIZES.rules(), box.y1(), 1e-9);
+        OrientedBox button = e.clearance().get(1);
+        assertEquals(64 - PanelMetrics.BUTTON_SPACE, button.y0(), 1e-9, "the button has its room right under the board");
+        assertEquals(64, button.y1(), 1e-9);
     }
 
     @Test
     void withoutAPrivacyPlaceTheFallbackBoardIsPartOfTheRulesElement() {
         EditElement e = single(draftOf(EditMark.of(EditKind.RULES, 2.5, 64, 100.5, -90f)), "rules");
 
-        assertEquals(2, e.clearance().size());
+        assertEquals(3, e.clearance().size(), "board, button and the privacy board beside it");
         OrientedBox rulesBox = e.clearance().get(0);
-        OrientedBox privacyBox = e.clearance().get(1);
-        assertEquals(PanelMetrics.OFFSET * 2, Math.abs(privacyBox.center().z() - rulesBox.center().z()), 1e-9,
-                "the two boards sit two blocks to either side of the station");
+        OrientedBox privacyBox = e.clearance().get(2);
+        assertEquals(PanelMetrics.width() + PanelMetrics.BESIDE_GAP, Math.abs(privacyBox.center().z() - rulesBox.center().z()), 1e-9,
+                "side by side with a small gap");
     }
 
     @Test
@@ -159,7 +161,7 @@ class EditElementTest {
         OrientedBox box = e.clearance().get(0);
         assertEquals(20.5, box.center().x(), 1e-9);
         assertEquals(100.5, box.center().z(), 1e-9);
-        assertEquals(64 + PanelMetrics.PRIVACY_Y, box.y0(), 1e-9);
+        assertEquals(64, box.y0(), 1e-9, "its own place already is the bottom middle of the board");
     }
 
     @Test
@@ -170,12 +172,16 @@ class EditElementTest {
         var fallback = PanelMetrics.privacyBoard(world, rules, null);
         var own = PanelMetrics.privacyBoard(world, rules, new Pos(9, 64, 9, 0f));
 
-        assertEquals(2.4 - Math.cos(Math.toRadians(90)) * 2, board.getX(), 1e-9);
-        assertEquals(100.5 - 2.0, board.getZ(), 1e-9);
-        assertEquals(100.5 + 2.0, fallback.getZ(), 1e-9);
-        assertEquals(64 + 1.5, fallback.getY(), 1e-9);
+        assertEquals(2.4, board.getX(), 1e-9);
+        assertEquals(100.5, board.getZ(), 1e-9);
+        assertEquals(64, board.getY(), 1e-9);
+        assertEquals(100.5 + 4.5, fallback.getZ(), 1e-9, "on the reader's right, one board width and a gap away");
+        assertEquals(64, fallback.getY(), 1e-9);
+        var button = PanelMetrics.rulesButton(world, rules);
+        assertEquals(64 - PanelMetrics.BUTTON_DROP, button.getY(), 1e-9);
+        assertTrue(button.getX() < 2.4, "the board looks west, so the button stands a little to the west of it");
         assertEquals(9.0, own.getX());
-        assertEquals(64 + 1.5, own.getY());
+        assertEquals(64, own.getY(), "its own place is the bottom middle, no offset");
     }
 
     // ------------------------------------------------------------------ collision

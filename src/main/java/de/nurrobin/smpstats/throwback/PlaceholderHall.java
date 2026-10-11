@@ -2,7 +2,6 @@ package de.nurrobin.smpstats.throwback;
 
 import org.bukkit.Material;
 import org.bukkit.World;
-import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.type.Lantern;
 
 import java.util.ArrayList;
@@ -10,7 +9,7 @@ import java.util.List;
 
 /**
  * A plain stand-in corridor so the hall can be tested before the builders deliver theirs: start platform,
- * a corridor with six alcoves per side, three picture walls, a rules panel and a portal frame at the end.
+ * a corridor with six alcoves per side, room for pictures, a rules panel and a portal frame at the end.
  * Each alcove holds a stage floor of {@link #STAGE_DEPTH} by {@link #STAGE_WIDTH} with {@link #MARGIN} free
  * blocks to the sides and the back, because the hologram above a stage is up to 6.5 blocks wide.
  * Everything is derived from the constants below, and the matching {@link HallLayout} is returned.
@@ -26,7 +25,7 @@ public final class PlaceholderHall {
     static final int FIRST_ALCOVE_Z = 12;
     static final int ALCOVE_SPACING = STAGE_WIDTH + 2 * MARGIN + 1;
     static final int ALCOVES_PER_SIDE = 6;
-    /** First z behind the last alcove; picture walls, rules panel and portal are placed relative to it. */
+    /** First z behind the last alcove; the picture room, rules panel and portal are placed relative to it. */
     static final int AFTER_ALCOVES_Z = FIRST_ALCOVE_Z + ALCOVE_SPACING * (ALCOVES_PER_SIDE - 1) + STAGE_WIDTH / 2 + MARGIN;
     static final int END_Z = AFTER_ALCOVES_Z + 23;
     static final int OUTER_X = CORRIDOR_HALF + STAGE_DEPTH + MARGIN;
@@ -47,12 +46,8 @@ public final class PlaceholderHall {
             stages.add(new Pos(eastX, Y0, z, -90f));
         }
         int a = AFTER_ALCOVES_Z;
-        List<WallDef> walls = List.of(
-                new WallDef("bauten-1", -2, Y0, a + 6, BlockFace.EAST, 4, 3, "Bauten 2025: Bau 1", "Erbauer"),
-                new WallDef("bauten-2", -2, Y0, a + 11, BlockFace.EAST, 4, 3, "Bauten 2025: Bau 2", "Erbauer"),
-                new WallDef("bauten-3", -2, Y0, a + 16, BlockFace.EAST, 4, 3, "Bauten 2025: Bau 3", "Erbauer"));
-        return new HallLayout(new Pos(0.5, Y0, -6.5, 0f), List.copyOf(stages), new Pos(2.4, Y0, a + 7.5, 90f), null,
-                Region.of(-1, Y0, END_Z - 3, 1, Y0 + 2, END_Z - 2), walls);
+        return new HallLayout(new Pos(0.5, Y0, -6.5, 0f), List.copyOf(stages), new Pos(2.4, Y0 + 1.2, a + 5.5, 90f), null,
+                Region.of(-1, Y0, END_Z - 3, 1, Y0 + 2, END_Z - 2), List.of());
     }
 
     /** Builds the blocks into the world and returns the layout that belongs to them. */

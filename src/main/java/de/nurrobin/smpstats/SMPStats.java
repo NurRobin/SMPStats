@@ -6,7 +6,6 @@ import de.nurrobin.smpstats.season.SeasonStore;
 import de.nurrobin.smpstats.throwback.CachedProgressRepository;
 import de.nurrobin.smpstats.throwback.HallWorld;
 import de.nurrobin.smpstats.throwback.MannequinSceneRenderer;
-import de.nurrobin.smpstats.throwback.MapArtWall;
 import de.nurrobin.smpstats.throwback.ThrowbackCommand;
 import de.nurrobin.smpstats.throwback.ThrowbackEditListener;
 import de.nurrobin.smpstats.throwback.ThrowbackEditor;
@@ -591,7 +590,6 @@ public class SMPStats extends JavaPlugin {
             this.throwbackService = new ThrowbackService(this, seasonService,
                     new CachedProgressRepository(progressStore, getLogger()), throwbackSettings, renderer,
                     new HallWorld(this, throwbackSettings.world(), hallTime),
-                    new MapArtWall(this, getDataFolder().toPath().resolve("throwback").resolve("mapwall.yml")),
                     () -> !Bukkit.getOnlineMode(), System::currentTimeMillis);
             this.throwbackRenderer = renderer;
             this.throwbackEditor = new ThrowbackEditor(this, throwbackService, renderer);

@@ -7,10 +7,11 @@ import java.util.Optional;
 
 /**
  * The markers of one edit session, in the order they were placed. Singletons (start, rules, privacy, portal
- * corners) replace their predecessor; stages are numbered by their order, so removing one closes the gap.
+ * corners) replace their predecessor; stages are numbered by their order, so removing one closes the gap. Texts
+ * may be placed any number of times.
  */
 final class EditDraft {
-    enum Placed { ADDED, REPLACED, STAGE_LIMIT, WALL_NAME_TAKEN }
+    enum Placed { ADDED, REPLACED, STAGE_LIMIT }
 
     private final List<EditMark> marks = new ArrayList<>();
 
@@ -41,8 +42,8 @@ final class EditDraft {
             d.marks.add(EditMark.of(EditKind.PORTAL_1, portal.minX() + 0.5, portal.minY(), portal.minZ() + 0.5, 0f));
             d.marks.add(EditMark.of(EditKind.PORTAL_2, portal.maxX() + 0.5, portal.maxY(), portal.maxZ() + 0.5, 0f));
         }
-        for (WallDef wall : layout.walls()) {
-            d.marks.add(EditMark.ofWall(wall));
+        for (HallText text : layout.texts()) {
+            d.marks.add(EditMark.ofText(text));
         }
         return d;
     }
@@ -59,7 +60,7 @@ final class EditDraft {
                 : Region.of(portal1.blockX(), portal1.blockY(), portal1.blockZ(), portal2.blockX(), portal2.blockY(), portal2.blockZ());
         return new HallLayout(single(EditKind.START).map(EditMark::pos).orElse(null), stages().stream().map(EditMark::pos).toList(),
                 single(EditKind.RULES).map(EditMark::pos).orElse(null), single(EditKind.PRIVACY).map(EditMark::pos).orElse(null),
-                portal, walls().stream().map(EditMark::wall).toList());
+                portal, texts().stream().map(EditMark::hallText).toList());
     }
 
     List<EditMark> marks() {
@@ -74,8 +75,8 @@ final class EditDraft {
         return of(EditKind.STAGE);
     }
 
-    List<EditMark> walls() {
-        return of(EditKind.WALL);
+    List<EditMark> texts() {
+        return of(EditKind.TEXT);
     }
 
     List<EditMark> of(EditKind kind) {
@@ -94,10 +95,7 @@ final class EditDraft {
                 }
                 marks.add(mark);
                 return Placed.ADDED;
-            case WALL:
-                if (marks.stream().anyMatch(m -> m.kind() == EditKind.WALL && m.wall().name().equals(mark.wall().name()))) {
-                    return Placed.WALL_NAME_TAKEN;
-                }
+            case TEXT:
                 marks.add(mark);
                 return Placed.ADDED;
             default:
@@ -138,18 +136,5 @@ final class EditDraft {
             return Optional.empty();
         }
         return Optional.of(marks.remove(marks.size() - 1));
-    }
-
-    /** The smallest free number for a new picture wall named {@code bauten-<n>}. */
-    int nextWallNumber() {
-        int n = 1;
-        while (hasWall("bauten-" + n)) {
-            n++;
-        }
-        return n;
-    }
-
-    boolean hasWall(String name) {
-        return marks.stream().anyMatch(m -> m.kind() == EditKind.WALL && m.wall().name().equals(name));
     }
 }

@@ -47,7 +47,6 @@ public final class ThrowbackService {
     private final ThrowbackFlow flow;
     private final SceneRenderer renderer;
     private final HallWorlds hall;
-    private final MapArtWall wall;
     private final BooleanSupplier offlineMode;
     private final TrophyCatalog catalog = TrophyCatalog.standard();
     private final NamespacedKey previousMode;
@@ -63,7 +62,7 @@ public final class ThrowbackService {
     private java.util.function.BiFunction<Player, Location, java.util.concurrent.CompletableFuture<Boolean>> teleporter =
             (player, location) -> player.teleportAsync(location);
     private volatile ThrowbackSettings settings;
-    private World wallsWorld;
+    private World cleanedWorld;
     private volatile ThrowbackTexts texts;
     private volatile TrophyBoard board;
     private volatile ThrowbackContent content;
@@ -72,7 +71,7 @@ public final class ThrowbackService {
     private BukkitTask unloadTask;
 
     public ThrowbackService(Plugin plugin, SeasonService seasons, CachedProgressRepository repository,
-                            ThrowbackSettings settings, SceneRenderer renderer, HallWorlds hall, MapArtWall wall,
+                            ThrowbackSettings settings, SceneRenderer renderer, HallWorlds hall,
                             BooleanSupplier offlineMode, java.util.function.LongSupplier clock) {
         this.plugin = plugin;
         this.logger = plugin.getLogger();
@@ -81,7 +80,6 @@ public final class ThrowbackService {
         this.settings = settings;
         this.renderer = renderer;
         this.hall = hall;
-        this.wall = wall;
         this.offlineMode = offlineMode;
         this.dataFolder = plugin.getDataFolder().toPath();
         this.previousMode = new NamespacedKey(plugin, "throwback_prev_gm");
@@ -324,18 +322,32 @@ public final class ThrowbackService {
         return spawn.clone();
     }
 
-    /** Loads the hall world and, when it was not loaded before, puts the picture walls up again (renderers are not saved). */
+    /** Loads the hall world and, the first time, clears the frames of the old picture walls out of it. */
     private World loadHall() {
         World world = hall.load();
-        if (world != null && world != wallsWorld) {
-            wallsWorld = world;
-            try {
-                wall.build(world, settings.layout().walls(), dataFolder.resolve(settings.imagesFolder()));
-            } catch (RuntimeException e) {
-                logger.log(java.util.logging.Level.WARNING, "Throwback: Bilderwände konnten nicht aufgebaut werden", e);
-            }
+        if (world != null && world != cleanedWorld) {
+            cleanedWorld = world;
+            removeOldPictureWalls(world);
         }
         return world;
+    }
+
+    /**
+     * Pictures are placed with ImageFrame now. Frames and titles of the old built-in picture walls carry this tag
+     * and would otherwise hang in the hall for good, because nothing rebuilds or removes them any more.
+     */
+    private void removeOldPictureWalls(World world) {
+        NamespacedKey oldWall = new NamespacedKey(plugin, "throwback_wall");
+        int removed = 0;
+        for (org.bukkit.entity.Entity e : world.getEntities()) {
+            if (e.getPersistentDataContainer().has(oldWall)) {
+                e.remove();
+                removed++;
+            }
+        }
+        if (removed > 0) {
+            logger.info("Throwback: " + removed + " Rahmen und Titel der alten Bilderwände entfernt");
+        }
     }
 
     private void enterHall(Player p, Location origin) {
@@ -466,6 +478,9 @@ public final class ThrowbackService {
         List<Runnable> steps = new ArrayList<>();
         steps.add(() -> buildStart(session, world, layout, plan));
         steps.add(() -> buildRules(session, world, layout, plan));
+        if (!layout.texts().isEmpty()) {
+            steps.add(() -> layout.texts().forEach(t -> session.panel(t.pos().at(world), t.component(), HallText.SCALE)));
+        }
         for (StagePlan stage : plan.stages()) {
             if (stage.index() >= layout.stages().size()) {
                 continue;
@@ -515,15 +530,15 @@ public final class ThrowbackService {
 
     private void buildRules(SceneRenderer.SceneSession session, World world, HallLayout layout, HallPlan plan) {
         Pos rules = layout.rules();
-        // Two fixed boards at eye level: rules on the reader's left, privacy on the right unless it has a place of its own.
+        // Two fixed boards: the rules with the button right under them, privacy on the reader's right unless it has a place of its own.
         session.panel(PanelMetrics.rulesBoard(world, rules), ThrowbackTexts.joinLines(plan.rules()), PanelMetrics.SCALE);
         if (!plan.privacy().isEmpty()) {
             session.panel(PanelMetrics.privacyBoard(world, rules, layout.privacy()), ThrowbackTexts.joinLines(plan.privacy()),
                     PanelMetrics.SCALE);
         }
-        Location button = new Location(world, rules.x(), rules.y() + 0.8, rules.z());
-        session.text(button, content().rulesButton());
-        session.interaction(new Location(world, rules.x(), rules.y(), rules.z()), 1.4f, 1.4f, ACTION_RULES);
+        session.text(PanelMetrics.rulesButton(world, rules), content().rulesButton());
+        session.interaction(PanelMetrics.rulesClickBox(world, rules), PanelMetrics.CLICK_WIDTH, (float) PanelMetrics.BUTTON_SPACE,
+                ACTION_RULES);
     }
 
     private void buildStage(SceneRenderer.SceneSession session, World world, Pos pos, StagePlan stage) {
@@ -714,23 +729,14 @@ public final class ThrowbackService {
         unloadTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             unloadTask = null;
             if (hall.unload()) {
-                wallsWorld = null;
+                cleanedWorld = null;
             }
         }, settings.unloadDelaySeconds() * 20L);
     }
 
     // ------------------------------------------------------------------ admin helpers
 
-    /** Rebuilds the shared picture walls if the hall world is loaded. */
-    public int rebuildWalls() {
-        World world = hall.loaded();
-        if (world == null) {
-            return 0;
-        }
-        return wall.build(world, settings.layout().walls(), dataFolder.resolve(settings.imagesFolder()));
-    }
-
-    /** Loads the hall world (for building and for the walls) and (re)builds the picture walls. */
+    /** Loads the hall world for building and keeps it loaded. */
     public World loadForAdmin() {
         World world = loadHall();
         if (world != null) {
@@ -740,28 +746,9 @@ public final class ThrowbackService {
         return world;
     }
 
-    /**
-     * Saves a layout made in the edit mode: picture walls that are gone get their frames removed, the layout is
-     * written to config.yml and the remaining walls are rebuilt. Returns how many walls got a picture.
-     */
-    public int applyEditedLayout(HallLayout next) {
-        World world = hall.loaded();
-        if (world != null) {
-            List<String> kept = next.walls().stream().map(WallDef::name).toList();
-            try {
-                wall.clear(world, settings.layout().walls().stream().filter(w -> !kept.contains(w.name())).toList());
-            } catch (RuntimeException e) {
-                logger.log(java.util.logging.Level.WARNING, "Throwback: Rahmen entfernter Bilderwände ließen sich nicht abräumen", e);
-            }
-        }
+    /** Saves a layout made in the edit mode: it is written to config.yml and used by the next tour. */
+    public void applyEditedLayout(HallLayout next) {
         updateLayout(old -> next);
-        try {
-            return rebuildWalls();
-        } catch (RuntimeException e) {
-            // the layout is saved by now; the walls can be rebuilt with /throwback admin walls
-            logger.log(java.util.logging.Level.WARNING, "Throwback: Bilderwände konnten nicht neu aufgebaut werden", e);
-            return 0;
-        }
     }
 
     /** Applies a layout change and writes it to config.yml. */

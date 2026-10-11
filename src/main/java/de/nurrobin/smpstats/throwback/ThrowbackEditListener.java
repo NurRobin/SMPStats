@@ -50,13 +50,14 @@ public final class ThrowbackEditListener implements Listener {
         event.setCancelled(true);
         boolean command = tool == EditTool.UNDO || tool == EditTool.SAVE;
         switch (event.getAction()) {
-            case RIGHT_CLICK_BLOCK -> editor.use(p, tool, event.getClickedBlock(), event.getInteractionPoint());
+            case RIGHT_CLICK_BLOCK -> editor.use(p, tool, event.getClickedBlock(), event.getBlockFace(), event.getInteractionPoint());
             case RIGHT_CLICK_AIR -> {
                 if (command) {
-                    editor.use(p, tool, null, null);
+                    editor.use(p, tool, null, null, null);
                 }
             }
             case LEFT_CLICK_BLOCK -> editor.remove(p, tool, event.getClickedBlock());
+            case LEFT_CLICK_AIR -> editor.remove(p, tool, null);
             default -> { }
         }
     }

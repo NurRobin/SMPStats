@@ -56,9 +56,21 @@ class EditReportTest {
     }
 
     @Test
+    void withoutAPrivacyPlaceTheBoardBesideTheRulesCounts() {
+        EditDraft d = EditDraft.fromLayout(PlaceholderHall.layout());
+
+        EditReport r = EditReport.of(d, 8, List.of());
+
+        assertTrue(r.complete());
+        assertTrue(check(r, "privacy_default").ok());
+        d.remove(d.single(EditKind.RULES).orElseThrow());
+        EditReport noRules = EditReport.of(d, 8, List.of());
+        assertFalse(check(noRules, "privacy").ok(), "without a rules board there is nothing to hang beside");
+    }
+
+    @Test
     void onePortalCornerIsNotEnough() {
         EditDraft d = draftWith(12);
-        d.undo();
         d.remove(d.single(EditKind.PORTAL_2).orElseThrow());
 
         EditReport r = EditReport.of(d, 8, List.of());
@@ -68,9 +80,9 @@ class EditReportTest {
     }
 
     @Test
-    void picturesAreOptional() {
+    void textsAreOptional() {
         EditDraft d = draftWith(12);
-        d.marks().stream().filter(m -> m.kind() == EditKind.WALL).toList().forEach(d::remove);
+        d.marks().stream().filter(m -> m.kind() == EditKind.TEXT).toList().forEach(d::remove);
 
         assertTrue(EditReport.of(d, 8, List.of()).complete());
     }

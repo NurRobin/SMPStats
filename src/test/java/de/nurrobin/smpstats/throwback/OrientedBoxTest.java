@@ -11,28 +11,32 @@ import static org.junit.jupiter.api.Assertions.*;
 class OrientedBoxTest {
 
     @Test
-    void unitBoxHasTwelveEdgesAndEveryPointOnce() {
-        OrientedBox box = OrientedBox.aabb(0, 0, 0, 1, 1, 1);
+    void aBoxHasTwelveEdgesThatRunAlongOneAxisEach() {
+        OrientedBox box = OrientedBox.aabb(0, 0, 0, 8, 5, 3);
 
-        List<OrientedBox.Pt> points = box.edgePoints(0.5);
+        List<OrientedBox.Pt[]> edges = box.edges();
 
-        assertEquals(8 + 12, points.size(), "8 corners and one point in the middle of each of the 12 edges");
-        assertEquals(points.size(), new HashSet<>(points).size());
-        for (OrientedBox.Pt p : points) {
-            assertTrue(onEdge(p.x(), 0, 1) && onEdge(p.y(), 0, 1) && onEdge(p.z(), 0, 1));
+        assertEquals(12, edges.size());
+        Set<String> distinct = new HashSet<>();
+        double total = 0;
+        for (OrientedBox.Pt[] e : edges) {
+            int axes = (e[0].x() != e[1].x() ? 1 : 0) + (e[0].y() != e[1].y() ? 1 : 0) + (e[0].z() != e[1].z() ? 1 : 0);
+            assertEquals(1, axes, "an edge runs along exactly one axis");
+            total += Math.abs(e[1].x() - e[0].x()) + Math.abs(e[1].y() - e[0].y()) + Math.abs(e[1].z() - e[0].z());
+            distinct.add(List.of(e[0], e[1]).toString());
         }
-    }
-
-    private static boolean onEdge(double v, double lo, double hi) {
-        return Math.abs(v - lo) < 1e-9 || Math.abs(v - hi) < 1e-9 || (v > lo && v < hi);
+        assertEquals(12, distinct.size());
+        assertEquals(4 * (8 + 5 + 3), total, 1e-9);
     }
 
     @Test
-    void pointSpacingIsAboutHalfABlock() {
-        OrientedBox box = OrientedBox.aabb(0, 0, 0, 8, 5, 5);
+    void containsTakesTheMarginIntoAccount() {
+        OrientedBox box = OrientedBox.aabb(0, 64, 0, 2, 66, 1);
 
-        // 4 edges of 8 blocks (15 inner points each), 8 edges of 5 blocks (9 each), plus the 8 corners
-        assertEquals(4 * 15 + 8 * 9 + 8, box.edgePoints(0.5).size());
+        assertTrue(box.contains(1, 65, 0.5, 0));
+        assertFalse(box.contains(2.2, 65, 0.5, 0));
+        assertTrue(box.contains(2.2, 65, 0.5, 0.25));
+        assertFalse(box.contains(1, 66.5, 0.5, 0.25));
     }
 
     @Test

@@ -7,8 +7,7 @@ import org.bukkit.block.BlockFace;
  * south, 90 west, 180 north, -90 east):
  * <ul>
  * <li>start and stage: the builder's own look direction (a stage looks at its back wall)</li>
- * <li>rules and privacy board: look direction + 180, the board faces the reader</li>
- * <li>picture wall: the frames face against the look direction</li>
+ * <li>rules and privacy board, texts: away from a clicked wall, else look direction + 180</li>
  * </ul>
  */
 final class EditGeometry {
@@ -53,14 +52,8 @@ final class EditGeometry {
                 return EditMark.of(kind, x, y, z, snapYaw(lookYaw));
             case STAGE:
                 return stage(bx, by, bz, hitX, hitZ, lookYaw);
-            case RULES:
-            case PRIVACY:
-                return EditMark.of(kind, x, y, z, towardViewerYaw(lookYaw));
-            case PORTAL_1:
-            case PORTAL_2:
-                return EditMark.of(kind, x, y, z, 0f);
             default:
-                throw new IllegalArgumentException("Bilderwand: EditGeometry.wall nutzen");
+                throw new IllegalArgumentException(kind + ": eigene Methode in EditGeometry nutzen");
         }
     }
 
@@ -88,9 +81,60 @@ final class EditGeometry {
         return Math.max(block, Math.min(block + 1, Math.round(hit)));
     }
 
-    /** A picture wall whose lower-left front block sits on top of the clicked block, facing the builder. */
-    static WallDef wall(int bx, int by, int bz, float lookYaw, String name, int width, int height, String title,
-                        String builders) {
-        return new WallDef(name, bx, by + 1, bz, faceOf(lookYaw).getOppositeFace(), width, height, title, builders);
+    /**
+     * A portal corner names the block a player's feet pass through, because the portal fires on the feet. That is
+     * the clicked block itself if one can walk through it (portal filling, carpet, air-like blocks), else the block
+     * on the clicked side, the same block a placed block would go to.
+     */
+    static EditMark portalCorner(EditKind kind, int bx, int by, int bz, boolean passable, BlockFace face) {
+        int x = bx;
+        int y = by;
+        int z = bz;
+        if (!passable && face != null) {
+            x += face.getModX();
+            y += face.getModY();
+            z += face.getModZ();
+        }
+        return EditMark.of(kind, x + 0.5, y, z + 0.5, 0f);
+    }
+
+    /**
+     * A board (rules, privacy or a text), as the bottom middle of the board. Clicked on a wall it hangs flat against that
+     * wall, the middle of board and {@code below} together at the clicked block; clicked on a floor it stands on it,
+     * on a ceiling it hangs from it. {@code below} is room kept free under the board (the rules button).
+     */
+    static EditMark board(EditKind kind, int bx, int by, int bz, BlockFace face, float lookYaw, double height, double below) {
+        if (face == null || face == BlockFace.UP) {
+            return EditMark.of(kind, bx + 0.5, by + 1.0 + below, bz + 0.5, towardViewerYaw(lookYaw));
+        }
+        if (face == BlockFace.DOWN) {
+            return EditMark.of(kind, bx + 0.5, by - height, bz + 0.5, towardViewerYaw(lookYaw));
+        }
+        double inset = 0.5 + PanelMetrics.THICKNESS / 2;
+        return EditMark.of(kind, bx + 0.5 + face.getModX() * inset, by + 0.5 - (height + below) / 2 + below,
+                bz + 0.5 + face.getModZ() * inset, yawOf(face));
+    }
+
+    static EditMark privacy(int bx, int by, int bz, BlockFace face, float lookYaw, double height) {
+        return board(EditKind.PRIVACY, bx, by, bz, face, lookYaw, height, 0);
+    }
+
+    static EditMark text(int bx, int by, int bz, BlockFace face, float lookYaw, double height, String text) {
+        EditMark m = board(EditKind.TEXT, bx, by, bz, face, lookYaw, height, 0);
+        return new EditMark(EditKind.TEXT, m.x(), m.y(), m.z(), m.yaw(), text);
+    }
+
+    static EditMark rules(int bx, int by, int bz, BlockFace face, float lookYaw, double height) {
+        return board(EditKind.RULES, bx, by, bz, face, lookYaw, height, PanelMetrics.BUTTON_SPACE);
+    }
+
+    /** The yaw that looks towards {@code face}. */
+    static float yawOf(BlockFace face) {
+        return switch (face) {
+            case WEST -> 90f;
+            case NORTH -> 180f;
+            case EAST -> -90f;
+            default -> 0f;
+        };
     }
 }

@@ -100,9 +100,9 @@ class ThrowbackServiceTest {
         hall = new FakeHall();
         HallLayout layout = PlaceholderHall.layout();
         ThrowbackSettings settings = new ThrowbackSettings(true, "throwback_hall", "2025", 60, 15, "2026-1", "https://example.org",
-                false, 0, "throwback/images", "throwback/texts.yml", "", null, null, 8, layout);
+                false, 0, "throwback/texts.yml", "", null, null, 8, layout);
         service = new ThrowbackService(plugin, seasons, new CachedProgressRepository(progressStore, Logger.getLogger("test")),
-                settings, scenes, hall, new MapArtWall(plugin, data.resolve("mapwall.yml")), () -> false, clock::get);
+                settings, scenes, hall, () -> false, clock::get);
         service.teleporter((player, location) -> {
             player.teleport(location);
             return java.util.concurrent.CompletableFuture.completedFuture(true);
@@ -158,8 +158,8 @@ class ThrowbackServiceTest {
         assertEquals(2, panels.size());
         assertLocation(PanelMetrics.rulesBoard(hallWorld, rules), panels.get(0));
         assertLocation(PanelMetrics.privacyBoard(hallWorld, rules, null), panels.get(1));
-        assertEquals(rules.z() - 2, panels.get(0).getZ(), 1e-9, "rules on the reader's left");
-        assertEquals(rules.z() + 2, panels.get(1).getZ(), 1e-9);
+        assertEquals(rules.z(), panels.get(0).getZ(), 1e-9, "the rules board hangs at its place");
+        assertEquals(rules.z() + PanelMetrics.width() + PanelMetrics.BESIDE_GAP, panels.get(1).getZ(), 1e-9, "privacy on the reader's right");
         assertEquals(hallWorld, vera.getWorld());
     }
 
@@ -175,7 +175,7 @@ class ThrowbackServiceTest {
         assertLocation(PanelMetrics.rulesBoard(hallWorld, service.settings().layout().rules()), panels.get(0));
         assertEquals(20.5, panels.get(1).getX(), 1e-9);
         assertEquals(100.5, panels.get(1).getZ(), 1e-9);
-        assertEquals(64 + PanelMetrics.PRIVACY_Y, panels.get(1).getY(), 1e-9);
+        assertEquals(64, panels.get(1).getY(), 1e-9, "the own place is the bottom middle of the board");
         assertEquals(180f, panels.get(1).getYaw());
     }
 

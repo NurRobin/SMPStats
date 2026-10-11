@@ -10,13 +10,16 @@ import org.bukkit.persistence.PersistentDataType;
  * its name or material, so renamed or look-alike items do nothing.
  */
 enum EditTool {
-    START("start", Material.COMPASS, EditKind.START),
+    // not the plain compass: WorldEdit's navigation wand is a compass and teleports through walls on every click
+    START("start", Material.RECOVERY_COMPASS, EditKind.START),
     STAGE("stage", Material.ARMOR_STAND, EditKind.STAGE),
-    RULES("rules", Material.WRITABLE_BOOK, EditKind.RULES),
+    // paper, because a writable book opens its editor on the client before the server can stop the click
+    RULES("rules", Material.PAPER, EditKind.RULES),
     PRIVACY("privacy", Material.BOOK, EditKind.PRIVACY),
     PORTAL_1("portal1", Material.ENDER_PEARL, EditKind.PORTAL_1),
     PORTAL_2("portal2", Material.ENDER_EYE, EditKind.PORTAL_2),
-    WALL("wall", Material.PAINTING, EditKind.WALL),
+    // a name tag does nothing on a block, so the click reaches the edit mode alone
+    TEXT("text", Material.NAME_TAG, EditKind.TEXT),
     UNDO("undo", Material.RED_DYE, null),
     SAVE("save", Material.LIME_DYE, null);
 
