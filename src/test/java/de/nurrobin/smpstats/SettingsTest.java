@@ -53,6 +53,10 @@ class SettingsTest {
         assertEquals("127.0.0.1", settings.getApiBindAddress());
         assertEquals(1234, settings.getApiPort());
         assertEquals("KEY", settings.getApiKey());
+        assertEquals(Settings.DEFAULT_API_RATE_LIMIT_PER_SECOND, settings.getApiRateLimitPerSecond());
+        assertEquals(20, Settings.DEFAULT_API_RATE_LIMIT_PER_SECOND);
+        assertEquals(5, settings.withApiRateLimitPerSecond(5).getApiRateLimitPerSecond());
+        assertEquals(0, settings.withApiRateLimitPerSecond(-3).getApiRateLimitPerSecond());
         assertEquals(10, settings.getAutosaveMinutes());
         assertEquals(weights, settings.getSkillWeights());
         assertTrue(settings.isMomentsEnabled());

@@ -175,6 +175,7 @@ api:
   enabled: true
   bind_address: "127.0.0.1"  # Change to "0.0.0.0" for external access
   port: 8765
+  rate_limit_per_second: 20  # per client IP, 429 above it; 0 = unlimited
   api_key: "CHANGE_THIS_SECRET_KEY"
 
 # Enable features

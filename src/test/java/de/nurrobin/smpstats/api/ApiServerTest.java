@@ -77,6 +77,53 @@ class ApiServerTest {
     }
 
     @Test
+    void rateLimitAnswers429WithRetryAfterPerClientIp() throws Exception {
+        settings.withApiRateLimitPerSecond(2);
+        ApiServer limited = new ApiServer(plugin, stats, settings, moments, heatmap, timeline, health);
+        var handler = limited.onlineHandler();
+        for (int i = 0; i < 2; i++) {
+            FakeExchange ok = new FakeExchange("/online", API_KEY).from("10.0.0.7");
+            handler.handle(ok);
+            assertEquals(200, ok.status);
+        }
+        FakeExchange throttled = new FakeExchange("/online", API_KEY).from("10.0.0.7");
+        handler.handle(throttled);
+        assertEquals(429, throttled.status);
+        assertEquals("1", throttled.responseHeaders.getFirst("Retry-After"));
+
+        // the key is not even looked at once the client is over the limit
+        FakeExchange wrongKey = new FakeExchange("/online", "wrong").from("10.0.0.7");
+        handler.handle(wrongKey);
+        assertEquals(429, wrongKey.status);
+
+        FakeExchange other = new FakeExchange("/online", API_KEY).from("10.0.0.8");
+        handler.handle(other);
+        assertEquals(200, other.status);
+
+        FakeExchange openApi = new FakeExchange("/openapi.json", null).from("10.0.0.7");
+        limited.openApiHandler().handle(openApi);
+        assertEquals(429, openApi.status);
+    }
+
+    @Test
+    void rateLimitCanBeSwitchedOff() throws Exception {
+        settings.withApiRateLimitPerSecond(0);
+        ApiServer unlimited = new ApiServer(plugin, stats, settings, moments, heatmap, timeline, health);
+        for (int i = 0; i < 100; i++) {
+            FakeExchange exchange = new FakeExchange("/online", API_KEY);
+            unlimited.onlineHandler().handle(exchange);
+            assertEquals(200, exchange.status);
+        }
+    }
+
+    @Test
+    void apiDoesNotStartOnUnresolvableBindAddress() {
+        ApiServer bad = new ApiServer(plugin, stats, settingsWithBind("no-such-host.invalid"), moments, heatmap, timeline, health);
+        bad.start();
+        assertFalse(bad.isRunning());
+    }
+
+    @Test
     void rejectsUnauthorizedRequests() throws Exception {
         var handler = server.statsHandler();
         FakeExchange exchange = new FakeExchange("/stats/anything", null);
@@ -396,10 +443,18 @@ class ApiServerTest {
 
     // ============== Hardening Tests ==============
 
+    private Settings settingsWithBind(String bindAddress) {
+        return settingsWith(bindAddress, API_KEY);
+    }
+
     private Settings settingsWithKey(String apiKey) {
+        return settingsWith("127.0.0.1", apiKey);
+    }
+
+    private Settings settingsWith(String bindAddress, String apiKey) {
         return new Settings(
                 true, true, true, true, true, true, true,
-                true, "127.0.0.1", 0, apiKey, 1, settings.getSkillWeights(),
+                true, bindAddress, 0, apiKey, 1, settings.getSkillWeights(),
                 true, 0L, 0L, true, 1, 1.0, List.of(), List.of(), true, 1, 1, true, true, true, 1, 1,
                 true, 1, 0, 0, 0, 0, de.nurrobin.smpstats.health.HealthThresholds.defaults(),
                 true, 1, 1, "", 1, 1, Settings.DashboardSettings.defaults(), true);
@@ -518,6 +573,12 @@ class ApiServerTest {
         private final URI uri;
         private int status;
         private final ByteArrayOutputStream body = new ByteArrayOutputStream();
+        private InetSocketAddress remote = new InetSocketAddress(0);
+
+        FakeExchange from(String ip) throws Exception {
+            this.remote = new InetSocketAddress(java.net.InetAddress.getByName(ip), 40000);
+            return this;
+        }
 
         FakeExchange(String path, String apiKey) {
             this.uri = URI.create("http://localhost" + path);
@@ -581,7 +642,7 @@ class ApiServerTest {
 
         @Override
         public InetSocketAddress getRemoteAddress() {
-            return new InetSocketAddress(0);
+            return remote;
         }
 
         @Override

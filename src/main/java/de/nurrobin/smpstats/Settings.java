@@ -54,6 +54,9 @@ public class Settings {
     private final boolean guiAnimatedBordersEnabled;
 
     private RetentionSettings retentionSettings = RetentionSettings.DEFAULTS;
+    private int apiRateLimitPerSecond = DEFAULT_API_RATE_LIMIT_PER_SECOND;
+
+    public static final int DEFAULT_API_RATE_LIMIT_PER_SECOND = 20;
 
     /**
      * How long raw event rows are kept. A value of 0 keeps rows forever.
@@ -397,6 +400,16 @@ public class Settings {
 
     public Settings withRetention(RetentionSettings retentionSettings) {
         this.retentionSettings = retentionSettings;
+        return this;
+    }
+
+    /** Requests per second and client IP the HTTP API accepts; 0 switches the limit off. */
+    public int getApiRateLimitPerSecond() {
+        return apiRateLimitPerSecond;
+    }
+
+    public Settings withApiRateLimitPerSecond(int requestsPerSecond) {
+        this.apiRateLimitPerSecond = Math.max(0, requestsPerSecond);
         return this;
     }
 }

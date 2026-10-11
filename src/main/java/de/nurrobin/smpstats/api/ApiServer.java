@@ -65,6 +65,8 @@ public class ApiServer {
     private final AtomicLong lastAuthFailureLog = new AtomicLong();
     private final AtomicInteger suppressedAuthFailures = new AtomicInteger();
 
+    private final RateLimiter rateLimiter;
+
     private HttpServer server;
     private ExecutorService requestExecutor;
 
@@ -77,6 +79,8 @@ public class ApiServer {
         this.timelineService = timelineService;
         this.serverHealthService = serverHealthService;
         this.openApiDocument = new OpenApiDocument(settings, resolvePluginVersion(plugin));
+        int perSecond = settings.getApiRateLimitPerSecond();
+        this.rateLimiter = perSecond > 0 ? new RateLimiter(perSecond) : null;
     }
 
     private String resolvePluginVersion(SMPStats plugin) {
@@ -93,8 +97,10 @@ public class ApiServer {
 
         try {
             server = HttpServer.create(new InetSocketAddress(settings.getApiBindAddress(), settings.getApiPort()), 0);
-        } catch (IOException e) {
-            plugin.getLogger().severe("HTTP API konnte nicht gestartet werden: " + e.getMessage());
+        } catch (IOException | RuntimeException e) {
+            // RuntimeException: an api.bind_address that does not resolve fails with an unchecked exception
+            plugin.getLogger().severe("HTTP API konnte nicht gestartet werden (api.bind_address "
+                    + settings.getApiBindAddress() + ", api.port " + settings.getApiPort() + "): " + e);
             return;
         }
 
@@ -139,6 +145,21 @@ public class ApiServer {
 
     static boolean isPlaceholderKey(String key) {
         return key == null || key.isBlank() || PLACEHOLDER_API_KEYS.contains(key.trim());
+    }
+
+    /** Token bucket per client IP; the key is checked only after this, so wrong keys are throttled too. */
+    private boolean allowRequest(HttpExchange exchange) throws IOException {
+        if (rateLimiter == null) {
+            return true;
+        }
+        InetSocketAddress remote = exchange.getRemoteAddress();
+        String client = remote != null && remote.getAddress() != null ? remote.getAddress().getHostAddress() : "unknown";
+        if (rateLimiter.tryAcquire(client)) {
+            return true;
+        }
+        exchange.getResponseHeaders().add("Retry-After", String.valueOf(rateLimiter.retryAfterSeconds()));
+        sendText(exchange, 429, "Too Many Requests");
+        return false;
     }
 
     private boolean authorize(HttpExchange exchange) throws IOException {
@@ -286,7 +307,7 @@ public class ApiServer {
     private abstract class AuthorizedHandler implements HttpHandler {
         @Override
         public final void handle(HttpExchange exchange) throws IOException {
-            if (!authorize(exchange)) {
+            if (!allowRequest(exchange) || !authorize(exchange)) {
                 return;
             }
             try {
@@ -306,6 +327,9 @@ public class ApiServer {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             // Documentation should stay reachable without authentication for tool discovery
+            if (!allowRequest(exchange)) {
+                return;
+            }
             sendJsonString(exchange, 200, openApiDocument.toJson());
         }
     }

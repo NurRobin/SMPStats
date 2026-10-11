@@ -405,6 +405,7 @@ public class SMPStats extends JavaPlugin {
                 healthEnabled, healthSampleMinutes, healthChunkWeight, healthEntityWeight, healthHopperWeight, healthRedstoneWeight, healthThresholds,
                 storyEnabled, storyIntervalDays, storySummaryHour, storyWebhookUrl, storyTopLimit, storyRecentMoments,
                 dashboardSettings, guiAnimatedBordersEnabled)
+                .withApiRateLimitPerSecond(config.getInt("api.rate_limit_per_second", Settings.DEFAULT_API_RATE_LIMIT_PER_SECOND))
                 .withRetention(new Settings.RetentionSettings(
                         Math.max(0, config.getInt("retention.heatmap_events_days", 21)),
                         Math.max(0, config.getInt("retention.moments_days", 0)),

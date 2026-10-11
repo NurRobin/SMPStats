@@ -9,6 +9,20 @@ HTTP API served by the plugin’s built-in Java `HttpServer` (no TLS/HTTP2). It 
 - OpenAPI: `GET /openapi.json` returns the machine-readable OpenAPI 3.1 document (no auth required).
 - Time fields: epoch milliseconds unless noted. Coordinates are block coordinates unless noted. Query numbers must be valid integers; otherwise the server throws and you’ll get a 500.
 - HTTPS: terminate TLS in a reverse proxy if you expose the API publicly.
+- Rate limit: each client IP gets a token bucket of `api.rate_limit_per_second` requests (default `20`, burst of the same size; `0` disables it). Over the limit the API answers `429 Too Many Requests` with a `Retry-After` header. It applies before the key check, so wrong keys are throttled too, and to `/openapi.json`. The client IP is the TCP peer address; `X-Forwarded-For` is ignored because clients could forge it, so behind a reverse proxy on the same host all callers share one bucket.
+
+## Reaching the API from another host
+
+`api.bind_address` (default `127.0.0.1`, only this machine) is the interface the server listens on. For a consumer on another host, for example a website on a different machine in a private network, set it to the server's address in that network (such as `10.0.0.5`) or to `0.0.0.0` for all interfaces, then restart the server or run `/smpstats reload`. Prefer the private address over `0.0.0.0`, and restrict the port (`api.port`, default `8765`) with a firewall to the consumer's IP, because the API key is sent in clear text without TLS. An address that does not exist on the machine, or a port already in use, stops the API from starting; the reason is logged as `HTTP API konnte nicht gestartet werden`.
+
+```yaml
+api:
+  enabled: true
+  bind_address: "10.0.0.5"
+  port: 8765
+  rate_limit_per_second: 20
+  api_key: "<long random secret>"
+```
 
 ## Data shapes
 
